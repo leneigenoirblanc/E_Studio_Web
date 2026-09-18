@@ -3,6 +3,8 @@ import { ImpositionCalculation, ImpositionConfig, Margins } from '../types';
 export const PAGE_DIMENSIONS_MM: Record<string, [number, number]> = {
   A4: [210.0, 297.0],
   A3: [297.0, 420.0],
+  A5: [148.0, 210.0],
+  A6: [105.0, 148.0],
   LETTER: [215.9, 279.4],
 };
 
@@ -13,9 +15,17 @@ export class ImpositionCalculator {
     outer_margins: Margins,
     config: ImpositionConfig
   ): ImpositionCalculation {
-    const rawDim = PAGE_DIMENSIONS_MM[config.page_size] || PAGE_DIMENSIONS_MM.A4;
-    let page_w = rawDim[0];
-    let page_h = rawDim[1];
+    let page_w: number;
+    let page_h: number;
+
+    if (config.page_size === 'CUSTOM' && config.custom_page_w_mm && config.custom_page_h_mm) {
+      page_w = config.custom_page_w_mm;
+      page_h = config.custom_page_h_mm;
+    } else {
+      const rawDim = PAGE_DIMENSIONS_MM[config.page_size] || PAGE_DIMENSIONS_MM.A4;
+      page_w = rawDim[0];
+      page_h = rawDim[1];
+    }
 
     if (config.orientation === 'landscape') {
       [page_w, page_h] = [page_h, page_w];
@@ -37,8 +47,11 @@ export class ImpositionCalculator {
     const used_w = cols * label_total_w_mm + Math.max(0, cols - 1) * gap;
     const used_h = rows * label_total_h_mm + Math.max(0, rows - 1) * gap;
 
-    const horizontal_offset_mm = Math.max(0, (page_w - used_w) / 2);
-    const vertical_offset_mm = Math.max(0, (page_h - used_h) / 2);
+    const calibX = config.calibration_x_mm || 0;
+    const calibY = config.calibration_y_mm || 0;
+
+    const horizontal_offset_mm = Math.max(0, (page_w - used_w) / 2 + calibX);
+    const vertical_offset_mm = Math.max(0, (page_h - used_h) / 2 + calibY);
 
     return {
       page_w_mm: page_w,

@@ -3,6 +3,7 @@ import { LabelTemplate, ProductRecord, TemplateItem } from '../types';
 import { TierEngine } from '../utils/tierEngine';
 import { generateCode128Bars, generateEAN13Bars } from '../utils/barcodeGenerator';
 import { generateQrMatrix } from '../utils/qrGenerator';
+import { SmartGuideLine } from '../utils/smartGuides';
 
 interface LabelRendererProps {
   template: LabelTemplate;
@@ -13,7 +14,10 @@ interface LabelRendererProps {
   showInnerMargins?: boolean;
   showHazardWarnings?: boolean;
   selectedItemId?: string | null;
+  selectedItemIds?: string[];
   onSelectItem?: (id: string, e: React.MouseEvent) => void;
+  onResizeStart?: (id: string, handle: string, e: React.MouseEvent) => void;
+  smartGuides?: SmartGuideLine[];
   interactive?: boolean;
   className?: string;
   id?: string;
@@ -28,7 +32,10 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
   showInnerMargins = true,
   showHazardWarnings = false,
   selectedItemId = null,
+  selectedItemIds,
   onSelectItem,
+  onResizeStart,
+  smartGuides = [],
   interactive = false,
   className = '',
   id,
@@ -95,6 +102,14 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         // Scale font size proportionally
         const fontSizePx = Math.max(7, item.font_size_pt * 1.333 * zoom);
 
+        let finalDisplay = displayVal || item.placeholder || '';
+        if (item.prefix_text) finalDisplay = `${item.prefix_text} ${finalDisplay}`;
+        if (item.suffix_text) finalDisplay = `${finalDisplay} ${item.suffix_text}`;
+
+        const letterSpacingPx = item.letter_spacing_pt ? `${item.letter_spacing_pt * 1.333 * zoom}px` : undefined;
+        const lineHeightStyle = item.line_height_multiplier ? item.line_height_multiplier : 1.25;
+        const textTransform = item.text_transform && item.text_transform !== 'none' ? item.text_transform : undefined;
+
         return (
           <div
             className={`w-full h-full flex flex-col ${vAlignClass} overflow-hidden p-0.5`}
@@ -105,7 +120,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
             }}
           >
             <div
-              className={`${textAlignClass} leading-snug w-full whitespace-pre-wrap break-words`}
+              className={`${textAlignClass} w-full whitespace-pre-wrap break-words`}
               style={{
                 fontFamily: item.font_family,
                 fontSize: `${fontSizePx}px`,
@@ -113,9 +128,12 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                 fontStyle: item.font_style || 'normal',
                 textDecoration: item.text_decoration || 'none',
                 color: item.text_color || '#000000',
+                letterSpacing: letterSpacingPx,
+                lineHeight: lineHeightStyle,
+                textTransform: textTransform as any,
               }}
             >
-              {displayVal || item.placeholder || ''}
+              {finalDisplay}
             </div>
           </div>
         );
@@ -432,7 +450,9 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         .slice()
         .sort((a, b) => (a.z_index || 0) - (b.z_index || 0))
         .map((item) => {
-          const isSelected = selectedItemId === item.id;
+          const isSelected =
+            (selectedItemIds && selectedItemIds.includes(item.id)) ||
+            selectedItemId === item.id;
           const isHazard = showHazardWarnings && checkHazard(item);
 
           return (
@@ -477,17 +497,144 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
               )}
 
               {/* Selection resize handles */}
-              {isSelected && interactive && (
+              {isSelected && interactive && !item.locked && (
                 <>
-                  <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-white border-2 border-blue-600 cursor-nwse-resize z-50" />
-                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white border-2 border-blue-600 cursor-nesw-resize z-50" />
-                  <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-white border-2 border-blue-600 cursor-nesw-resize z-50" />
-                  <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-white border-2 border-blue-600 cursor-nwse-resize z-50" />
+                  {/* Top-Left NW */}
+                  <div
+                    onMouseDown={(e) => {
+                      if (onResizeStart) {
+                        e.stopPropagation();
+                        onResizeStart(item.id, 'nw', e);
+                      }
+                    }}
+                    className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-xs cursor-nwse-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
+                    title="Redimensionner"
+                  />
+                  {/* Top-Right NE */}
+                  <div
+                    onMouseDown={(e) => {
+                      if (onResizeStart) {
+                        e.stopPropagation();
+                        onResizeStart(item.id, 'ne', e);
+                      }
+                    }}
+                    className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-xs cursor-nesw-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
+                    title="Redimensionner"
+                  />
+                  {/* Bottom-Left SW */}
+                  <div
+                    onMouseDown={(e) => {
+                      if (onResizeStart) {
+                        e.stopPropagation();
+                        onResizeStart(item.id, 'sw', e);
+                      }
+                    }}
+                    className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-xs cursor-nesw-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
+                    title="Redimensionner"
+                  />
+                  {/* Bottom-Right SE */}
+                  <div
+                    onMouseDown={(e) => {
+                      if (onResizeStart) {
+                        e.stopPropagation();
+                        onResizeStart(item.id, 'se', e);
+                      }
+                    }}
+                    className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-xs cursor-nwse-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
+                    title="Redimensionner"
+                  />
+                  {/* Middle-Right E */}
+                  <div
+                    onMouseDown={(e) => {
+                      if (onResizeStart) {
+                        e.stopPropagation();
+                        onResizeStart(item.id, 'e', e);
+                      }
+                    }}
+                    className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2.5 h-2.5 bg-white border-2 border-blue-600 rounded-xs cursor-ew-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
+                  />
+                  {/* Middle-Bottom S */}
+                  <div
+                    onMouseDown={(e) => {
+                      if (onResizeStart) {
+                        e.stopPropagation();
+                        onResizeStart(item.id, 's', e);
+                      }
+                    }}
+                    className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white border-2 border-blue-600 rounded-xs cursor-ns-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
+                  />
                 </>
               )}
             </div>
           );
         })}
+
+      {/* Dynamic Smart Guides Overlay (Magenta Alignment Guidelines) */}
+      {smartGuides && smartGuides.length > 0 && (
+        <div className="absolute inset-0 pointer-events-none z-50 overflow-visible">
+          {smartGuides.map((guide) => {
+            if (guide.orientation === 'vertical') {
+              const leftPx = guide.position_mm * pxPerMm;
+              const topPx = guide.start_mm * pxPerMm;
+              const heightPx = (guide.end_mm - guide.start_mm) * pxPerMm;
+
+              return (
+                <React.Fragment key={guide.id}>
+                  {/* Vertical Guideline */}
+                  <div
+                    className="absolute w-[1.5px] bg-rose-500 shadow-xs pointer-events-none"
+                    style={{
+                      left: `${leftPx}px`,
+                      top: `${topPx}px`,
+                      height: `${Math.max(4, heightPx)}px`,
+                      borderLeft: '1.5px dashed #f43f5e',
+                    }}
+                  />
+                  {/* Guide Alignment Badge / Marker */}
+                  <div
+                    className="absolute -translate-x-1/2 -translate-y-1/2 px-1 py-0.5 bg-rose-600 text-[9px] font-mono text-white font-bold rounded shadow-xs pointer-events-none z-50 whitespace-nowrap"
+                    style={{
+                      left: `${leftPx}px`,
+                      top: `${topPx + Math.min(20, heightPx / 2)}px`,
+                    }}
+                  >
+                    {guide.label || `${guide.position_mm.toFixed(1)} mm`}
+                  </div>
+                </React.Fragment>
+              );
+            } else {
+              const topPx = guide.position_mm * pxPerMm;
+              const leftPx = guide.start_mm * pxPerMm;
+              const widthPx = (guide.end_mm - guide.start_mm) * pxPerMm;
+
+              return (
+                <React.Fragment key={guide.id}>
+                  {/* Horizontal Guideline */}
+                  <div
+                    className="absolute h-[1.5px] bg-rose-500 shadow-xs pointer-events-none"
+                    style={{
+                      top: `${topPx}px`,
+                      left: `${leftPx}px`,
+                      width: `${Math.max(4, widthPx)}px`,
+                      borderTop: '1.5px dashed #f43f5e',
+                    }}
+                  />
+                  {/* Guide Alignment Badge / Marker */}
+                  <div
+                    className="absolute -translate-x-1/2 -translate-y-1/2 px-1 py-0.5 bg-rose-600 text-[9px] font-mono text-white font-bold rounded shadow-xs pointer-events-none z-50 whitespace-nowrap"
+                    style={{
+                      left: `${leftPx + Math.min(24, widthPx / 2)}px`,
+                      top: `${topPx}px`,
+                    }}
+                  >
+                    {guide.label || `${guide.position_mm.toFixed(1)} mm`}
+                  </div>
+                </React.Fragment>
+              );
+            }
+          })}
+        </div>
+      )}
     </div>
   );
 };

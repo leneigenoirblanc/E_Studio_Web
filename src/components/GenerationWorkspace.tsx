@@ -4,6 +4,8 @@ import { SAMPLE_PRODUCTS } from '../sampleData';
 import { LabelRenderer } from './LabelRenderer';
 import { ImpositionCalculator } from '../utils/impositionCalculator';
 import { TierEngine } from '../utils/tierEngine';
+import { DataMappingModal } from './DataMappingModal';
+import { PptxExporter } from '../utils/pptxExporter';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import {
@@ -23,6 +25,7 @@ import {
   AlertCircle,
   FileText,
   Sliders,
+  Presentation,
 } from 'lucide-react';
 
 interface GenerationWorkspaceProps {
@@ -36,10 +39,15 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'preview' | 'data' | 'imposition'>('preview');
 
-  // Imposition sheet configuration
+  // Excel Mapping Modal State
+  const [mappingModalOpen, setMappingModalOpen] = useState(false);
+  const [rawHeaders, setRawHeaders] = useState<string[]>([]);
+  const [rawRows, setRawRows] = useState<any[]>([]);
+
+  // Imposition sheet configuration (default landscape as requested)
   const [impositionConfig, setImpositionConfig] = useState<ImpositionConfig>({
     page_size: 'A4',
-    orientation: 'portrait',
+    orientation: 'landscape',
     gap_mm: 2.0,
     show_cut_marks: true,
   });
@@ -111,7 +119,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
     });
   }, [products, template]);
 
-  // Excel / CSV File Import
+  // Excel / CSV File Import with Data Mapping Tool
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -126,41 +134,25 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
         const rawJson: any[] = XLSX.utils.sheet_to_json(worksheet);
 
         if (rawJson.length > 0) {
-          const imported: ProductRecord[] = rawJson.map((row, idx) => ({
-            id: `IMP-${idx + 1}`,
-            STORE_NAME: row['STORE_NAME'] || row['STORE'] || row['MAGASIN'] || 'SUPERMARCHÉ',
-            PRODUCT_SCAN: String(row['PRODUCT_SCAN'] || row['EAN'] || row['GTIN'] || row['CODE_BARRE'] || ''),
-            PARTNO: String(row['PARTNO'] || row['SKU'] || row['REF'] || `ART-${idx + 1}`),
-            ITEMNAME: String(row['ITEMNAME'] || row['NAME'] || row['DESIGNATION'] || row['ARTICLE'] || `Article ${idx + 1}`),
-            ITEMDESCRIPTION: String(row['ITEMDESCRIPTION'] || row['DESCRIPTION'] || ''),
-            DIV_NAME: String(row['DIV_NAME'] || row['DIVISION'] || ''),
-            DEPT_NAME: String(row['DEPT_NAME'] || row['DEPARTMENT'] || ''),
-            CATEGORY_NAME: String(row['CATEGORY_NAME'] || row['CATEGORY'] || row['RAYON'] || ''),
-            BRAND_INFO: String(row['BRAND_INFO'] || row['BRAND'] || row['MARQUE'] || ''),
-            PACK_UNIT: String(row['PACK_UNIT'] || row['CONDITIONNEMENT'] || ''),
-            SELLING_UNIT: String(row['SELLING_UNIT'] || row['UNITE'] || 'unité'),
-            SELLING_PRICE: parseFloat(row['SELLING_PRICE'] || row['PRICE'] || row['PRIX'] || 0),
-            PROMOPRICE: row['PROMOPRICE'] || row['PROMO'] ? parseFloat(row['PROMOPRICE'] || row['PROMO']) : undefined,
-            CASE_SIZE: row['CASE_SIZE'] ? parseInt(row['CASE_SIZE'], 10) : undefined,
-            CASE_UNIT: String(row['CASE_UNIT'] || ''),
-            TIERS: row['TIERS']
-              ? typeof row['TIERS'] === 'string'
-                ? JSON.parse(row['TIERS'])
-                : row['TIERS']
-              : [
-                  { qty: 6, unit_price: Math.round((parseFloat(row['SELLING_PRICE'] || 0) || 1000) * 0.9) },
-                  { qty: 12, unit_price: Math.round((parseFloat(row['SELLING_PRICE'] || 0) || 1000) * 0.8) },
-                ],
-          }));
-
-          setProducts(imported);
-          setCurrentIndex(0);
+          // Extract column headers dynamically
+          const headers = Object.keys(rawJson[0]);
+          setRawHeaders(headers);
+          setRawRows(rawJson);
+          setMappingModalOpen(true);
         }
       } catch (err) {
         alert("Erreur lors de l'importation du fichier Excel/CSV : " + String(err));
       }
     };
     reader.readAsArrayBuffer(file);
+    // Reset file input so user can reload same file
+    e.target.value = '';
+  };
+
+  const handleApplyMapping = (mappedProducts: ProductRecord[]) => {
+    setProducts(mappedProducts);
+    setCurrentIndex(0);
+    setMappingModalOpen(false);
   };
 
   // Export Excel template of current records
@@ -184,14 +176,29 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
     XLSX.writeFile(wb, "catalogue_articles_estudio.xlsx");
   };
 
-  // Generate Imposed PDF
-  const handleGeneratePdf = () => {
+  // PowerPoint (.pptx) Export
+  const handleExportPptx = async () => {
     if (!imposition) return;
+    try {
+      await PptxExporter.exportToPptx(template, products, imposition, impositionConfig);
+    } catch (err) {
+      alert("Erreur lors de l'export PowerPoint : " + String(err));
+    }
+  };
+
+  // Helper: Build the printable PDF document
+  const buildPdfDocument = () => {
+    if (!imposition) return null;
     const isLandscape = impositionConfig.orientation === 'landscape';
+    const pdfFormat =
+      impositionConfig.page_size === 'CUSTOM' && impositionConfig.custom_page_w_mm && impositionConfig.custom_page_h_mm
+        ? [impositionConfig.custom_page_w_mm, impositionConfig.custom_page_h_mm]
+        : impositionConfig.page_size.toLowerCase();
+
     const doc = new jsPDF({
       orientation: isLandscape ? 'landscape' : 'portrait',
       unit: 'mm',
-      format: impositionConfig.page_size.toLowerCase(),
+      format: pdfFormat as any,
     });
 
     const labelsPerPage = imposition.total_per_page;
@@ -249,8 +256,49 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
         }
       }
     }
+    return doc;
+  };
 
-    doc.save(`etiquettes_imposees_${template.name.toLowerCase().replace(/\s+/g, '_')}.pdf`);
+  // Generate and download Imposed PDF
+  const handleGeneratePdf = () => {
+    const doc = buildPdfDocument();
+    if (doc) {
+      doc.save(`etiquettes_imposees_${template.name.toLowerCase().replace(/\s+/g, '_')}.pdf`);
+    }
+  };
+
+  // Direct Print to Physical Printer via iframe/blob
+  const handleDirectPrint = () => {
+    const doc = buildPdfDocument();
+    if (!doc) return;
+
+    try {
+      const blob = doc.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
+
+      // Create hidden iframe to trigger native browser/physical print dialog
+      const printIframe = document.createElement('iframe');
+      printIframe.style.position = 'fixed';
+      printIframe.style.right = '0';
+      printIframe.style.bottom = '0';
+      printIframe.style.width = '0';
+      printIframe.style.height = '0';
+      printIframe.style.border = '0';
+      printIframe.src = blobUrl;
+
+      printIframe.onload = () => {
+        try {
+          printIframe.contentWindow?.focus();
+          printIframe.contentWindow?.print();
+        } catch {
+          window.open(blobUrl, '_blank');
+        }
+      };
+
+      document.body.appendChild(printIframe);
+    } catch {
+      window.print();
+    }
   };
 
   return (
@@ -326,11 +374,28 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
             <span>Export Excel</span>
           </button>
           <button
+            onClick={handleExportPptx}
+            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
+            title="Exporter planche en diapositives PowerPoint éditables (.pptx)"
+          >
+            <Presentation className="w-3.5 h-3.5 text-white" />
+            <span>Export PowerPoint</span>
+          </button>
+          <button
+            onClick={handleDirectPrint}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
+            title="Impression directe sur imprimante physique"
+          >
+            <Printer className="w-3.5 h-3.5 text-white" />
+            <span>Imprimer Direct</span>
+          </button>
+          <button
             onClick={handleGeneratePdf}
             className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
+            title="Télécharger planche complète en PDF"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Imprimer Planche (PDF)</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Télécharger PDF</span>
           </button>
         </div>
       </header>
@@ -487,9 +552,52 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
               >
                 <option value="A4">A4 (210 × 297 mm)</option>
                 <option value="A3">A3 (297 × 420 mm)</option>
+                <option value="A5">A5 (148 × 210 mm)</option>
+                <option value="A6">A6 (105 × 148 mm)</option>
                 <option value="LETTER">US Letter (215.9 × 279.4 mm)</option>
+                <option value="CUSTOM">Personnalisé (Custom mm)</option>
               </select>
             </div>
+
+            {impositionConfig.page_size === 'CUSTOM' && (
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2">
+                <span className="font-semibold text-slate-700 text-[11px]">Dimensions Page Personnalisée</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-medium block mb-0.5">Largeur (mm)</span>
+                    <input
+                      type="number"
+                      min="20"
+                      max="1000"
+                      value={impositionConfig.custom_page_w_mm || 210}
+                      onChange={(e) =>
+                        setImpositionConfig({
+                          ...impositionConfig,
+                          custom_page_w_mm: parseFloat(e.target.value) || 210,
+                        })
+                      }
+                      className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-medium block mb-0.5">Hauteur (mm)</span>
+                    <input
+                      type="number"
+                      min="20"
+                      max="1000"
+                      value={impositionConfig.custom_page_h_mm || 297}
+                      onChange={(e) =>
+                        setImpositionConfig({
+                          ...impositionConfig,
+                          custom_page_h_mm: parseFloat(e.target.value) || 297,
+                        })
+                      }
+                      className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Orientation</label>
@@ -544,6 +652,55 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
                 }
                 className="rounded text-blue-600"
               />
+            </div>
+
+            {/* Print Calibration Offset Controls */}
+            <div className="pt-2 border-t border-slate-200">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="font-semibold text-slate-700 text-xs">Calibration Imprimante (Décalage)</label>
+                <span className="text-[10px] text-slate-400 font-mono">± 0.1 mm</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-medium block mb-0.5">Axe X (mm)</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="-25"
+                    max="25"
+                    value={impositionConfig.calibration_x_mm || 0}
+                    onChange={(e) =>
+                      setImpositionConfig({
+                        ...impositionConfig,
+                        calibration_x_mm: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
+                    placeholder="0.0"
+                  />
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-medium block mb-0.5">Axe Y (mm)</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="-25"
+                    max="25"
+                    value={impositionConfig.calibration_y_mm || 0}
+                    onChange={(e) =>
+                      setImpositionConfig({
+                        ...impositionConfig,
+                        calibration_y_mm: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
+                    placeholder="0.0"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Ajuste les marges physiques pour compenser le glissement du papier de votre imprimante laser/jet d'encre.
+              </p>
             </div>
 
             {/* Imposition Results Summary */}
@@ -744,6 +901,16 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
             </table>
           </div>
         </div>
+      )}
+
+      {/* Excel / CSV Built-in Data Mapping Modal */}
+      {mappingModalOpen && (
+        <DataMappingModal
+          rawHeaders={rawHeaders}
+          rawRows={rawRows}
+          onApplyMapping={handleApplyMapping}
+          onCancel={() => setMappingModalOpen(false)}
+        />
       )}
     </div>
   );

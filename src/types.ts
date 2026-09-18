@@ -27,12 +27,17 @@ export interface TextItemProperties extends BaseItemProperties {
   font_size_pt: number;
   font_weight: 'normal' | '500' | '600' | 'bold' | '800';
   font_style: 'normal' | 'italic';
-  text_decoration: 'none' | 'underline';
+  text_decoration: 'none' | 'underline' | 'line-through';
   text_color: string;
   alignment: 'left' | 'center' | 'right' | 'justify';
   valign: 'top' | 'middle' | 'bottom';
   wrap: boolean;
   overflow: 'autofit_shrink' | 'clip' | 'overflow';
+  letter_spacing_pt?: number;
+  line_height_multiplier?: number;
+  text_transform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+  prefix_text?: string;
+  suffix_text?: string;
   fill_color?: string;
   border_color?: string;
   border_width?: number;
@@ -163,10 +168,14 @@ export interface ProductRecord {
 }
 
 export interface ImpositionConfig {
-  page_size: 'A4' | 'A3' | 'LETTER';
+  page_size: 'A4' | 'A3' | 'A5' | 'A6' | 'LETTER' | 'CUSTOM';
   orientation: 'portrait' | 'landscape';
   gap_mm: number;
   show_cut_marks: boolean;
+  calibration_x_mm?: number;
+  calibration_y_mm?: number;
+  custom_page_w_mm?: number;
+  custom_page_h_mm?: number;
 }
 
 export interface ImpositionCalculation {
