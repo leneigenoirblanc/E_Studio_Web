@@ -31,27 +31,37 @@ export class ImpositionCalculator {
       [page_w, page_h] = [page_h, page_w];
     }
 
-    const gap = Math.max(0, config.gap_mm || 0);
-    const label_total_w_mm = template_w_mm + outer_margins.left + outer_margins.right;
-    const label_total_h_mm = template_h_mm + outer_margins.top + outer_margins.bottom;
+    const gap_x = Math.max(0, config.gap_x_mm ?? config.gap_mm ?? 0);
+    const gap_y = Math.max(0, config.gap_y_mm ?? config.gap_mm ?? 0);
+
+    const marginLeft = Math.max(0, config.margin_left_mm ?? 0);
+    const marginRight = Math.max(0, config.margin_right_mm ?? 0);
+    const marginTop = Math.max(0, config.margin_top_mm ?? 0);
+    const marginBottom = Math.max(0, config.margin_bottom_mm ?? 0);
+
+    const available_w = Math.max(10, page_w - marginLeft - marginRight);
+    const available_h = Math.max(10, page_h - marginTop - marginBottom);
+
+    const label_total_w_mm = template_w_mm + (outer_margins?.left || 0) + (outer_margins?.right || 0);
+    const label_total_h_mm = template_h_mm + (outer_margins?.top || 0) + (outer_margins?.bottom || 0);
 
     if (label_total_w_mm <= 0 || label_total_h_mm <= 0) {
       throw new Error('Les dimensions de gabarit doivent être strictement positives.');
     }
 
-    // Number of columns & rows that fit
-    // For n items with gap: n * w + (n - 1) * gap <= page_dim => n * (w + gap) - gap <= page_dim => n * (w + gap) <= page_dim + gap
-    const cols = Math.max(1, Math.floor((page_w + gap) / (label_total_w_mm + gap)));
-    const rows = Math.max(1, Math.floor((page_h + gap) / (label_total_h_mm + gap)));
+    // Number of columns & rows that fit in available printable space
+    const cols = Math.max(1, Math.floor((available_w + gap_x) / (label_total_w_mm + gap_x)));
+    const rows = Math.max(1, Math.floor((available_h + gap_y) / (label_total_h_mm + gap_y)));
 
-    const used_w = cols * label_total_w_mm + Math.max(0, cols - 1) * gap;
-    const used_h = rows * label_total_h_mm + Math.max(0, rows - 1) * gap;
+    const used_w = cols * label_total_w_mm + Math.max(0, cols - 1) * gap_x;
+    const used_h = rows * label_total_h_mm + Math.max(0, rows - 1) * gap_y;
 
     const calibX = config.calibration_x_mm || 0;
     const calibY = config.calibration_y_mm || 0;
 
-    const horizontal_offset_mm = Math.max(0, (page_w - used_w) / 2 + calibX);
-    const vertical_offset_mm = Math.max(0, (page_h - used_h) / 2 + calibY);
+    // Center within available margins or whole page
+    const horizontal_offset_mm = Math.max(0, marginLeft + (available_w - used_w) / 2 + calibX);
+    const vertical_offset_mm = Math.max(0, marginTop + (available_h - used_h) / 2 + calibY);
 
     return {
       page_w_mm: page_w,

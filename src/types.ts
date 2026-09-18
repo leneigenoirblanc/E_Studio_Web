@@ -5,7 +5,16 @@ export interface Margins {
   right: number;
 }
 
-export type ItemType = 'text' | 'shape' | 'ellipse' | 'line' | 'image' | 'qrcode' | 'barcode' | 'tier_price';
+export type ItemType =
+  | 'text'
+  | 'shape'
+  | 'ellipse'
+  | 'line'
+  | 'image'
+  | 'qrcode'
+  | 'barcode'
+  | 'tier_price'
+  | 'restricted_area';
 
 export interface BaseItemProperties {
   id: string;
@@ -20,6 +29,14 @@ export interface BaseItemProperties {
   binding_key?: string;
 }
 
+export interface TextShadowConfig {
+  enabled: boolean;
+  color: string;
+  blur_px: number;
+  offset_x_px: number;
+  offset_y_px: number;
+}
+
 export interface TextItemProperties extends BaseItemProperties {
   type: 'text';
   text: string;
@@ -27,7 +44,7 @@ export interface TextItemProperties extends BaseItemProperties {
   font_size_pt: number;
   font_weight: 'normal' | '500' | '600' | 'bold' | '800';
   font_style: 'normal' | 'italic';
-  text_decoration: 'none' | 'underline' | 'line-through';
+  text_decoration: 'none' | 'underline' | 'line-through' | 'underline line-through';
   text_color: string;
   alignment: 'left' | 'center' | 'right' | 'justify';
   valign: 'top' | 'middle' | 'bottom';
@@ -44,6 +61,12 @@ export interface TextItemProperties extends BaseItemProperties {
   corner_radius?: number;
   placeholder?: string;
 
+  // Rich Typography & Advanced Styling Tools
+  highlight_color?: string; // background text highlight
+  text_shadow?: TextShadowConfig;
+  subscript_superscript?: 'none' | 'subscript' | 'superscript';
+  strikethrough_color?: string;
+
   // Dedicated Price & Currency separate typography & configuration
   is_price?: boolean;
   currency_symbol?: string; // e.g. "FCFA", "€", "$", "MAD", "DZD", "CHF", "£"
@@ -54,6 +77,17 @@ export interface TextItemProperties extends BaseItemProperties {
   currency_font_style?: 'normal' | 'italic';
   currency_color?: string;
   currency_spacing_pt?: number;
+
+  // Promotion badge presets
+  promo_badge_type?:
+    | 'standard'
+    | 'discount_pct'
+    | 'slashed_price'
+    | 'bogo'
+    | 'flash_sale'
+    | 'unit_price'
+    | 'promo_period'
+    | 'eco_tax';
 }
 
 export interface ShapeItemProperties extends BaseItemProperties {
@@ -109,6 +143,15 @@ export interface TierPriceItemProperties extends BaseItemProperties {
   fallback_to_base_price?: boolean;
 }
 
+export interface RestrictedAreaItemProperties extends BaseItemProperties {
+  type: 'restricted_area';
+  label: string; // e.g. "Zone Réservée / Capteur", "Marge d'encollage"
+  pattern: 'diagonal_stripes' | 'solid' | 'cross' | 'outline';
+  zone_color: string; // e.g. "#ef4444"
+  opacity: number; // 0.15 to 0.75
+  warn_on_overlap: boolean;
+}
+
 export type TemplateItem =
   | TextItemProperties
   | ShapeItemProperties
@@ -117,7 +160,19 @@ export type TemplateItem =
   | ImageItemProperties
   | QRCodeItemProperties
   | BarcodeItemProperties
-  | TierPriceItemProperties;
+  | TierPriceItemProperties
+  | RestrictedAreaItemProperties;
+
+export interface CalibrationImageConfig {
+  url: string;
+  opacity: number; // 0 to 1
+  offset_x_mm: number;
+  offset_y_mm: number;
+  scale_pct: number; // 50 to 200
+  visible: boolean;
+  locked: boolean;
+  print_in_output: boolean; // whether to include in print/PDF output or keep as reference overlay only
+}
 
 export interface LabelTemplate {
   schema_version: number;
@@ -134,13 +189,14 @@ export interface LabelTemplate {
   background_image_visible?: boolean;
   background_image_locked?: boolean;
   background_image_in_output?: boolean;
+  calibration_image?: CalibrationImageConfig | null;
   items: TemplateItem[];
 }
 
 export interface DomainField {
   key: string;
   label: string;
-  value_type: 'text' | 'currency' | 'barcode' | 'number';
+  value_type: 'text' | 'currency' | 'barcode' | 'number' | 'date' | 'promo';
   aliases: string[];
   numeric?: boolean;
 }
@@ -167,6 +223,14 @@ export interface ProductRecord {
   SELLING_UNIT?: string;
   SELLING_PRICE: number;
   PROMOPRICE?: number;
+  DISCOUNT_PCT?: number; // e.g. 20 for -20%
+  PROMO_LABEL?: string; // e.g. "1 ACHETÉ = 1 OFFERT", "VENTE FLASH"
+  PROMO_START_DATE?: string;
+  PROMO_END_DATE?: string;
+  PROMO_PERIOD?: string; // e.g. "Du 15 au 30 Mai"
+  UNIT_PRICE_TEXT?: string; // e.g. "12.50 € / kg"
+  ECO_TAX?: string; // e.g. "Dont 0,15 € d'éco-part"
+  ORIGIN_COUNTRY?: string; // e.g. "Origine France"
   ITEM_TYPE?: string;
   CASE_SIZE?: number;
   CASE_UNIT?: string;
@@ -182,6 +246,12 @@ export interface ImpositionConfig {
   page_size: 'A4' | 'A3' | 'A5' | 'A6' | 'LETTER' | 'CUSTOM';
   orientation: 'portrait' | 'landscape';
   gap_mm: number;
+  gap_x_mm?: number;
+  gap_y_mm?: number;
+  margin_top_mm?: number;
+  margin_bottom_mm?: number;
+  margin_left_mm?: number;
+  margin_right_mm?: number;
   show_cut_marks: boolean;
   calibration_x_mm?: number;
   calibration_y_mm?: number;

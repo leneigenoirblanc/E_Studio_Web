@@ -65,6 +65,25 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
     );
   };
 
+  // Check if item overlaps any active restricted area
+  const checkRestrictedOverlap = (item: TemplateItem): { isOverlapping: boolean; label: string } => {
+    if (item.type === 'restricted_area') return { isOverlapping: false, label: '' };
+    const restrictedItems = template.items.filter(
+      (it) => it.type === 'restricted_area' && (it as any).warn_on_overlap !== false
+    );
+    for (const r of restrictedItems) {
+      const overlap =
+        item.x_mm < r.x_mm + r.w_mm &&
+        item.x_mm + item.w_mm > r.x_mm &&
+        item.y_mm < r.y_mm + r.h_mm &&
+        item.y_mm + item.h_mm > r.y_mm;
+      if (overlap) {
+        return { isOverlapping: true, label: (r as any).label || 'Zone Restreinte' };
+      }
+    }
+    return { isOverlapping: false, label: '' };
+  };
+
   // Render individual item
   const renderItemContent = (item: TemplateItem) => {
     const itemW = item.w_mm * pxPerMm;
@@ -118,6 +137,13 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         const lineHeightStyle = item.line_height_multiplier ? item.line_height_multiplier : 1.25;
         const textTransform = item.text_transform && item.text_transform !== 'none' ? item.text_transform : undefined;
 
+        // Shadow styling
+        let textShadowStyle: string | undefined = undefined;
+        if (item.text_shadow && item.text_shadow.enabled) {
+          const s = item.text_shadow;
+          textShadowStyle = `${(s.offset_x_px || 1) * zoom}px ${(s.offset_y_px || 1) * zoom}px ${(s.blur_px || 2) * zoom}px ${s.color || '#000000'}`;
+        }
+
         // Currency separate styling
         const hasCurrency = (isPriceField || item.currency_symbol) && item.currency_symbol;
         const currencySym = item.currency_symbol || 'FCFA';
@@ -160,6 +186,9 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
           </span>
         );
 
+        const isSub = item.subscript_superscript === 'subscript';
+        const isSuper = item.subscript_superscript === 'superscript';
+
         return (
           <div
             className={`w-full h-full flex flex-col ${vAlignClass} overflow-hidden p-0.5`}
@@ -173,19 +202,71 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
               className={`${textAlignClass} w-full whitespace-pre-wrap break-words leading-tight`}
               style={{
                 fontFamily: item.font_family,
-                fontSize: `${fontSizePx}px`,
+                fontSize: `${isSub || isSuper ? fontSizePx * 0.75 : fontSizePx}px`,
                 fontWeight: item.font_weight || 'normal',
                 fontStyle: item.font_style || 'normal',
                 textDecoration: item.text_decoration || 'none',
+                textDecorationColor: item.strikethrough_color || item.text_color || '#000000',
                 color: item.text_color || '#000000',
                 letterSpacing: letterSpacingPx,
                 lineHeight: lineHeightStyle,
                 textTransform: textTransform as any,
+                textShadow: textShadowStyle,
+                verticalAlign: isSub ? 'sub' : isSuper ? 'super' : 'baseline',
+                transform: isSub ? 'translateY(10%)' : isSuper ? 'translateY(-15%)' : undefined,
               }}
             >
               {hasCurrency && currPosition === 'before' && renderCurrencySpan()}
-              <span>{mainText}</span>
+              <span
+                style={{
+                  backgroundColor: item.highlight_color && item.highlight_color !== 'transparent' ? item.highlight_color : undefined,
+                  padding: item.highlight_color && item.highlight_color !== 'transparent' ? '0 2px' : undefined,
+                  borderRadius: '2px',
+                }}
+              >
+                {mainText}
+              </span>
               {hasCurrency && (currPosition === 'after' || currPosition === 'superscript' || currPosition === 'subscript') && renderCurrencySpan()}
+            </div>
+          </div>
+        );
+      }
+
+      case 'restricted_area': {
+        const zoneColor = item.zone_color || '#ef4444';
+        const opacity = item.opacity ?? 0.25;
+        const pattern = item.pattern || 'diagonal_stripes';
+
+        let backgroundPattern = 'transparent';
+        if (pattern === 'diagonal_stripes') {
+          backgroundPattern = `repeating-linear-gradient(45deg, ${zoneColor} 0, ${zoneColor} 6px, transparent 6px, transparent 12px)`;
+        } else if (pattern === 'cross') {
+          backgroundPattern = `repeating-linear-gradient(45deg, ${zoneColor} 0, ${zoneColor} 2px, transparent 2px, transparent 8px), repeating-linear-gradient(-45deg, ${zoneColor} 0, ${zoneColor} 2px, transparent 2px, transparent 8px)`;
+        } else if (pattern === 'solid') {
+          backgroundPattern = zoneColor;
+        }
+
+        return (
+          <div
+            className="w-full h-full relative border border-dashed flex flex-col items-center justify-center p-1 select-none overflow-hidden"
+            style={{
+              borderColor: zoneColor,
+              backgroundColor: pattern === 'solid' ? zoneColor : `${zoneColor}15`,
+              opacity: opacity,
+            }}
+          >
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundImage: backgroundPattern,
+                opacity: 0.8,
+              }}
+            />
+            <div
+              className="relative z-10 bg-slate-900/80 text-white px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase shadow-xs text-center truncate max-w-full"
+              style={{ fontSize: `${Math.max(7, 7.5 * zoom)}px` }}
+            >
+              🚫 {item.label || 'Zone Restreinte'}
             </div>
           </div>
         );
@@ -477,6 +558,30 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         />
       )}
 
+      {/* Calibration Reference Image (Adjust disposition relative to real print zone) */}
+      {template.calibration_image && template.calibration_image.visible && template.calibration_image.url && (
+        <div
+          className="absolute inset-0 pointer-events-none z-5 overflow-hidden select-none"
+          style={{
+            opacity: template.calibration_image.opacity ?? 0.5,
+          }}
+        >
+          <img
+            src={template.calibration_image.url}
+            alt="Calibration Overlay"
+            className="absolute pointer-events-none"
+            style={{
+              left: `${(template.calibration_image.offset_x_mm || 0) * pxPerMm}px`,
+              top: `${(template.calibration_image.offset_y_mm || 0) * pxPerMm}px`,
+              width: `${(template.width_mm * ((template.calibration_image.scale_pct || 100) / 100)) * pxPerMm}px`,
+              height: 'auto',
+              transformOrigin: 'top left',
+            }}
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      )}
+
       {/* Inner Printable Margins boundary guide */}
       {showInnerMargins && (
         <div
@@ -506,6 +611,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
             (selectedItemIds && selectedItemIds.includes(item.id)) ||
             selectedItemId === item.id;
           const isHazard = showHazardWarnings && checkHazard(item);
+          const restrictedOverlap = checkRestrictedOverlap(item);
 
           return (
             <div
@@ -524,7 +630,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                 isSelected
                   ? 'outline-2 outline-blue-600 outline-dashed ring-2 ring-blue-500/20 z-40'
                   : ''
-              }`}
+              } ${restrictedOverlap.isOverlapping ? 'ring-2 ring-rose-500/60' : ''}`}
               style={{
                 left: `${item.x_mm * pxPerMm}px`,
                 top: `${item.y_mm * pxPerMm}px`,
@@ -547,6 +653,16 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                   }}
                   title="Attention: cet élément déborde de la zone imprimable !"
                 />
+              )}
+
+              {/* Restricted Area Collision Alert Badge */}
+              {restrictedOverlap.isOverlapping && (
+                <div
+                  className="absolute -top-3.5 left-0 z-40 bg-rose-600 text-white text-[8px] font-bold px-1.5 py-0.2 rounded shadow pointer-events-none whitespace-nowrap animate-bounce"
+                  title={`Collision avec: ${restrictedOverlap.label}`}
+                >
+                  ⚠️ Zone Restreinte
+                </div>
               )}
 
               {/* Selection resize handles - Geometric Plus '+' with longer faded extremities & thin circle at intersection */}

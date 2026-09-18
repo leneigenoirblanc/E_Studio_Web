@@ -50,6 +50,11 @@ import {
   Magnet,
   Paintbrush,
   ClipboardCheck,
+  ShieldAlert,
+  Sliders,
+  Crosshair,
+  FileImage,
+  X,
 } from 'lucide-react';
 
 interface TemplateEditorProps {
@@ -82,6 +87,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [activeSmartGuides, setActiveSmartGuides] = useState<SmartGuideLine[]>([]);
   const [previewDataIndex, setPreviewDataIndex] = useState<number | null>(null);
   const [savedNotification, setSavedNotification] = useState(false);
+
+  // Calibration Image Modal
+  const [showCalibrationModal, setShowCalibrationModal] = useState(false);
+
+  // Mouse live position (mm) for bottom status bar
+  const [mousePosMm, setMousePosMm] = useState<{ x_mm: number; y_mm: number } | null>(null);
 
   // Copy / Paste Style Clipboard
   const [copiedStyle, setCopiedStyle] = useState<ElementStylePayload | null>(null);
@@ -464,6 +475,24 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           fallback_to_base_price: true,
         };
         break;
+      case 'restricted_area':
+        newItem = {
+          id,
+          type: 'restricted_area',
+          x_mm: centerX,
+          y_mm: centerY,
+          w_mm: 30.0,
+          h_mm: 20.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          zone_color: '#ef4444',
+          pattern: 'diagonal_stripes',
+          opacity: 0.25,
+          warn_on_overlap: true,
+          label: 'Zone Réservée / Encoche',
+        };
+        break;
     }
 
     const next = { ...template, items: [...template.items, newItem] };
@@ -550,12 +579,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
     if (selectedItems.length === 0) return;
 
-    // Nudge step: Shift = 0.5mm, Normal = 2.0mm, Alt+Shift = 0.1mm (ultra fine nudge)
-    let step = 2.0;
+    // Standard 96 DPI: 1px = 1 / 3.78 ≈ 0.26458 mm, 10px = 10 / 3.78 ≈ 2.6458 mm
+    // Nudge step: Arrow keys = 1px (0.265mm), Shift+Arrow = 10px (2.646mm), Alt+Arrow = 0.1mm
+    let step = 1 / 3.78; // 1px
     if (e.altKey && e.shiftKey) {
+      step = 0.05;
+    } else if (e.altKey) {
       step = 0.1;
     } else if (e.shiftKey) {
-      step = 0.5;
+      step = 10 / 3.78; // 10px
     }
 
     if (e.key === 'ArrowLeft') {
@@ -1024,6 +1056,14 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             <span>Paliers Prix</span>
           </button>
           <button
+            onClick={() => addItem('restricted_area')}
+            className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 hover:shadow-xs border border-rose-200 font-semibold text-rose-700 flex items-center gap-1.5 transition"
+            title="Ajouter une zone de contrainte / encoche réservée non imprimable"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+            <span>Zone Restreinte</span>
+          </button>
+          <button
             onClick={() => addItem('image')}
             className="px-2.5 py-1 rounded hover:bg-white hover:shadow-xs border border-transparent hover:border-slate-200 font-medium text-slate-700 flex items-center gap-1.5 transition"
           >
@@ -1208,6 +1248,23 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             <AlertTriangle className="w-3.5 h-3.5" />
           </button>
 
+          {/* Calibration Overlay Toggle/Config */}
+          <button
+            onClick={() => setShowCalibrationModal(true)}
+            className={`px-2 py-1 rounded border text-[11px] font-medium transition flex items-center gap-1.5 ${
+              template.calibration_image?.visible
+                ? 'bg-amber-50 border-amber-300 text-amber-800 font-semibold'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+            title="Calibrer avec une image de fond / zone physique réelle à imprimer"
+          >
+            <Crosshair className="w-3 h-3 text-amber-600" />
+            <span>Calibrer Image</span>
+            {template.calibration_image?.visible && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            )}
+          </button>
+
           {/* Zoom */}
           <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
             <button
@@ -1265,6 +1322,16 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           <div
             ref={labelCanvasRef}
             className="relative shadow-2xl rounded-xs transition-transform"
+            onMouseMove={(e) => {
+              if (labelCanvasRef.current) {
+                const rect = labelCanvasRef.current.getBoundingClientRect();
+                const scalePxPerMm = 3.78 * zoom;
+                const x_mm = Number(((e.clientX - rect.left) / scalePxPerMm).toFixed(2));
+                const y_mm = Number(((e.clientY - rect.top) / scalePxPerMm).toFixed(2));
+                setMousePosMm({ x_mm, y_mm });
+              }
+            }}
+            onMouseLeave={() => setMousePosMm(null)}
             onMouseDown={(e) => {
               // If click didn't land directly on an item, it starts marquee
               if ((e.target as HTMLElement).closest('[data-item-id]')) return;
@@ -1316,6 +1383,400 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           onPasteStyle={handlePasteStyle}
         />
       </div>
+
+      {/* Editor Status Bar */}
+      <footer className="h-7 bg-white border-t border-slate-200 px-3 flex items-center justify-between text-[11px] text-slate-600 shrink-0 font-mono z-20">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+            <span className="font-sans font-medium text-slate-700">
+              {template.name} ({template.width_mm} × {template.height_mm} mm)
+            </span>
+          </div>
+
+          <div className="h-3.5 w-px bg-slate-200" />
+
+          {selectedItems.length === 1 ? (
+            <div className="flex items-center gap-3 text-slate-700">
+              <span className="font-sans font-semibold text-blue-600">
+                {selectedItems[0].type.toUpperCase()} #{selectedItems[0].id.slice(0, 6)}
+              </span>
+              <span>
+                X: <strong className="font-bold">{selectedItems[0].x_mm}</strong> mm ({Math.round(selectedItems[0].x_mm * 3.78)} px)
+              </span>
+              <span>
+                Y: <strong className="font-bold">{selectedItems[0].y_mm}</strong> mm ({Math.round(selectedItems[0].y_mm * 3.78)} px)
+              </span>
+              <span>
+                L: <strong className="font-bold">{selectedItems[0].w_mm}</strong> mm
+              </span>
+              <span>
+                H: <strong className="font-bold">{selectedItems[0].h_mm}</strong> mm
+              </span>
+              {selectedItems[0].rotation ? (
+                <span>Rot: <strong className="font-bold">{selectedItems[0].rotation}°</strong></span>
+              ) : null}
+            </div>
+          ) : selectedItems.length > 1 ? (
+            <div className="flex items-center gap-2 text-indigo-700 font-semibold font-sans">
+              <span>{selectedItems.length} éléments sélectionnés</span>
+            </div>
+          ) : (
+            <span className="text-slate-400 font-sans italic">Aucun élément sélectionné</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4">
+          {mousePosMm && (
+            <div className="flex items-center gap-2 text-slate-600">
+              <Crosshair className="w-3 h-3 text-slate-400" />
+              <span>
+                Curseur: <strong>{mousePosMm.x_mm}</strong>, <strong>{mousePosMm.y_mm}</strong> mm
+              </span>
+            </div>
+          )}
+
+          <div className="h-3.5 w-px bg-slate-200" />
+
+          <div className="text-[10px] text-slate-400 font-sans hidden md:flex items-center gap-1.5">
+            <span className="font-medium text-slate-600">Nudge:</span>
+            <span>Flèches = 1px</span>
+            <span>•</span>
+            <span>Maj+Flèches = 10px</span>
+            <span>•</span>
+            <span>Alt = 0.1mm</span>
+          </div>
+
+          <div className="h-3.5 w-px bg-slate-200" />
+
+          <span className="text-slate-500 font-semibold">{Math.round(zoom * 100)}%</span>
+        </div>
+      </footer>
+
+      {/* Calibration Image Settings Modal */}
+      {showCalibrationModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <Crosshair className="w-5 h-5 text-amber-600" />
+                <h2 className="font-bold text-slate-900 text-sm">Image de Calibration & Repérage</h2>
+              </div>
+              <button
+                onClick={() => setShowCalibrationModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-slate-600">
+                Superposez une image ou un scan du support réel (étiquette physique, zone de découpe, emballage) pour ajuster au millimètre près l'emplacement de vos éléments.
+              </p>
+
+              {/* Toggle Enable */}
+              <label className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100/70 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <FileImage className="w-4 h-4 text-amber-600" />
+                  <span className="font-bold text-slate-800">Afficher le calque de calibration</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={template.calibration_image?.visible || false}
+                  onChange={(e) => {
+                    const current = template.calibration_image || {
+                      url: '',
+                      opacity: 0.35,
+                      offset_x_mm: 0,
+                      offset_y_mm: 0,
+                      scale_pct: 100,
+                      visible: false,
+                      locked: false,
+                      print_in_output: false,
+                    };
+                    const updated = {
+                      ...template,
+                      calibration_image: { ...current, visible: e.target.checked },
+                    };
+                    pushState(updated);
+                  }}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                />
+              </label>
+
+              {/* Image URL or File Upload */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700 block">Source de l'image (URL ou Fichier local)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={template.calibration_image?.url || ''}
+                    onChange={(e) => {
+                      const current = template.calibration_image || {
+                        url: '',
+                        opacity: 0.35,
+                        offset_x_mm: 0,
+                        offset_y_mm: 0,
+                        scale_pct: 100,
+                        visible: true,
+                        locked: false,
+                        print_in_output: false,
+                      };
+                      pushState({
+                        ...template,
+                        calibration_image: { ...current, url: e.target.value, visible: true },
+                      });
+                    }}
+                    placeholder="https://... ou glissez un fichier"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                  />
+                  <label className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-semibold rounded-lg cursor-pointer flex items-center gap-1">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Parcourir</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            const res = evt.target?.result as string;
+                            const current = template.calibration_image || {
+                              url: '',
+                              opacity: 0.35,
+                              offset_x_mm: 0,
+                              offset_y_mm: 0,
+                              scale_pct: 100,
+                              visible: true,
+                              locked: false,
+                              print_in_output: false,
+                            };
+                            pushState({
+                              ...template,
+                              calibration_image: { ...current, url: res, visible: true },
+                            });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Opacity Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-slate-700 font-medium">
+                  <span>Transparence du calque</span>
+                  <span className="font-mono font-bold">
+                    {Math.round((template.calibration_image?.opacity ?? 0.35) * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.05"
+                  max="1.0"
+                  step="0.05"
+                  value={template.calibration_image?.opacity ?? 0.35}
+                  onChange={(e) => {
+                    const current = template.calibration_image || {
+                      url: '',
+                      opacity: 0.35,
+                      offset_x_mm: 0,
+                      offset_y_mm: 0,
+                      scale_pct: 100,
+                      visible: true,
+                      locked: false,
+                      print_in_output: false,
+                    };
+                    pushState({
+                      ...template,
+                      calibration_image: { ...current, opacity: parseFloat(e.target.value) },
+                    });
+                  }}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Offset and Scale Controls */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] text-slate-500 font-medium mb-1">Décalage X (mm)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={template.calibration_image?.offset_x_mm ?? 0}
+                    onChange={(e) => {
+                      const current = template.calibration_image || {
+                        url: '',
+                        opacity: 0.35,
+                        offset_x_mm: 0,
+                        offset_y_mm: 0,
+                        scale_pct: 100,
+                        visible: true,
+                        locked: false,
+                        print_in_output: false,
+                      };
+                      pushState({
+                        ...template,
+                        calibration_image: { ...current, offset_x_mm: parseFloat(e.target.value) || 0 },
+                      });
+                    }}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 font-medium mb-1">Décalage Y (mm)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={template.calibration_image?.offset_y_mm ?? 0}
+                    onChange={(e) => {
+                      const current = template.calibration_image || {
+                        url: '',
+                        opacity: 0.35,
+                        offset_x_mm: 0,
+                        offset_y_mm: 0,
+                        scale_pct: 100,
+                        visible: true,
+                        locked: false,
+                        print_in_output: false,
+                      };
+                      pushState({
+                        ...template,
+                        calibration_image: { ...current, offset_y_mm: parseFloat(e.target.value) || 0 },
+                      });
+                    }}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 font-medium mb-1">Échelle (%)</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="500"
+                    step="5"
+                    value={template.calibration_image?.scale_pct ?? 100}
+                    onChange={(e) => {
+                      const current = template.calibration_image || {
+                        url: '',
+                        opacity: 0.35,
+                        offset_x_mm: 0,
+                        offset_y_mm: 0,
+                        scale_pct: 100,
+                        visible: true,
+                        locked: false,
+                        print_in_output: false,
+                      };
+                      pushState({
+                        ...template,
+                        calibration_image: { ...current, scale_pct: parseFloat(e.target.value) || 100 },
+                      });
+                    }}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Sample Presets */}
+              <div className="pt-2 border-t border-slate-200">
+                <span className="text-[11px] font-bold text-slate-500 uppercase block mb-1.5">Exemples rapides :</span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = template.calibration_image || {
+                        url: '',
+                        opacity: 0.35,
+                        offset_x_mm: 0,
+                        offset_y_mm: 0,
+                        scale_pct: 100,
+                        visible: true,
+                        locked: false,
+                        print_in_output: false,
+                      };
+                      pushState({
+                        ...template,
+                        calibration_image: {
+                          ...current,
+                          visible: true,
+                          url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
+                          opacity: 0.3,
+                        },
+                      });
+                    }}
+                    className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-medium"
+                  >
+                    Exemple Emballage Boîte
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = template.calibration_image || {
+                        url: '',
+                        opacity: 0.35,
+                        offset_x_mm: 0,
+                        offset_y_mm: 0,
+                        scale_pct: 100,
+                        visible: true,
+                        locked: false,
+                        print_in_output: false,
+                      };
+                      pushState({
+                        ...template,
+                        calibration_image: {
+                          ...current,
+                          visible: true,
+                          url: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=600&q=80',
+                          opacity: 0.3,
+                        },
+                      });
+                    }}
+                    className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-medium"
+                  >
+                    Exemple Bouteille / Flacon
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = template.calibration_image || {
+                        url: '',
+                        opacity: 0.35,
+                        offset_x_mm: 0,
+                        offset_y_mm: 0,
+                        scale_pct: 100,
+                        visible: false,
+                        locked: false,
+                        print_in_output: false,
+                      };
+                      pushState({
+                        ...template,
+                        calibration_image: { ...current, visible: false, url: '' },
+                      });
+                    }}
+                    className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-medium"
+                  >
+                    Réinitialiser
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setShowCalibrationModal(false)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs shadow-xs"
+              >
+                Appliquer et Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

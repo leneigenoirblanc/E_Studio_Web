@@ -1,5 +1,5 @@
 import React from 'react';
-import { TemplateItem, TextItemProperties, ShapeItemProperties, BarcodeItemProperties } from '../types';
+import { TemplateItem, TextItemProperties, ShapeItemProperties, BarcodeItemProperties, RestrictedAreaItemProperties } from '../types';
 import { DOMAIN_FIELDS } from '../domainFields';
 import {
   AVAILABLE_FONTS,
@@ -8,6 +8,7 @@ import {
   VERTICAL_ALIGNMENTS,
   TEXT_TRANSFORMS,
   CURRENCY_SYMBOLS,
+  FONT_SIZE_PRESETS,
   extractCommonProperties,
   ElementStylePayload,
   extractElementStyle,
@@ -33,6 +34,14 @@ import {
   Paintbrush,
   DollarSign,
   ClipboardCheck,
+  Highlighter,
+  RotateCcw,
+  ShieldAlert,
+  Sun,
+  Ban,
+  Sparkles,
+  Subscript as SubscriptIcon,
+  Superscript as SuperscriptIcon,
 } from 'lucide-react';
 
 interface PropertyInspectorProps {
@@ -684,6 +693,65 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               </div>
             </div>
 
+            {/* Quick Size Presets & Size Input */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] text-slate-500 font-medium">Taille de Police (pt)</label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      update({
+                        font_size_pt: 10,
+                        font_weight: 'normal',
+                        font_style: 'normal',
+                        text_decoration: 'none',
+                        letter_spacing_pt: 0,
+                        line_height_multiplier: 1.25,
+                        highlight_color: undefined,
+                        strikethrough_color: undefined,
+                        text_shadow: undefined,
+                        subscript_superscript: 'none',
+                        text_transform: 'none',
+                      });
+                    }}
+                    title="Effacer le formatage et réinitialiser la typographie"
+                    className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 rounded transition"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    <span>Reset</span>
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="4"
+                  max="120"
+                  value={selectedItem.font_size_pt}
+                  onChange={(e) => update({ font_size_pt: parseFloat(e.target.value) || 10 })}
+                  className="w-20 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono font-bold"
+                />
+                <div className="flex-1 flex items-center gap-1 overflow-x-auto pb-0.5">
+                  {FONT_SIZE_PRESETS.slice(0, 7).map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => update({ font_size_pt: size })}
+                      className={`px-1.5 py-0.5 text-[10px] rounded border transition ${
+                        selectedItem.font_size_pt === size
+                          ? 'bg-blue-600 border-blue-600 text-white font-bold'
+                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-[11px] text-slate-500">Police de Caractères</label>
@@ -700,21 +768,6 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                 </select>
               </div>
               <div>
-                <label className="text-[11px] text-slate-500">Taille (pt)</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="4"
-                  max="100"
-                  value={selectedItem.font_size_pt}
-                  onChange={(e) => update({ font_size_pt: parseFloat(e.target.value) || 10 })}
-                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
                 <label className="text-[11px] text-slate-500">Graisse (Font Weight)</label>
                 <select
                   value={selectedItem.font_weight}
@@ -728,33 +781,219 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                   ))}
                 </select>
               </div>
+            </div>
+
+            {/* Styles, Sub/Superscript & Décorations */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-slate-500">Style, Décoration & Indice</label>
+              <div className="grid grid-cols-5 gap-1">
+                {/* Italic */}
+                <button
+                  type="button"
+                  onClick={() => update({ font_style: selectedItem.font_style === 'italic' ? 'normal' : 'italic' })}
+                  className={`py-1 text-center font-serif italic text-xs rounded border ${selectedItem.font_style === 'italic' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'border-slate-200 bg-white'}`}
+                  title="Italique"
+                >
+                  I
+                </button>
+                {/* Underline */}
+                <button
+                  type="button"
+                  onClick={() => update({ text_decoration: selectedItem.text_decoration === 'underline' ? 'none' : 'underline' })}
+                  className={`py-1 text-center underline text-xs rounded border ${selectedItem.text_decoration === 'underline' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'border-slate-200 bg-white'}`}
+                  title="Souligné"
+                >
+                  U
+                </button>
+                {/* Strikethrough */}
+                <button
+                  type="button"
+                  onClick={() => update({ text_decoration: selectedItem.text_decoration === 'line-through' ? 'none' : 'line-through' })}
+                  className={`py-1 text-center line-through text-xs rounded border ${selectedItem.text_decoration === 'line-through' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'border-slate-200 bg-white'}`}
+                  title="Barré"
+                >
+                  S
+                </button>
+                {/* Subscript */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    update({
+                      subscript_superscript:
+                        selectedItem.subscript_superscript === 'subscript' ? 'none' : 'subscript',
+                    })
+                  }
+                  className={`py-1 flex items-center justify-center text-xs rounded border ${
+                    selectedItem.subscript_superscript === 'subscript'
+                      ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                  title="Indice (Subscript)"
+                >
+                  <SubscriptIcon className="w-3.5 h-3.5" />
+                </button>
+                {/* Superscript */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    update({
+                      subscript_superscript:
+                        selectedItem.subscript_superscript === 'superscript' ? 'none' : 'superscript',
+                    })
+                  }
+                  className={`py-1 flex items-center justify-center text-xs rounded border ${
+                    selectedItem.subscript_superscript === 'superscript'
+                      ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                  title="Exposant (Superscript)"
+                >
+                  <SuperscriptIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Surlignage (Highlight) & Couleur de Texte */}
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[11px] text-slate-500">Style & Décoration</label>
+                <label className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <Highlighter className="w-3 h-3 text-amber-500" />
+                  <span>Surlignage</span>
+                </label>
                 <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="color"
+                    value={selectedItem.highlight_color || '#fef08a'}
+                    onChange={(e) => update({ highlight_color: e.target.value })}
+                    className="w-7 h-6 p-0 rounded border border-slate-300 cursor-pointer"
+                  />
                   <button
                     type="button"
-                    onClick={() => update({ font_style: selectedItem.font_style === 'italic' ? 'normal' : 'italic' })}
-                    className={`flex-1 py-1 text-center font-serif italic text-xs rounded border ${selectedItem.font_style === 'italic' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'border-slate-200 bg-white'}`}
+                    onClick={() => update({ highlight_color: undefined })}
+                    className={`px-1.5 py-1 text-[10px] rounded border ${!selectedItem.highlight_color ? 'bg-slate-200 text-slate-800 font-bold' : 'text-slate-500 hover:bg-slate-100'}`}
                   >
-                    I
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => update({ text_decoration: selectedItem.text_decoration === 'underline' ? 'none' : 'underline' })}
-                    className={`flex-1 py-1 text-center underline text-xs rounded border ${selectedItem.text_decoration === 'underline' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'border-slate-200 bg-white'}`}
-                  >
-                    U
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => update({ text_decoration: selectedItem.text_decoration === 'line-through' ? 'none' : 'line-through' })}
-                    className={`flex-1 py-1 text-center line-through text-xs rounded border ${selectedItem.text_decoration === 'line-through' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'border-slate-200 bg-white'}`}
-                    title="Barré (Promo)"
-                  >
-                    S
+                    Aucun
                   </button>
                 </div>
               </div>
+
+              <div>
+                <label className="text-[11px] text-slate-500">Couleur Texte</label>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="color"
+                    value={selectedItem.text_color || '#000000'}
+                    onChange={(e) => update({ text_color: e.target.value })}
+                    className="w-7 h-6 p-0 rounded border border-slate-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={selectedItem.text_color || '#000000'}
+                    onChange={(e) => update({ text_color: e.target.value })}
+                    className="flex-1 px-1.5 py-0.5 bg-slate-50 border border-slate-300 rounded text-xs font-mono uppercase"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Ombre Portée (Text Shadow) */}
+            <div className="space-y-1.5 p-2 bg-slate-50 rounded border border-slate-200">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-medium text-slate-700 flex items-center gap-1">
+                  <Sun className="w-3 h-3 text-slate-500" />
+                  <span>Ombre du Texte (Shadow)</span>
+                </label>
+                <input
+                  type="checkbox"
+                  checked={Boolean(selectedItem.text_shadow && selectedItem.text_shadow.enabled)}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    update({
+                      text_shadow: {
+                        enabled,
+                        offset_x_px: selectedItem.text_shadow?.offset_x_px ?? 1,
+                        offset_y_px: selectedItem.text_shadow?.offset_y_px ?? 1,
+                        blur_px: selectedItem.text_shadow?.blur_px ?? 2,
+                        color: selectedItem.text_shadow?.color ?? 'rgba(0,0,0,0.4)',
+                      },
+                    });
+                  }}
+                  className="rounded text-blue-600 focus:ring-blue-500"
+                />
+              </div>
+
+              {selectedItem.text_shadow && selectedItem.text_shadow.enabled && (
+                <div className="grid grid-cols-4 gap-1.5 pt-1">
+                  <div>
+                    <label className="text-[9px] text-slate-400">X (px)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={selectedItem.text_shadow.offset_x_px}
+                      onChange={(e) =>
+                        update({
+                          text_shadow: {
+                            ...selectedItem.text_shadow!,
+                            offset_x_px: parseFloat(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-1 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-slate-400">Y (px)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={selectedItem.text_shadow.offset_y_px}
+                      onChange={(e) =>
+                        update({
+                          text_shadow: {
+                            ...selectedItem.text_shadow!,
+                            offset_y_px: parseFloat(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-1 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-slate-400">Flou (px)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      value={selectedItem.text_shadow.blur_px}
+                      onChange={(e) =>
+                        update({
+                          text_shadow: {
+                            ...selectedItem.text_shadow!,
+                            blur_px: parseFloat(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-1 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-slate-400">Couleur</label>
+                    <input
+                      type="color"
+                      value={selectedItem.text_shadow.color || '#000000'}
+                      onChange={(e) =>
+                        update({
+                          text_shadow: {
+                            ...selectedItem.text_shadow!,
+                            color: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full h-6 p-0 rounded border border-slate-300 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Transformations & Spacing */}
@@ -1259,7 +1498,84 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
           </div>
         )}
 
-        {/* TIER PRICE SPECIFIC */}
+        {/* RESTRICTED AREA SPECIFIC */}
+        {selectedItem.type === 'restricted_area' && (
+          <div className="pt-2 border-t border-slate-200 space-y-3 bg-rose-50/40 p-3 rounded-lg border border-rose-200">
+            <h4 className="font-bold text-rose-900 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+              <span>Zone de Contrainte / Masquage</span>
+            </h4>
+            <div>
+              <label className="text-[11px] text-slate-600 font-medium">Libellé / Description</label>
+              <input
+                type="text"
+                placeholder="ex: Zone Poinçon / Encoche"
+                value={(selectedItem as RestrictedAreaItemProperties).label || ''}
+                onChange={(e) => update({ label: e.target.value })}
+                className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] text-slate-600">Motif de Hachure</label>
+                <select
+                  value={(selectedItem as RestrictedAreaItemProperties).pattern || 'diagonal_stripes'}
+                  onChange={(e) => update({ pattern: e.target.value as any })}
+                  className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+                >
+                  <option value="diagonal_stripes">Hachures Diagonales</option>
+                  <option value="cross">Croisillons (Grille)</option>
+                  <option value="solid">Couleur Pleine</option>
+                  <option value="outline">Contour Simple</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-600">Couleur d'Alerte</label>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="color"
+                    value={(selectedItem as RestrictedAreaItemProperties).zone_color || '#ef4444'}
+                    onChange={(e) => update({ zone_color: e.target.value })}
+                    className="w-7 h-6 p-0 rounded border border-slate-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={(selectedItem as RestrictedAreaItemProperties).zone_color || '#ef4444'}
+                    onChange={(e) => update({ zone_color: e.target.value })}
+                    className="flex-1 px-1.5 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-mono uppercase"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center">
+                <label className="text-[11px] text-slate-600">Opacité ({Math.round(((selectedItem as RestrictedAreaItemProperties).opacity ?? 0.25) * 100)}%)</label>
+              </div>
+              <input
+                type="range"
+                min="0.05"
+                max="1"
+                step="0.05"
+                value={(selectedItem as RestrictedAreaItemProperties).opacity ?? 0.25}
+                onChange={(e) => update({ opacity: parseFloat(e.target.value) || 0.25 })}
+                className="w-full accent-rose-600 mt-1 cursor-pointer"
+              />
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-700 font-medium">
+                <input
+                  type="checkbox"
+                  checked={(selectedItem as RestrictedAreaItemProperties).warn_on_overlap ?? true}
+                  onChange={(e) => update({ warn_on_overlap: e.target.checked })}
+                  className="rounded text-rose-600 focus:ring-rose-500"
+                />
+                <span>Alerter si un élément déborde sur cette zone</span>
+              </label>
+            </div>
+          </div>
+        )}
         {selectedItem.type === 'tier_price' && (
           <div className="pt-2 border-t border-slate-200 space-y-3">
             <h4 className="font-bold text-slate-900 mb-1.5 uppercase text-[10px] tracking-wider text-slate-400">

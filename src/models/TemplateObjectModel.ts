@@ -15,6 +15,7 @@ import {
   QRCodeItemProperties,
   BarcodeItemProperties,
   TierPriceItemProperties,
+  RestrictedAreaItemProperties,
   BaseItemProperties,
 } from '../types';
 
@@ -56,6 +57,22 @@ export const TEXT_TRANSFORMS = [
   { value: 'lowercase', label: 'minuscule' },
   { value: 'capitalize', label: 'Première Lettre' },
 ] as const;
+
+export const CURRENCY_SYMBOLS = [
+  { value: 'FCFA', label: 'FCFA (Franc CFA)' },
+  { value: '€', label: '€ (Euro)' },
+  { value: '$', label: '$ (Dollar)' },
+  { value: 'CHF', label: 'CHF (Franc Suisse)' },
+  { value: '£', label: '£ (Livre Sterling)' },
+  { value: 'MAD', label: 'MAD (Dirham Marocain)' },
+  { value: 'DZD', label: 'DZD (Dinar Algérien)' },
+  { value: 'TND', label: 'TND (Dinar Tunisien)' },
+  { value: 'GNF', label: 'GNF (Franc Guinéen)' },
+] as const;
+
+export const FONT_SIZE_PRESETS = [
+  6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96,
+];
 
 /**
  * Base Object Class representing any canvas template element
@@ -166,6 +183,21 @@ export class TierPriceTemplateObject extends BaseTemplateObject<TierPriceItemPro
 }
 
 /**
+ * Restricted Area / Constraint Element Subclass
+ */
+export class RestrictedAreaTemplateObject extends BaseTemplateObject<RestrictedAreaItemProperties> {
+  public clone(newId?: string, offsetMm: number = 3): RestrictedAreaItemProperties {
+    return {
+      ...this.properties,
+      id: newId || `restricted_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      x_mm: this.properties.x_mm + offsetMm,
+      y_mm: this.properties.y_mm + offsetMm,
+      z_index: this.properties.z_index + 1,
+    };
+  }
+}
+
+/**
  * Factory creating object wrapper instance
  */
 export function createObjectInstance(item: TemplateItem): BaseTemplateObject {
@@ -178,6 +210,8 @@ export function createObjectInstance(item: TemplateItem): BaseTemplateObject {
       return new BarcodeTemplateObject(item);
     case 'tier_price':
       return new TierPriceTemplateObject(item);
+    case 'restricted_area':
+      return new RestrictedAreaTemplateObject(item);
     default:
       return new (class extends BaseTemplateObject {
         clone(newId?: string, offsetMm = 3) {
@@ -192,6 +226,8 @@ export function createObjectInstance(item: TemplateItem): BaseTemplateObject {
       })(item);
   }
 }
+
+export const PRESET_FONT_SIZES = [6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72];
 
 /**
  * Multi-selection helper:
@@ -219,6 +255,8 @@ export interface CommonProperties {
   letter_spacing_pt?: number;
   line_height_multiplier?: number;
   text_transform?: string;
+  highlight_color?: string;
+  subscript_superscript?: string;
 
   // Colors & Borders
   fill_color?: string;
@@ -241,6 +279,12 @@ export interface CommonProperties {
   bar_color?: string;
   barcode_type?: string;
   show_text?: boolean;
+
+  // Restricted Area
+  zone_color?: string;
+  pattern?: string;
+  opacity?: number;
+  warn_on_overlap?: boolean;
 }
 
 export function extractCommonProperties(items: TemplateItem[]): CommonProperties {
@@ -265,6 +309,8 @@ export function extractCommonProperties(items: TemplateItem[]): CommonProperties
       letter_spacing_pt: it.letter_spacing_pt,
       line_height_multiplier: it.line_height_multiplier,
       text_transform: it.text_transform,
+      highlight_color: it.highlight_color,
+      subscript_superscript: it.subscript_superscript,
       fill_color: it.fill_color,
       border_color: it.border_color,
       border_width: it.border_width,
@@ -281,6 +327,10 @@ export function extractCommonProperties(items: TemplateItem[]): CommonProperties
       bar_color: it.bar_color,
       barcode_type: it.barcode_type,
       show_text: it.show_text,
+      zone_color: it.zone_color,
+      pattern: it.pattern,
+      opacity: it.opacity,
+      warn_on_overlap: it.warn_on_overlap,
     };
   }
 
@@ -303,6 +353,8 @@ export function extractCommonProperties(items: TemplateItem[]): CommonProperties
     'letter_spacing_pt',
     'line_height_multiplier',
     'text_transform',
+    'highlight_color',
+    'subscript_superscript',
     'fill_color',
     'border_color',
     'border_width',
@@ -319,6 +371,10 @@ export function extractCommonProperties(items: TemplateItem[]): CommonProperties
     'bar_color',
     'barcode_type',
     'show_text',
+    'zone_color',
+    'pattern',
+    'opacity',
+    'warn_on_overlap',
   ];
 
   for (const key of keys) {
@@ -333,19 +389,6 @@ export function extractCommonProperties(items: TemplateItem[]): CommonProperties
 
   return common;
 }
-
-export const CURRENCY_SYMBOLS = [
-  { value: 'FCFA', label: 'FCFA (Franc CFA)' },
-  { value: '€', label: '€ (Euro)' },
-  { value: '$', label: '$ (Dollar)' },
-  { value: 'MAD', label: 'MAD (Dirham marocain)' },
-  { value: 'DZD', label: 'DZD (Dinar algérien)' },
-  { value: 'TND', label: 'TND (Dinar tunisien)' },
-  { value: 'CHF', label: 'CHF (Franc suisse)' },
-  { value: '£', label: '£ (Livre sterling)' },
-  { value: 'XOF', label: 'XOF' },
-  { value: 'XAF', label: 'XAF' },
-];
 
 /**
  * Style payload for Copy Style / Paste Style actions
@@ -363,6 +406,8 @@ export interface ElementStylePayload {
   letter_spacing_pt?: number;
   line_height_multiplier?: number;
   text_transform?: string;
+  highlight_color?: string;
+  subscript_superscript?: string;
   
   // Fill & Colors
   fill_color?: string;
@@ -391,6 +436,11 @@ export interface ElementStylePayload {
   bar_color?: string;
   module_color?: string;
   background_color?: string;
+
+  // Restricted Area
+  zone_color?: string;
+  pattern?: string;
+  opacity?: number;
 }
 
 /**
@@ -411,6 +461,8 @@ export function extractElementStyle(item: TemplateItem): ElementStylePayload {
   if (it.letter_spacing_pt !== undefined) style.letter_spacing_pt = it.letter_spacing_pt;
   if (it.line_height_multiplier !== undefined) style.line_height_multiplier = it.line_height_multiplier;
   if (it.text_transform !== undefined) style.text_transform = it.text_transform;
+  if (it.highlight_color !== undefined) style.highlight_color = it.highlight_color;
+  if (it.subscript_superscript !== undefined) style.subscript_superscript = it.subscript_superscript;
 
   if (it.fill_color !== undefined) style.fill_color = it.fill_color;
   if (it.border_color !== undefined) style.border_color = it.border_color;
@@ -435,6 +487,10 @@ export function extractElementStyle(item: TemplateItem): ElementStylePayload {
   if (it.module_color !== undefined) style.module_color = it.module_color;
   if (it.background_color !== undefined) style.background_color = it.background_color;
 
+  if (it.zone_color !== undefined) style.zone_color = it.zone_color;
+  if (it.pattern !== undefined) style.pattern = it.pattern;
+  if (it.opacity !== undefined) style.opacity = it.opacity;
+
   return style;
 }
 
@@ -456,6 +512,8 @@ export function applyElementStyle(target: TemplateItem, style: ElementStylePaylo
     if (style.letter_spacing_pt !== undefined) result.letter_spacing_pt = style.letter_spacing_pt;
     if (style.line_height_multiplier !== undefined) result.line_height_multiplier = style.line_height_multiplier;
     if (style.text_transform !== undefined) result.text_transform = style.text_transform;
+    if (style.highlight_color !== undefined) result.highlight_color = style.highlight_color;
+    if (style.subscript_superscript !== undefined) result.subscript_superscript = style.subscript_superscript;
 
     if (style.fill_color !== undefined) result.fill_color = style.fill_color;
     if (style.border_color !== undefined) result.border_color = style.border_color;
@@ -492,6 +550,10 @@ export function applyElementStyle(target: TemplateItem, style: ElementStylePaylo
     if (style.module_color !== undefined) result.module_color = style.module_color;
     if (style.text_color !== undefined) result.module_color = style.text_color;
     if (style.fill_color !== undefined) result.background_color = style.fill_color;
+  } else if (target.type === 'restricted_area') {
+    if (style.zone_color !== undefined) result.zone_color = style.zone_color;
+    if (style.pattern !== undefined) result.pattern = style.pattern;
+    if (style.opacity !== undefined) result.opacity = style.opacity;
   }
 
   return result as TemplateItem;
