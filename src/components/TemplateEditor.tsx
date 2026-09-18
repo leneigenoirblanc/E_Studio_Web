@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LabelTemplate, TemplateItem, ProductRecord } from '../types';
 import { LabelRenderer } from './LabelRenderer';
 import { PropertyInspector } from './PropertyInspector';
+import { FindReplaceModal } from './FindReplaceModal';
+import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
+import { CanvasRulers } from './CanvasRulers';
 import { SAMPLE_PRODUCTS } from '../sampleData';
 import {
   createObjectInstance,
@@ -61,6 +64,10 @@ import {
   Group,
   Ungroup,
   Compass,
+  Search,
+  Keyboard,
+  Ruler,
+  Grid,
 } from 'lucide-react';
 
 interface TemplateEditorProps {
@@ -89,13 +96,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [showInnerMargins, setShowInnerMargins] = useState(true);
   const [showHazardWarnings, setShowHazardWarnings] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
+  const [gridSizeMm, setGridSizeMm] = useState(0.5);
+  const [showRulers, setShowRulers] = useState(true);
   const [smartGuidesEnabled, setSmartGuidesEnabled] = useState(true);
   const [activeSmartGuides, setActiveSmartGuides] = useState<SmartGuideLine[]>([]);
   const [previewDataIndex, setPreviewDataIndex] = useState<number | null>(null);
   const [savedNotification, setSavedNotification] = useState(false);
 
-  // Calibration Image Modal
+  // Modals state
   const [showCalibrationModal, setShowCalibrationModal] = useState(false);
+  const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
   // Mouse live position (mm) for bottom status bar
   const [mousePosMm, setMousePosMm] = useState<{ x_mm: number; y_mm: number } | null>(null);
@@ -598,6 +609,13 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       return;
     }
 
+    // Find & Replace: Ctrl+F
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      setIsFindReplaceOpen(true);
+      e.preventDefault();
+      return;
+    }
+
     // Paste Style: Ctrl+Alt+V
     if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'v' || e.key === 'V')) {
       if (selectedItems.length > 0 && copiedStyle) {
@@ -908,7 +926,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           effectiveDeltaX = snapRes.snappedX - primaryOrig.x;
           effectiveDeltaY = snapRes.snappedY - primaryOrig.y;
         } else if (snapToGrid) {
-          const snap = 0.5;
+          const snap = gridSizeMm;
           effectiveDeltaX = Math.round((primaryOrig.x + deltaX) / snap) * snap - primaryOrig.x;
           effectiveDeltaY = Math.round((primaryOrig.y + deltaY) / snap) * snap - primaryOrig.y;
         }
@@ -1027,31 +1045,59 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
         </div>
 
-        {/* Primary Action Buttons & Undo/Redo */}
+        {/* Primary Action Buttons & Undo/Redo/Search/Shortcuts */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 mr-2">
+          {/* History Stack Controls */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 mr-1">
             <button
               onClick={handleUndo}
               disabled={historyIndex <= 0}
-              title="Annuler (Ctrl+Z)"
-              className="p-1.5 rounded hover:bg-white text-slate-600 disabled:opacity-30 transition"
+              title="Annuler la dernière action (Ctrl+Z)"
+              className="p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 transition flex items-center gap-1"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
+            <span className="text-[10px] font-mono text-slate-500 font-bold px-1.5 border-x border-slate-200">
+              {historyIndex + 1}/{history.length}
+            </span>
             <button
               onClick={handleRedo}
               disabled={historyIndex >= history.length - 1}
-              title="Rétablir (Ctrl+Y)"
-              className="p-1.5 rounded hover:bg-white text-slate-600 disabled:opacity-30 transition"
+              title="Rétablir l'action annulée (Ctrl+Y)"
+              className="p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 transition flex items-center gap-1"
             >
               <RotateCw className="w-3.5 h-3.5" />
             </button>
           </div>
 
+          {/* Find & Replace Global Trigger */}
+          <button
+            onClick={() => setIsFindReplaceOpen(true)}
+            title="Rechercher & Remplacer globalement (Ctrl+F)"
+            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
+          >
+            <Search className="w-3.5 h-3.5 text-blue-600" />
+            <span>Rechercher...</span>
+            <kbd className="hidden sm:inline-block px-1 py-0.2 bg-white border border-slate-300 rounded font-mono text-[9px] text-slate-500">
+              Ctrl+F
+            </kbd>
+          </button>
+
+          {/* Keyboard Shortcuts Trigger */}
+          <button
+            onClick={() => setIsShortcutsOpen(true)}
+            title="Consulter tous les raccourcis clavier pro"
+            className="p-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-lg transition"
+          >
+            <Keyboard className="w-4 h-4 text-slate-600" />
+          </button>
+
+          <div className="h-4 w-px bg-slate-200 mx-1" />
+
           {savedNotification && (
             <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1 animate-in fade-in">
               <CheckCircle className="w-4 h-4" />
-              Gabarit sauvegardé !
+              Sauvegardé !
             </span>
           )}
           <button
@@ -1063,7 +1109,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </button>
           <button
             onClick={exportJson}
-            title="Exporter gabarit en JSON"
+            title="Exporter le gabarit au format JSON"
             className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
           >
             <Download className="w-3.5 h-3.5 text-slate-600" />
@@ -1074,217 +1120,284 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Générer des étiquettes</span>
+            <span>Générer étiquettes</span>
           </button>
         </div>
       </header>
 
-      {/* Secondary Tools Palette */}
-      <div className="h-11 bg-slate-50 border-b border-slate-200 px-4 flex items-center justify-between shrink-0 overflow-x-auto text-xs">
-        {/* Insert Objects Palette */}
+      {/* Ergonomic Tools Ribbon Toolbar */}
+      <div className="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between shrink-0 overflow-x-auto text-xs gap-3">
+        {/* Insert Palette Group */}
         <div className="flex items-center gap-1">
-          <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 tracking-wider">Insérer :</span>
-          <button
-            onClick={() => addItem('text')}
-            className="px-2.5 py-1 rounded hover:bg-white hover:shadow-xs border border-transparent hover:border-slate-200 font-medium text-slate-700 flex items-center gap-1.5 transition"
-          >
-            <Type className="w-3.5 h-3.5 text-blue-600" />
-            <span>Texte</span>
-          </button>
-          <button
-            onClick={() => addItem('shape')}
-            className="px-2.5 py-1 rounded hover:bg-white hover:shadow-xs border border-transparent hover:border-slate-200 font-medium text-slate-700 flex items-center gap-1.5 transition"
-          >
-            <Square className="w-3.5 h-3.5 text-slate-600" />
-            <span>Rectangle</span>
-          </button>
-          <button
-            onClick={() => addItem('ellipse')}
-            className="px-2.5 py-1 rounded hover:bg-white hover:shadow-xs border border-transparent hover:border-slate-200 font-medium text-slate-700 flex items-center gap-1.5 transition"
-          >
-            <Circle className="w-3.5 h-3.5 text-slate-600" />
-            <span>Ellipse</span>
-          </button>
-          <button
-            onClick={() => addItem('line')}
-            className="px-2.5 py-1 rounded hover:bg-white hover:shadow-xs border border-transparent hover:border-slate-200 font-medium text-slate-700 flex items-center gap-1.5 transition"
-          >
-            <Minus className="w-3.5 h-3.5 text-slate-600" />
-            <span>Ligne</span>
-          </button>
-          <button
-            onClick={() => addItem('barcode')}
-            className="px-2.5 py-1 rounded hover:bg-white hover:shadow-xs border border-transparent hover:border-slate-200 font-medium text-slate-700 flex items-center gap-1.5 transition"
-          >
-            <Barcode className="w-3.5 h-3.5 text-slate-800" />
-            <span>Code-barres</span>
-          </button>
-          <button
-            onClick={() => addItem('qrcode')}
-            className="px-2.5 py-1 rounded hover:bg-white hover:shadow-xs border border-transparent hover:border-slate-200 font-medium text-slate-700 flex items-center gap-1.5 transition"
-          >
-            <QrCode className="w-3.5 h-3.5 text-slate-800" />
-            <span>QR Code</span>
-          </button>
-          <button
-            onClick={() => addItem('tier_price')}
-            className="px-2.5 py-1 rounded bg-sky-100/70 hover:bg-sky-100 hover:shadow-xs border border-sky-200 font-semibold text-sky-800 flex items-center gap-1.5 transition"
-          >
-            <DollarSign className="w-3.5 h-3.5 text-sky-700" />
-            <span>Paliers Prix</span>
-          </button>
-          <button
-            onClick={() => addItem('restricted_area')}
-            className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 hover:shadow-xs border border-rose-200 font-semibold text-rose-700 flex items-center gap-1.5 transition"
-            title="Ajouter une zone de contrainte / encoche réservée non imprimable"
-          >
-            <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-            <span>Zone Restreinte</span>
-          </button>
-          <button
-            onClick={() => addItem('curved_text')}
-            className="px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 hover:shadow-xs border border-indigo-200 font-semibold text-indigo-700 flex items-center gap-1.5 transition"
-            title="Ajouter un texte courbé / circulaire (parfait pour sceaux et macarons)"
-          >
-            <CircleDot className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Texte Courbe</span>
-          </button>
-          <button
-            onClick={() => addItem('pictogram')}
-            className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 hover:shadow-xs border border-emerald-200 font-semibold text-emerald-700 flex items-center gap-1.5 transition"
-            title="Ajouter un pictogramme réglementaire (Nutri-Score, Bio, Origine France, Triman, Allergènes...)"
-          >
-            <Stamp className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Pictogramme</span>
-          </button>
-          <button
-            onClick={() => addItem('image')}
-            className="px-2.5 py-1 rounded hover:bg-white hover:shadow-xs border border-transparent hover:border-slate-200 font-medium text-slate-700 flex items-center gap-1.5 transition"
-          >
-            <ImageIcon className="w-3.5 h-3.5 text-slate-600" />
-            <span>Image</span>
-          </button>
-
-          {/* Alignment & Distribution Tools when 2+ items selected */}
-          {selectedItems.length > 1 && (
-            <div className="flex items-center gap-1 ml-3 pl-3 border-l border-slate-200">
-              <span className="text-[10px] uppercase font-bold text-slate-400 mr-1">Aligner :</span>
-              <button
-                onClick={() => handleAlign('left')}
-                className="p-1 hover:bg-white rounded border border-transparent hover:border-slate-200"
-                title="Aligner à gauche"
-              >
-                <AlignLeft className="w-3.5 h-3.5 text-slate-700" />
-              </button>
-              <button
-                onClick={() => handleAlign('center')}
-                className="p-1 hover:bg-white rounded border border-transparent hover:border-slate-200"
-                title="Centrer horizontalement"
-              >
-                <AlignCenter className="w-3.5 h-3.5 text-slate-700" />
-              </button>
-              <button
-                onClick={() => handleAlign('right')}
-                className="p-1 hover:bg-white rounded border border-transparent hover:border-slate-200"
-                title="Aligner à droite"
-              >
-                <AlignRight className="w-3.5 h-3.5 text-slate-700" />
-              </button>
-              <button
-                onClick={() => handleAlign('top')}
-                className="px-1.5 py-0.5 hover:bg-white rounded border border-transparent hover:border-slate-200 text-[10px] font-bold"
-                title="Aligner en haut"
-              >
-                Haut
-              </button>
-              <button
-                onClick={() => handleAlign('middle')}
-                className="px-1.5 py-0.5 hover:bg-white rounded border border-transparent hover:border-slate-200 text-[10px] font-bold"
-                title="Centrer verticalement (Milieu)"
-              >
-                Milieu
-              </button>
-              <button
-                onClick={() => handleAlign('bottom')}
-                className="px-1.5 py-0.5 hover:bg-white rounded border border-transparent hover:border-slate-200 text-[10px] font-bold"
-                title="Aligner en bas"
-              >
-                Bas
-              </button>
-              {selectedItems.length >= 3 && (
-                <>
-                  <div className="h-3 w-px bg-slate-200 mx-0.5" />
-                  <button
-                    onClick={() => handleDistribute('horizontal')}
-                    className="px-1.5 py-0.5 hover:bg-white rounded border border-transparent hover:border-slate-200 text-[10px] font-medium text-slate-600"
-                    title="Répartir horizontalement à intervalles égaux"
-                  >
-                    Répartir H
-                  </button>
-                  <button
-                    onClick={() => handleDistribute('vertical')}
-                    className="px-1.5 py-0.5 hover:bg-white rounded border border-transparent hover:border-slate-200 text-[10px] font-medium text-slate-600"
-                    title="Répartir verticalement à intervalles égaux"
-                  >
-                    Répartir V
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Quick Style Copy/Paste Toolbar Buttons */}
-          <div className="flex items-center gap-1 ml-3 pl-3 border-l border-slate-200">
+          <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 tracking-wider select-none">
+            Insérer
+          </span>
+          <div className="flex items-center bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs gap-0.5">
             <button
-              onClick={() => handleCopyStyle()}
-              disabled={selectedItems.length === 0}
-              className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 text-slate-700 text-[11px] font-medium flex items-center gap-1 transition"
-              title="Copier le style de l'élément sélectionné (Ctrl+Alt+C)"
+              onClick={() => addItem('text')}
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              title="Ajouter un champ texte"
             >
-              <Paintbrush className="w-3 h-3 text-indigo-600" />
-              <span>Copier Style</span>
+              <Type className="w-3.5 h-3.5 text-blue-600" />
+              <span>Texte</span>
             </button>
             <button
-              onClick={handlePasteStyle}
-              disabled={!copiedStyle || selectedItems.length === 0}
-              className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 text-slate-700 text-[11px] font-medium flex items-center gap-1 transition"
-              title="Appliquer le style copié aux éléments sélectionnés (Ctrl+Alt+V)"
+              onClick={() => addItem('shape')}
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              title="Ajouter un rectangle"
             >
-              <ClipboardCheck className="w-3 h-3 text-emerald-600" />
-              <span>Coller Style</span>
+              <Square className="w-3.5 h-3.5 text-slate-600" />
+              <span>Rectangle</span>
+            </button>
+            <button
+              onClick={() => addItem('ellipse')}
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              title="Ajouter une ellipse"
+            >
+              <Circle className="w-3.5 h-3.5 text-slate-600" />
+              <span>Ellipse</span>
+            </button>
+            <button
+              onClick={() => addItem('line')}
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              title="Ajouter une ligne"
+            >
+              <Minus className="w-3.5 h-3.5 text-slate-600" />
+              <span>Ligne</span>
+            </button>
+            <button
+              onClick={() => addItem('barcode')}
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              title="Ajouter un code-barres"
+            >
+              <Barcode className="w-3.5 h-3.5 text-slate-800" />
+              <span>Code-barres</span>
+            </button>
+            <button
+              onClick={() => addItem('qrcode')}
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              title="Ajouter un QR Code"
+            >
+              <QrCode className="w-3.5 h-3.5 text-slate-800" />
+              <span>QR Code</span>
+            </button>
+            <button
+              onClick={() => addItem('tier_price')}
+              className="px-2 py-1 rounded bg-sky-50 hover:bg-sky-100 font-semibold text-sky-800 flex items-center gap-1 transition"
+              title="Ajouter un tableau de prix par volume/palier"
+            >
+              <DollarSign className="w-3.5 h-3.5 text-sky-700" />
+              <span>Paliers Prix</span>
+            </button>
+            <button
+              onClick={() => addItem('restricted_area')}
+              className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 font-semibold text-rose-700 flex items-center gap-1 transition"
+              title="Ajouter une zone restreinte non imprimable"
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+              <span>Zone Restreinte</span>
+            </button>
+            <button
+              onClick={() => addItem('curved_text')}
+              className="px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 font-semibold text-indigo-700 flex items-center gap-1 transition"
+              title="Ajouter un texte circulaire / courbé"
+            >
+              <CircleDot className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Texte Courbe</span>
+            </button>
+            <button
+              onClick={() => addItem('pictogram')}
+              className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-700 flex items-center gap-1 transition"
+              title="Ajouter un pictogramme réglementaire"
+            >
+              <Stamp className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Pictogramme</span>
+            </button>
+            <button
+              onClick={() => addItem('image')}
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              title="Ajouter une image"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-slate-600" />
+              <span>Image</span>
             </button>
           </div>
         </div>
 
-        {/* View Controls & Data Preview Toggle */}
-        <div className="flex items-center gap-2.5">
-          {/* Smart Guides Toggle */}
-          <button
-            onClick={() => setSmartGuidesEnabled(!smartGuidesEnabled)}
-            className={`px-2 py-1 rounded border text-[11px] font-medium transition flex items-center gap-1 ${
-              smartGuidesEnabled
-                ? 'bg-rose-50 border-rose-300 text-rose-700 font-semibold'
-                : 'bg-white border-slate-200 text-slate-500'
-            }`}
-            title="Guides intelligents d'alignement dynamique (bords, centres, marges)"
-          >
-            <Magnet className="w-3 h-3" />
-            <span>Guides Intelligents</span>
-          </button>
+        {/* Alignment & Style Clipboard Group */}
+        {selectedItems.length > 0 && (
+          <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
+            <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 tracking-wider select-none">
+              Agencer
+            </span>
+            <div className="flex items-center bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs gap-0.5">
+              {selectedItems.length > 1 && (
+                <>
+                  <button
+                    onClick={() => handleAlign('left')}
+                    className="p-1 hover:bg-slate-100 rounded text-slate-700"
+                    title="Aligner à gauche"
+                  >
+                    <AlignLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleAlign('center')}
+                    className="p-1 hover:bg-slate-100 rounded text-slate-700"
+                    title="Centrer horizontalement"
+                  >
+                    <AlignCenter className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleAlign('right')}
+                    className="p-1 hover:bg-slate-100 rounded text-slate-700"
+                    title="Aligner à droite"
+                  >
+                    <AlignRight className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="h-3 w-px bg-slate-200 mx-0.5" />
+                  <button
+                    onClick={() => handleAlign('top')}
+                    className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-bold text-slate-700"
+                    title="Aligner en haut"
+                  >
+                    Haut
+                  </button>
+                  <button
+                    onClick={() => handleAlign('middle')}
+                    className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-bold text-slate-700"
+                    title="Centrer au milieu"
+                  >
+                    Milieu
+                  </button>
+                  <button
+                    onClick={() => handleAlign('bottom')}
+                    className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-bold text-slate-700"
+                    title="Aligner en bas"
+                  >
+                    Bas
+                  </button>
+                  {selectedItems.length >= 3 && (
+                    <>
+                      <div className="h-3 w-px bg-slate-200 mx-0.5" />
+                      <button
+                        onClick={() => handleDistribute('horizontal')}
+                        className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-semibold text-slate-700"
+                        title="Répartir horizontalement"
+                      >
+                        Répartir H
+                      </button>
+                      <button
+                        onClick={() => handleDistribute('vertical')}
+                        className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-semibold text-slate-700"
+                        title="Répartir verticalement"
+                      >
+                        Répartir V
+                      </button>
+                    </>
+                  )}
+                  <div className="h-3 w-px bg-slate-200 mx-0.5" />
+                </>
+              )}
 
-          {/* Snap Grid Toggle */}
-          <button
-            onClick={() => setSnapToGrid(!snapToGrid)}
-            className={`px-2 py-1 rounded border text-[11px] font-medium transition ${
-              snapToGrid ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold' : 'bg-white border-slate-200 text-slate-500'
-            }`}
-            title="Magnétisme Grille 0.5 mm"
-          >
-            Grille (0.5mm)
-          </button>
+              <button
+                onClick={() => handleCopyStyle()}
+                className="px-2 py-0.5 rounded hover:bg-slate-100 text-slate-700 text-[11px] font-medium flex items-center gap-1 transition"
+                title="Copier style (Ctrl+Alt+C)"
+              >
+                <Paintbrush className="w-3 h-3 text-indigo-600" />
+                <span>Copier Style</span>
+              </button>
+              <button
+                onClick={handlePasteStyle}
+                disabled={!copiedStyle}
+                className="px-2 py-0.5 rounded hover:bg-slate-100 text-slate-700 disabled:opacity-30 text-[11px] font-medium flex items-center gap-1 transition"
+                title="Coller style (Ctrl+Alt+V)"
+              >
+                <ClipboardCheck className="w-3 h-3 text-emerald-600" />
+                <span>Coller Style</span>
+              </button>
+            </div>
+          </div>
+        )}
 
+        {/* Repères & Grille Options */}
+        <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
+          <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 tracking-wider select-none">
+            Repères
+          </span>
+          <div className="flex items-center bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs gap-1">
+            {/* Smart Guides */}
+            <button
+              onClick={() => setSmartGuidesEnabled(!smartGuidesEnabled)}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition ${
+                smartGuidesEnabled
+                  ? 'bg-rose-50 text-rose-700 font-bold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Magnétisme dynamique entre éléments"
+            >
+              <Magnet className="w-3 h-3" />
+              <span>Guides</span>
+            </button>
+
+            {/* Grid Snap & Grid Size */}
+            <div className="flex items-center gap-0.5 bg-slate-50 px-1 py-0.5 rounded border border-slate-200">
+              <button
+                onClick={() => setSnapToGrid(!snapToGrid)}
+                className={`text-[11px] font-semibold flex items-center gap-1 ${
+                  snapToGrid ? 'text-blue-700 font-bold' : 'text-slate-400'
+                }`}
+                title="Activer/désactiver la grille"
+              >
+                <Grid className="w-3 h-3" />
+                <span>Grille</span>
+              </button>
+              {snapToGrid && (
+                <select
+                  value={gridSizeMm}
+                  onChange={(e) => setGridSizeMm(parseFloat(e.target.value))}
+                  className="text-[10px] font-mono bg-white border border-slate-300 rounded px-1 py-0.2 font-bold text-slate-700 outline-none"
+                >
+                  <option value={0.5}>0.5mm</option>
+                  <option value={1}>1mm</option>
+                  <option value={2}>2mm</option>
+                  <option value={5}>5mm</option>
+                  <option value={10}>10mm</option>
+                </select>
+              )}
+            </div>
+
+            {/* Rulers Toggle */}
+            <button
+              onClick={() => setShowRulers(!showRulers)}
+              className={`p-1 rounded text-[11px] font-medium transition ${
+                showRulers ? 'bg-amber-50 text-amber-800 font-bold' : 'text-slate-400 hover:text-slate-800'
+              }`}
+              title="Afficher / Masquer les règles millimétrées"
+            >
+              <Ruler className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Calibration Modal Trigger */}
+            <button
+              onClick={() => setShowCalibrationModal(true)}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition ${
+                template.calibration_image?.visible
+                  ? 'bg-amber-100 text-amber-800 font-bold'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              title="Calibrer une image de fond réelle"
+            >
+              <Crosshair className="w-3 h-3 text-amber-600" />
+              <span>Calibrer</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Data Simulator & Zoom */}
+        <div className="flex items-center gap-2">
           {/* Data Binding Simulator */}
-          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-0.5">
+          <div className="flex items-center gap-1 bg-white border border-slate-200/80 rounded-lg px-2 py-1 shadow-2xs">
             <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
               <Eye className="w-3 h-3 text-slate-400" />
               Données:
@@ -1308,7 +1421,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                 >
                   <ChevronLeft className="w-3 h-3" />
                 </button>
-                <span className="font-mono text-[10px] text-slate-700 font-bold px-1">
+                <span className="font-mono text-[10px] text-slate-700 font-bold px-0.5">
                   #{previewDataIndex + 1}/{SAMPLE_PRODUCTS.length}
                 </span>
                 <button
@@ -1323,7 +1436,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                 </button>
                 <button
                   onClick={() => setPreviewDataIndex(null)}
-                  className="text-[10px] text-slate-400 hover:text-slate-600 ml-1"
+                  className="text-[10px] text-slate-400 hover:text-slate-600 ml-0.5"
                 >
                   (Off)
                 </button>
@@ -1331,36 +1444,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             )}
           </div>
 
-          {/* Guides toggles */}
-          <button
-            onClick={() => setShowHazardWarnings(!showHazardWarnings)}
-            className={`p-1.5 rounded transition ${
-              showHazardWarnings ? 'bg-amber-100 text-amber-800' : 'text-slate-400 hover:bg-slate-200'
-            }`}
-            title="Contrôler les dépassements (Hazard warning)"
-          >
-            <AlertTriangle className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Calibration Overlay Toggle/Config */}
-          <button
-            onClick={() => setShowCalibrationModal(true)}
-            className={`px-2 py-1 rounded border text-[11px] font-medium transition flex items-center gap-1.5 ${
-              template.calibration_image?.visible
-                ? 'bg-amber-50 border-amber-300 text-amber-800 font-semibold'
-                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
-            }`}
-            title="Calibrer avec une image de fond / zone physique réelle à imprimer"
-          >
-            <Crosshair className="w-3 h-3 text-amber-600" />
-            <span>Calibrer Image</span>
-            {template.calibration_image?.visible && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            )}
-          </button>
-
-          {/* Zoom */}
-          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
+          {/* Zoom Widget */}
+          <div className="flex items-center gap-1 bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs">
             <button
               onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
               className="p-1 hover:bg-slate-100 rounded text-slate-600"
@@ -1380,7 +1465,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             </button>
             <button
               onClick={() => setZoom(1.0)}
-              className="p-1 hover:bg-slate-100 rounded text-slate-600 text-[10px] font-medium"
+              className="px-1 py-0.5 hover:bg-slate-100 rounded text-slate-600 text-[10px] font-bold"
               title="Taille réelle (100%)"
             >
               1:1
@@ -1432,6 +1517,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               handleCanvasMouseDown(e);
             }}
           >
+            {/* Rulers Overlay */}
+            {showRulers && (
+              <CanvasRulers
+                width_mm={template.width_mm}
+                height_mm={template.height_mm}
+                zoom={zoom}
+                mousePosMm={mousePosMm}
+              />
+            )}
             <LabelRenderer
               template={template}
               record={currentPreviewRecord}
@@ -1871,6 +1965,22 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
         </div>
       )}
+
+      {/* Global Find and Replace Modal */}
+      <FindReplaceModal
+        isOpen={isFindReplaceOpen}
+        onClose={() => setIsFindReplaceOpen(false)}
+        items={template.items}
+        selectedItemIds={selectedItemIds}
+        onSelectItems={setSelectedItemIds}
+        onUpdateMultipleItems={handleUpdateMultipleItems}
+      />
+
+      {/* Keyboard Shortcuts Cheatsheet Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
     </div>
   );
 };

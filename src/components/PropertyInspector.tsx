@@ -574,7 +574,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <input
                 type="number"
                 step="0.5"
-                value={selectedItem.x_mm}
+                value={selectedItem.x_mm ?? 0}
                 onChange={(e) => update({ x_mm: parseFloat(e.target.value) || 0 })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
               />
@@ -584,7 +584,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <input
                 type="number"
                 step="0.5"
-                value={selectedItem.y_mm}
+                value={selectedItem.y_mm ?? 0}
                 onChange={(e) => update({ y_mm: parseFloat(e.target.value) || 0 })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
               />
@@ -595,7 +595,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                 type="number"
                 step="0.5"
                 min="1"
-                value={selectedItem.w_mm}
+                value={selectedItem.w_mm ?? 1}
                 onChange={(e) => update({ w_mm: Math.max(1, parseFloat(e.target.value) || 1) })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
               />
@@ -606,7 +606,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                 type="number"
                 step="0.5"
                 min="1"
-                value={selectedItem.h_mm}
+                value={selectedItem.h_mm ?? 1}
                 onChange={(e) => update({ h_mm: Math.max(1, parseFloat(e.target.value) || 1) })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
               />
@@ -616,7 +616,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <input
                 type="number"
                 step="15"
-                value={selectedItem.rotation || 0}
+                value={selectedItem.rotation ?? 0}
                 onChange={(e) => update({ rotation: parseFloat(e.target.value) || 0 })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
               />
@@ -625,7 +625,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="text-[11px] text-slate-500">Plan (Z-Index)</label>
               <input
                 type="number"
-                value={selectedItem.z_index || 1}
+                value={selectedItem.z_index ?? 1}
                 onChange={(e) => update({ z_index: parseInt(e.target.value, 10) || 1 })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
               />
@@ -735,7 +735,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="text-[11px] text-slate-500">Texte / Valeur par défaut</label>
               <textarea
                 rows={2}
-                value={selectedItem.text}
+                value={selectedItem.text ?? ''}
                 onChange={(e) => update({ text: e.target.value })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
               />
@@ -801,7 +801,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                   step="0.5"
                   min="4"
                   max="120"
-                  value={selectedItem.font_size_pt}
+                  value={selectedItem.font_size_pt ?? 10}
                   onChange={(e) => update({ font_size_pt: parseFloat(e.target.value) || 10 })}
                   className="w-20 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono font-bold"
                 />
@@ -828,7 +828,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <div>
                 <label className="text-[11px] text-slate-500">Police de Caractères</label>
                 <select
-                  value={selectedItem.font_family}
+                  value={selectedItem.font_family || 'Arial'}
                   onChange={(e) => update({ font_family: e.target.value })}
                   className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
                 >
@@ -842,7 +842,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <div>
                 <label className="text-[11px] text-slate-500">Graisse (Font Weight)</label>
                 <select
-                  value={selectedItem.font_weight}
+                  value={selectedItem.font_weight || 'normal'}
                   onChange={(e) => update({ font_weight: e.target.value as any })}
                   className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
                 >
@@ -1001,7 +1001,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                     <input
                       type="number"
                       step="0.5"
-                      value={selectedItem.text_shadow.offset_x_px}
+                      value={selectedItem.text_shadow?.offset_x_px ?? 0}
                       onChange={(e) =>
                         update({
                           text_shadow: {
@@ -1018,7 +1018,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                     <input
                       type="number"
                       step="0.5"
-                      value={selectedItem.text_shadow.offset_y_px}
+                      value={selectedItem.text_shadow?.offset_y_px ?? 0}
                       onChange={(e) =>
                         update({
                           text_shadow: {
@@ -1036,7 +1036,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                       type="number"
                       step="0.5"
                       min="0"
-                      value={selectedItem.text_shadow.blur_px}
+                      value={selectedItem.text_shadow?.blur_px ?? 0}
                       onChange={(e) =>
                         update({
                           text_shadow: {
@@ -1052,7 +1052,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                     <label className="text-[9px] text-slate-400">Couleur</label>
                     <input
                       type="color"
-                      value={selectedItem.text_shadow.color || '#000000'}
+                      value={selectedItem.text_shadow?.color || '#000000'}
                       onChange={(e) =>
                         update({
                           text_shadow: {
@@ -1172,7 +1172,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <div>
                 <label className="text-[11px] text-slate-500">Alignement V</label>
                 <select
-                  value={selectedItem.valign}
+                  value={selectedItem.valign || 'top'}
                   onChange={(e) => update({ valign: e.target.value as any })}
                   className="w-full mt-0.5 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs"
                 >
@@ -1720,7 +1720,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
             <div>
               <label className="text-[11px] text-slate-500">Type de Code-barres</label>
               <select
-                value={selectedItem.barcode_type}
+                value={selectedItem.barcode_type || 'ean13'}
                 onChange={(e) => update({ barcode_type: e.target.value as any })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
               >
@@ -1732,7 +1732,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="text-[11px] text-slate-500">Code par défaut (si non lié)</label>
               <input
                 type="text"
-                value={selectedItem.code}
+                value={selectedItem.code || ''}
                 onChange={(e) => update({ code: e.target.value })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-mono text-xs"
               />
@@ -1751,7 +1751,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                 <label className="text-[11px] text-slate-600 flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={selectedItem.show_text}
+                    checked={Boolean(selectedItem.show_text)}
                     onChange={(e) => update({ show_text: e.target.checked })}
                     className="rounded text-blue-600 focus:ring-blue-500"
                   />
@@ -1772,7 +1772,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="text-[11px] text-slate-500">Contenu / URL</label>
               <input
                 type="text"
-                value={selectedItem.content}
+                value={selectedItem.content || ''}
                 onChange={(e) => update({ content: e.target.value })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
               />
@@ -1888,7 +1888,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="text-[11px] text-slate-500">Texte</label>
               <input
                 type="text"
-                value={(selectedItem as CurvedTextItemProperties).text}
+                value={(selectedItem as CurvedTextItemProperties).text || ''}
                 onChange={(e) => update({ text: e.target.value })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
               />
@@ -2029,7 +2029,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                 type="number"
                 min="1"
                 max="10"
-                value={selectedItem.primary_tier}
+                value={selectedItem.primary_tier ?? 1}
                 onChange={(e) => update({ primary_tier: parseInt(e.target.value, 10) || 1 })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
               />
@@ -2038,7 +2038,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="text-[11px] text-slate-500">Préfixe quantité</label>
               <input
                 type="text"
-                value={selectedItem.prefix_text}
+                value={selectedItem.prefix_text || ''}
                 onChange={(e) => update({ prefix_text: e.target.value })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
               />
@@ -2047,7 +2047,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="text-[11px] text-slate-500">Symbole monétaire</label>
               <input
                 type="text"
-                value={selectedItem.unit_label}
+                value={selectedItem.unit_label || ''}
                 onChange={(e) => update({ unit_label: e.target.value })}
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
               />
@@ -2056,7 +2056,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="flex items-center gap-2 cursor-pointer text-[11px]">
                 <input
                   type="checkbox"
-                  checked={selectedItem.strict_required}
+                  checked={Boolean(selectedItem.strict_required)}
                   onChange={(e) => update({ strict_required: e.target.checked })}
                   className="rounded text-blue-600"
                 />
