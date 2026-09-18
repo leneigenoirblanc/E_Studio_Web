@@ -1126,99 +1126,99 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       </header>
 
       {/* Ergonomic Tools Ribbon Toolbar */}
-      <div className="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between shrink-0 overflow-x-auto text-xs gap-3">
+      <div className="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between shrink-0 overflow-x-auto text-xs gap-3 whitespace-nowrap scrollbar-thin">
         {/* Insert Palette Group */}
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 tracking-wider select-none">
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 tracking-wider select-none shrink-0">
             Insérer
           </span>
-          <div className="flex items-center bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs gap-0.5">
+          <div className="flex items-center bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs gap-0.5 shrink-0">
             <button
               onClick={() => addItem('text')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter un champ texte"
             >
-              <Type className="w-3.5 h-3.5 text-blue-600" />
+              <Type className="w-3.5 h-3.5 text-blue-600 shrink-0" />
               <span>Texte</span>
             </button>
             <button
               onClick={() => addItem('shape')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter un rectangle"
             >
-              <Square className="w-3.5 h-3.5 text-slate-600" />
+              <Square className="w-3.5 h-3.5 text-slate-600 shrink-0" />
               <span>Rectangle</span>
             </button>
             <button
               onClick={() => addItem('ellipse')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter une ellipse"
             >
-              <Circle className="w-3.5 h-3.5 text-slate-600" />
+              <Circle className="w-3.5 h-3.5 text-slate-600 shrink-0" />
               <span>Ellipse</span>
             </button>
             <button
               onClick={() => addItem('line')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter une ligne"
             >
-              <Minus className="w-3.5 h-3.5 text-slate-600" />
+              <Minus className="w-3.5 h-3.5 text-slate-600 shrink-0" />
               <span>Ligne</span>
             </button>
             <button
               onClick={() => addItem('barcode')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter un code-barres"
             >
-              <Barcode className="w-3.5 h-3.5 text-slate-800" />
+              <Barcode className="w-3.5 h-3.5 text-slate-800 shrink-0" />
               <span>Code-barres</span>
             </button>
             <button
               onClick={() => addItem('qrcode')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter un QR Code"
             >
-              <QrCode className="w-3.5 h-3.5 text-slate-800" />
+              <QrCode className="w-3.5 h-3.5 text-slate-800 shrink-0" />
               <span>QR Code</span>
             </button>
             <button
               onClick={() => addItem('tier_price')}
-              className="px-2 py-1 rounded bg-sky-50 hover:bg-sky-100 font-semibold text-sky-800 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded bg-sky-50 hover:bg-sky-100 font-semibold text-sky-800 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter un tableau de prix par volume/palier"
             >
-              <DollarSign className="w-3.5 h-3.5 text-sky-700" />
+              <DollarSign className="w-3.5 h-3.5 text-sky-700 shrink-0" />
               <span>Paliers Prix</span>
             </button>
             <button
               onClick={() => addItem('restricted_area')}
-              className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 font-semibold text-rose-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 font-semibold text-rose-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter une zone restreinte non imprimable"
             >
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
               <span>Zone Restreinte</span>
             </button>
             <button
               onClick={() => addItem('curved_text')}
-              className="px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 font-semibold text-indigo-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 font-semibold text-indigo-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter un texte circulaire / courbé"
             >
-              <CircleDot className="w-3.5 h-3.5 text-indigo-600" />
+              <CircleDot className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
               <span>Texte Courbe</span>
             </button>
             <button
               onClick={() => addItem('pictogram')}
-              className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter un pictogramme réglementaire"
             >
-              <Stamp className="w-3.5 h-3.5 text-emerald-600" />
+              <Stamp className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Pictogramme</span>
             </button>
             <button
               onClick={() => addItem('image')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition"
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter une image"
             >
-              <ImageIcon className="w-3.5 h-3.5 text-slate-600" />
+              <ImageIcon className="w-3.5 h-3.5 text-slate-600 shrink-0" />
               <span>Image</span>
             </button>
           </div>

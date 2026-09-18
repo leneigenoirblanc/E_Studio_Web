@@ -1,4 +1,5 @@
 import { ProductRecord, TextItemProperties, TemplateItem } from '../types';
+import { resolveCanonicalKey } from '../domainFields';
 
 /**
  * Advanced Retail & Pricing Engine for E-Studio
@@ -6,6 +7,99 @@ import { ProductRecord, TextItemProperties, TemplateItem } from '../types';
  * secondary currency conversion, dynamic dates (DLC/DLUO), and conditional display rules.
  */
 export class PricingEngine {
+  /**
+   * Helper: Resolves field value from ProductRecord, taking into account exact keys, 
+   * canonical domain aliases, and case/spacing normalization.
+   */
+  static getProductFieldValue(record: ProductRecord | null | undefined, bindingKey: string): any {
+    if (!record || !bindingKey) return undefined;
+
+    // 1. Direct property match
+    if (record[bindingKey] !== undefined && record[bindingKey] !== null && record[bindingKey] !== '') {
+      return record[bindingKey];
+    }
+
+    // 2. Special handling for Promo Price
+    if (bindingKey === 'PROMOPRICE') {
+      return PricingEngine.getPromoPrice(record);
+    }
+
+    // 3. Special handling for Selling Price
+    if (bindingKey === 'SELLING_PRICE') {
+      return PricingEngine.getSellingPrice(record);
+    }
+
+    // 4. Normalized key search (e.g. "PRIX_PROMO", "PRIX PROMO", "prix_promo")
+    const normTarget = bindingKey.trim().toUpperCase().replace(/[\s\.\-]+/g, '_');
+    for (const k of Object.keys(record)) {
+      const kNorm = k.trim().toUpperCase().replace(/[\s\.\-]+/g, '_');
+      if (kNorm === normTarget && record[k] !== undefined && record[k] !== null && record[k] !== '') {
+        return record[k];
+      }
+    }
+
+    // 5. Check if canonical resolution matches
+    for (const k of Object.keys(record)) {
+      const canonical = resolveCanonicalKey(k);
+      if (canonical === bindingKey && record[k] !== undefined && record[k] !== null && record[k] !== '') {
+        return record[k];
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Helper: Resolves promo price from record with fallback matching
+   */
+  static getPromoPrice(record: ProductRecord | null | undefined): number | undefined {
+    if (!record) return undefined;
+
+    if (typeof record.PROMOPRICE === 'number' && !isNaN(record.PROMOPRICE) && record.PROMOPRICE > 0) {
+      return record.PROMOPRICE;
+    }
+
+    // Search record keys for canonical PROMOPRICE
+    for (const k of Object.keys(record)) {
+      const canonical = resolveCanonicalKey(k);
+      if (canonical === 'PROMOPRICE') {
+        const val = record[k];
+        if (typeof val === 'number' && !isNaN(val) && val > 0) return val;
+        if (typeof val === 'string') {
+          const num = parseFloat(val.replace(',', '.').replace(/[^0-9.-]+/g, ''));
+          if (!isNaN(num) && num > 0) return num;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Helper: Resolves standard selling price from record with fallback matching
+   */
+  static getSellingPrice(record: ProductRecord | null | undefined): number {
+    if (!record) return 0;
+
+    if (typeof record.SELLING_PRICE === 'number' && !isNaN(record.SELLING_PRICE)) {
+      return record.SELLING_PRICE;
+    }
+
+    for (const k of Object.keys(record)) {
+      const canonical = resolveCanonicalKey(k);
+      if (canonical === 'SELLING_PRICE') {
+        const val = record[k];
+        if (typeof val === 'number' && !isNaN(val)) return val;
+        if (typeof val === 'string') {
+          const num = parseFloat(val.replace(',', '.').replace(/[^0-9.-]+/g, ''));
+          if (!isNaN(num)) return num;
+        }
+      }
+    }
+
+    return 0;
+  }
+
   /**
    * Evaluates whether an item should be rendered based on its conditional display configuration
    */
@@ -19,16 +113,16 @@ export class PricingEngine {
     const { rule, field_key } = item.conditional_display;
 
     switch (rule) {
-      case 'has_promo':
-        return (
-          record.PROMOPRICE !== undefined &&
-          record.PROMOPRICE !== null &&
-          record.PROMOPRICE > 0 &&
-          record.PROMOPRICE < record.SELLING_PRICE
-        );
+      case 'has_promo': {
+        const promo = PricingEngine.getPromoPrice(record);
+        const base = PricingEngine.getSellingPrice(record);
+        return promo !== undefined && promo > 0 && (base === 0 || promo < base);
+      }
 
-      case 'has_barcode':
-        return Boolean(record.PRODUCT_SCAN && record.PRODUCT_SCAN.trim().length > 0);
+      case 'has_barcode': {
+        const scan = PricingEngine.getProductFieldValue(record, 'PRODUCT_SCAN');
+        return Boolean(scan && String(scan).trim().length > 0);
+      }
 
       case 'has_tiers':
         return Boolean(record.TIERS && record.TIERS.length > 0);
@@ -36,7 +130,7 @@ export class PricingEngine {
       case 'field_gt_zero': {
         const key = field_key || item.binding_key;
         if (!key) return true;
-        const val = record[key];
+        const val = PricingEngine.getProductFieldValue(record, key);
         const num = typeof val === 'number' ? val : parseFloat(String(val || 0));
         return !isNaN(num) && num > 0;
       }
@@ -44,7 +138,7 @@ export class PricingEngine {
       case 'field_not_empty': {
         const key = field_key || item.binding_key;
         if (!key) return true;
-        const val = record[key];
+        const val = PricingEngine.getProductFieldValue(record, key);
         return val !== undefined && val !== null && String(val).trim() !== '';
       }
 
@@ -67,16 +161,21 @@ export class PricingEngine {
       return item.text;
     }
 
+    const promoPrice = PricingEngine.getPromoPrice(record);
+    const sellingPrice = PricingEngine.getSellingPrice(record);
+
     // 1. Unit Price Calculation (Prix au kilo / litre / pièce)
     if (item.calculation_mode === 'unit_price' && item.unit_price_config?.enabled) {
       const cfg = item.unit_price_config;
-      const basePrice = (record.PROMOPRICE && record.PROMOPRICE > 0) ? record.PROMOPRICE : record.SELLING_PRICE;
+      const basePrice = (promoPrice && promoPrice > 0) ? promoPrice : sellingPrice;
       
       // Determine quantity / weight from explicit record fields or fallback heuristics
       let quantity = 1.0;
-      if (cfg.weight_volume_key && record[cfg.weight_volume_key] !== undefined) {
-        const raw = record[cfg.weight_volume_key];
-        quantity = typeof raw === 'number' ? raw : parseFloat(String(raw)) || 1.0;
+      if (cfg.weight_volume_key) {
+        const raw = PricingEngine.getProductFieldValue(record, cfg.weight_volume_key);
+        if (raw !== undefined) {
+          quantity = typeof raw === 'number' ? raw : parseFloat(String(raw)) || 1.0;
+        }
       } else if (record.NET_WEIGHT_KG) {
         quantity = record.NET_WEIGHT_KG;
       } else if (record.VOLUME_L) {
@@ -95,7 +194,7 @@ export class PricingEngine {
         ? Math.round(unitPrice).toLocaleString('fr-FR')
         : unitPrice.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       
-      const currency = item.currency_symbol || (record.SELLING_PRICE > 500 ? 'FCFA' : '€');
+      const currency = item.currency_symbol || (sellingPrice > 500 ? 'FCFA' : '€');
       return `${formattedUnitPrice} ${currency} / ${cfg.measure_unit}`;
     }
 
@@ -104,8 +203,8 @@ export class PricingEngine {
       if (record.DISCOUNT_PCT !== undefined && record.DISCOUNT_PCT > 0) {
         return `-${Math.round(record.DISCOUNT_PCT)}%`;
       }
-      if (record.PROMOPRICE && record.PROMOPRICE > 0 && record.SELLING_PRICE > record.PROMOPRICE) {
-        const pct = Math.round(((record.SELLING_PRICE - record.PROMOPRICE) / record.SELLING_PRICE) * 100);
+      if (promoPrice && promoPrice > 0 && sellingPrice > promoPrice) {
+        const pct = Math.round(((sellingPrice - promoPrice) / sellingPrice) * 100);
         return `-${pct}%`;
       }
       return '-20%';
@@ -114,7 +213,7 @@ export class PricingEngine {
     // 3. Secondary Currency Conversion (e.g. FCFA -> EUR)
     if (item.calculation_mode === 'secondary_currency' && item.secondary_currency_config?.enabled) {
       const cfg = item.secondary_currency_config;
-      const basePrice = (record.PROMOPRICE && record.PROMOPRICE > 0) ? record.PROMOPRICE : record.SELLING_PRICE;
+      const basePrice = (promoPrice && promoPrice > 0) ? promoPrice : sellingPrice;
       const rate = cfg.exchange_rate > 0 ? cfg.exchange_rate : 655.957;
 
       const converted = cfg.mode === 'multiply' ? basePrice * rate : basePrice / rate;
@@ -134,12 +233,14 @@ export class PricingEngine {
     }
 
     // Fallback: standard binding key or static text
-    if (item.binding_key && record[item.binding_key] !== undefined) {
-      const raw = record[item.binding_key];
-      if (typeof raw === 'number') {
-        return raw.toLocaleString('fr-FR');
+    if (item.binding_key) {
+      const val = PricingEngine.getProductFieldValue(record, item.binding_key);
+      if (val !== undefined && val !== null && val !== '') {
+        if (typeof val === 'number') {
+          return val.toLocaleString('fr-FR');
+        }
+        return String(val);
       }
-      return String(raw);
     }
 
     return item.text;

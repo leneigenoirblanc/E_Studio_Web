@@ -37,13 +37,30 @@ export const DOMAIN_FIELDS: DomainField[] = [
 export const DOMAIN_FIELD_MAP = new Map(DOMAIN_FIELDS.map(f => [f.key, f]));
 
 export function resolveCanonicalKey(inputHeader: string): string | null {
+  if (!inputHeader) return null;
   const norm = inputHeader.trim().toUpperCase().replace(/[\s\.\-]+/g, '_');
   if (DOMAIN_FIELD_MAP.has(norm)) return norm;
+
+  // 1. Enhanced Regex for Promo Price detection
+  if (
+    /^(PRIX_?PROMO|PROMO_?PRIX|PROMO_?PRICE|PV_?PROMO|NOUVEAU_?PRIX|PRIX_?SOLDE|SOLDE|SPECIAL_?PRICE|PRIX_?SPECIAL|DISCOUNT_?PRICE|PRIX_?REMISE|REMISE_?PRIX|PRIX_?CHOC|BARRE_?PRIX|PROMO)$/i.test(norm) ||
+    (norm.includes('PROMO') && !norm.includes('TEXT') && !norm.includes('LABEL') && !norm.includes('PERIODE') && !norm.includes('DATE') && !norm.includes('MESSAGE') && !norm.includes('BADGE') && !norm.includes('%') && !norm.includes('PCT'))
+  ) {
+    return 'PROMOPRICE';
+  }
+
+  // 2. Enhanced Regex for Standard Selling Price
+  if (/^(PRIX|PRICE|PRIX_?VENTE|PV|PRIX_?STD|PRIX_?UNITAIRE|PRIX_?STANDARD|STANDARD_?PRICE|SELLING_?PRICE)$/i.test(norm)) {
+    return 'SELLING_PRICE';
+  }
+
+  // 3. Check explicit domain aliases
   for (const field of DOMAIN_FIELDS) {
     for (const alias of field.aliases) {
       const aliasNorm = alias.trim().toUpperCase().replace(/[\s\.\-]+/g, '_');
       if (norm === aliasNorm) return field.key;
     }
   }
+
   return null;
 }

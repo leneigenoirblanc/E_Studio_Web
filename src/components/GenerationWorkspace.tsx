@@ -4,6 +4,7 @@ import { SAMPLE_PRODUCTS } from '../sampleData';
 import { LabelRenderer } from './LabelRenderer';
 import { ImpositionCalculator } from '../utils/impositionCalculator';
 import { TierEngine } from '../utils/tierEngine';
+import { PricingEngine } from '../utils/pricingEngine';
 import { DataMappingModal } from './DataMappingModal';
 import { PptxExporter } from '../utils/pptxExporter';
 import { ZplExporter } from '../utils/zplExporter';
@@ -49,13 +50,20 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<any[]>([]);
 
-  // Imposition sheet configuration (default landscape as requested)
-  const [impositionConfig, setImpositionConfig] = useState<ImpositionConfig>({
-    page_size: 'A4',
-    orientation: 'landscape',
-    gap_mm: 2.0,
-    show_cut_marks: true,
-    start_offset_slot: 0,
+  // Imposition sheet configuration (defaults to template.default_imposition or landscape A4)
+  const [impositionConfig, setImpositionConfig] = useState<ImpositionConfig>(() => {
+    if (template.default_imposition) {
+      return template.default_imposition;
+    }
+    return {
+      page_size: 'A4',
+      orientation: 'landscape',
+      gap_mm: 2.0,
+      gap_x_mm: 2.0,
+      gap_y_mm: 2.0,
+      show_cut_marks: true,
+      start_offset_slot: 0,
+    };
   });
 
   // PDF Export Config
@@ -246,6 +254,9 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
     const totalItemsToPlace = products.length + startOffset;
     const totalPages = Math.ceil(totalItemsToPlace / labelsPerPage);
 
+    const gapX = Math.max(0, impositionConfig.gap_x_mm ?? impositionConfig.gap_mm ?? 2.0);
+    const gapY = Math.max(0, impositionConfig.gap_y_mm ?? impositionConfig.gap_mm ?? 2.0);
+
     let productCursor = 0;
 
     for (let page = 0; page < totalPages; page++) {
@@ -265,44 +276,149 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
         const col = slot % imposition.cols;
         const row = Math.floor(slot / imposition.cols);
 
-        const x = imposition.horizontal_offset_mm + col * (imposition.label_total_w_mm + impositionConfig.gap_mm);
-        const y = imposition.vertical_offset_mm + row * (imposition.label_total_h_mm + impositionConfig.gap_mm);
+        const x = imposition.horizontal_offset_mm + col * (imposition.label_total_w_mm + gapX);
+        const y = imposition.vertical_offset_mm + row * (imposition.label_total_h_mm + gapY);
 
-        // Label border
-        doc.setDrawColor(200, 200, 200);
-        doc.setLineWidth(0.2);
-        doc.rect(x, y, template.width_mm, template.height_mm);
+        // Label background & border
+        if (template.bg_color && template.bg_color !== 'transparent') {
+          const hex = template.bg_color.replace('#', '');
+          const r = parseInt(hex.substring(0, 2), 16) || 255;
+          const g = parseInt(hex.substring(2, 4), 16) || 255;
+          const b = parseInt(hex.substring(4, 6), 16) || 255;
+          doc.setFillColor(r, g, b);
+          doc.rect(x, y, template.width_mm, template.height_mm, 'F');
+        }
+
+        doc.setDrawColor(220, 226, 235);
+        doc.setLineWidth(0.15);
+        doc.rect(x, y, template.width_mm, template.height_mm, 'S');
 
         // Inner printable margins guide / crop marks
         if (impositionConfig.show_cut_marks) {
           doc.setDrawColor(180, 180, 180);
-          doc.line(x - 1, y, x + 1, y);
-          doc.line(x, y - 1, x, y + 1);
+          doc.line(x - 1.5, y, x + 1.5, y);
+          doc.line(x, y - 1.5, x, y + 1.5);
+          doc.line(x + template.width_mm - 1.5, y + template.height_mm, x + template.width_mm + 1.5, y + template.height_mm);
+          doc.line(x + template.width_mm, y + template.height_mm - 1.5, x + template.width_mm, y + template.height_mm + 1.5);
         }
 
-        // Print core texts
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.text(prod.STORE_NAME || 'MAGASIN', x + 2, y + 4);
+        // Dynamically render all template items for this product
+        template.items.forEach((item) => {
+          if (!PricingEngine.shouldDisplayItem(item, prod)) return;
 
-        doc.setFontSize(10);
-        doc.text(prod.ITEMNAME.slice(0, 35), x + 2, y + 10);
+          const itemX = x + item.x_mm;
+          const itemY = y + item.y_mm;
 
-        // Price
-        doc.setFontSize(14);
-        doc.setTextColor(2, 132, 199);
-        doc.text(`${prod.SELLING_PRICE.toLocaleString('fr-FR')} FCFA`, x + template.width_mm - 2, y + 14, { align: 'right' });
+          if (item.type === 'text') {
+            const textVal = PricingEngine.resolveCalculatedText(item, prod);
+            if (!textVal) return;
 
-        // Barcode text placeholder
-        doc.setFontSize(7);
-        doc.setTextColor(100, 116, 139);
-        if (prod.PRODUCT_SCAN) {
-          doc.text(`EAN: ${prod.PRODUCT_SCAN}`, x + 2, y + template.height_mm - 3);
-        }
-        if (prod.PARTNO) {
-          doc.text(`SKU: ${prod.PARTNO}`, x + template.width_mm - 2, y + template.height_mm - 3, { align: 'right' });
-        }
+            const hex = (item.text_color || '#000000').replace('#', '');
+            const r = parseInt(hex.substring(0, 2), 16) || 0;
+            const g = parseInt(hex.substring(2, 4), 16) || 0;
+            const b = parseInt(hex.substring(4, 6), 16) || 0;
+
+            doc.setTextColor(r, g, b);
+
+            const isBold = item.font_weight === 'bold' || item.font_weight === '800' || item.font_weight === '600';
+            const isItalic = item.font_style === 'italic';
+
+            let fontStyle = 'normal';
+            if (isBold && isItalic) fontStyle = 'bolditalic';
+            else if (isBold) fontStyle = 'bold';
+            else if (isItalic) fontStyle = 'italic';
+
+            const familyNorm = (item.font_family || '').toLowerCase();
+            const fontFamily = familyNorm.includes('serif') ? 'times' : familyNorm.includes('mono') ? 'courier' : 'helvetica';
+
+            doc.setFont(fontFamily, fontStyle);
+
+            const fontSizePt = item.font_size_pt || 10;
+            doc.setFontSize(fontSizePt);
+
+            const align = item.alignment || 'left';
+            let textX = itemX;
+            if (align === 'center') textX = itemX + item.w_mm / 2;
+            else if (align === 'right') textX = itemX + item.w_mm;
+
+            let textY = itemY + fontSizePt * 0.32;
+            if (item.valign === 'middle') {
+              textY = itemY + item.h_mm / 2 + fontSizePt * 0.12;
+            } else if (item.valign === 'bottom') {
+              textY = itemY + item.h_mm - 0.5;
+            }
+
+            doc.text(textVal, textX, textY, { align: align as any });
+
+            // Render strikethrough line for promo standard price comparisons
+            const isStrikethrough = item.text_decoration?.includes('line-through');
+            if (isStrikethrough) {
+              doc.setDrawColor(r, g, b);
+              doc.setLineWidth(0.3);
+              const approxCharWidthMm = fontSizePt * 0.28;
+              const textWidthMm = Math.min(item.w_mm, textVal.length * approxCharWidthMm);
+              let lineX1 = itemX;
+              if (align === 'center') lineX1 = itemX + (item.w_mm - textWidthMm) / 2;
+              else if (align === 'right') lineX1 = itemX + item.w_mm - textWidthMm;
+              doc.line(lineX1, textY - fontSizePt * 0.1, lineX1 + textWidthMm, textY - fontSizePt * 0.1);
+            }
+          } else if (item.type === 'shape' || item.type === 'ellipse' || item.type === 'line') {
+            const fillColor = (item as any).fill_color || 'transparent';
+            const borderColor = (item as any).border_color || (item as any).color || '#000000';
+            const borderWidth = (item as any).border_width || (item as any).thickness || 0.2;
+
+            const bgHex = fillColor.replace('#', '');
+            const bgR = parseInt(bgHex.substring(0, 2), 16) || 255;
+            const bgG = parseInt(bgHex.substring(2, 4), 16) || 255;
+            const bgB = parseInt(bgHex.substring(4, 6), 16) || 255;
+
+            const strokeHex = borderColor.replace('#', '');
+            const stR = parseInt(strokeHex.substring(0, 2), 16) || 0;
+            const stG = parseInt(strokeHex.substring(2, 4), 16) || 0;
+            const stB = parseInt(strokeHex.substring(4, 6), 16) || 0;
+
+            doc.setFillColor(bgR, bgG, bgB);
+            doc.setDrawColor(stR, stG, stB);
+            doc.setLineWidth(borderWidth);
+
+            const hasFill = fillColor && fillColor !== 'transparent';
+            const hasStroke = borderWidth > 0;
+            const style = hasFill && hasStroke ? 'FD' : hasFill ? 'F' : 'S';
+
+            if (item.type === 'ellipse') {
+              doc.ellipse(itemX + item.w_mm / 2, itemY + item.h_mm / 2, item.w_mm / 2, item.h_mm / 2, style);
+            } else if (item.type === 'line') {
+              doc.line(itemX, itemY, itemX + item.w_mm, itemY + item.h_mm);
+            } else {
+              doc.rect(itemX, itemY, item.w_mm, item.h_mm, style);
+            }
+          } else if (item.type === 'barcode' || item.type === 'qrcode') {
+            const rawCode = PricingEngine.getProductFieldValue(prod, item.binding_key || 'PRODUCT_SCAN') || '3250390123456';
+            doc.setFillColor(15, 23, 42);
+            doc.setDrawColor(15, 23, 42);
+            // Draw clean barcode background bar frame
+            doc.rect(itemX, itemY, item.w_mm, Math.max(2, item.h_mm - 3), 'F');
+            doc.setFont('courier', 'normal');
+            doc.setFontSize(6.5);
+            doc.setTextColor(30, 41, 59);
+            doc.text(String(rawCode), itemX + item.w_mm / 2, itemY + item.h_mm - 0.5, { align: 'center' });
+          } else if (item.type === 'tier_price') {
+            doc.setDrawColor(203, 213, 225);
+            doc.setFillColor(248, 250, 252);
+            doc.rect(itemX, itemY, item.w_mm, item.h_mm, 'FD');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6.5);
+            doc.setTextColor(51, 65, 85);
+            doc.text('PALIERS DE PRIX', itemX + item.w_mm / 2, itemY + 3, { align: 'center' });
+          } else if (item.type === 'pictogram') {
+            doc.setFillColor(220, 38, 38);
+            doc.rect(itemX, itemY, item.w_mm, item.h_mm, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.text('!', itemX + item.w_mm / 2, itemY + item.h_mm / 2 + 1, { align: 'center' });
+          }
+        });
       }
     }
     return doc;
@@ -715,19 +831,51 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
               </div>
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Espacement entre étiquettes (mm)</label>
-              <input
-                type="number"
-                step="0.5"
-                min="0"
-                max="20"
-                value={impositionConfig.gap_mm}
-                onChange={(e) =>
-                  setImpositionConfig({ ...impositionConfig, gap_mm: parseFloat(e.target.value) || 0 })
-                }
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono"
-              />
+            <div className="space-y-2">
+              <label className="block font-semibold text-slate-700 text-xs">Espacement des Étiquettes sur la Planche (mm)</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-medium block mb-0.5">Espacement Horiz. X (mm)</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="50"
+                    value={impositionConfig.gap_x_mm ?? impositionConfig.gap_mm ?? 2.0}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setImpositionConfig({ ...impositionConfig, gap_x_mm: val, gap_mm: val });
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800"
+                  />
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-medium block mb-0.5">Espacement Vert. Y (mm)</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="50"
+                    value={impositionConfig.gap_y_mm ?? impositionConfig.gap_mm ?? 2.0}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setImpositionConfig({ ...impositionConfig, gap_y_mm: val });
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  template.default_imposition = impositionConfig;
+                  alert('La disposition de planche et les espacements ont été enregistrés dans le gabarit actuel.');
+                }}
+                className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+              >
+                <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />
+                <span>Enregistrer cette disposition dans le gabarit</span>
+              </button>
             </div>
 
             {/* Start Offset / Re-use partially used sheet */}

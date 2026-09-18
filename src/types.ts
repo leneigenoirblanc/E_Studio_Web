@@ -281,6 +281,7 @@ export interface LabelTemplate {
   background_image_locked?: boolean;
   background_image_in_output?: boolean;
   calibration_image?: CalibrationImageConfig | null;
+  default_imposition?: ImpositionConfig;
   items: TemplateItem[];
 }
 
