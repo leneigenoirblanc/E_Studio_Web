@@ -1,5 +1,15 @@
 import React from 'react';
-import { TemplateItem, TextItemProperties, ShapeItemProperties, BarcodeItemProperties, RestrictedAreaItemProperties } from '../types';
+import {
+  TemplateItem,
+  TextItemProperties,
+  ShapeItemProperties,
+  BarcodeItemProperties,
+  RestrictedAreaItemProperties,
+  CurvedTextItemProperties,
+  PictogramItemProperties,
+  PictogramType,
+  ConditionalDisplayConfig,
+} from '../types';
 import { DOMAIN_FIELDS } from '../domainFields';
 import {
   AVAILABLE_FONTS,
@@ -42,6 +52,13 @@ import {
   Sparkles,
   Subscript as SubscriptIcon,
   Superscript as SuperscriptIcon,
+  Calculator,
+  Calendar,
+  Coins,
+  Eye,
+  Scissors,
+  Stamp,
+  CircleDot,
 } from 'lucide-react';
 
 interface PropertyInspectorProps {
@@ -651,6 +668,61 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
             </div>
           </div>
         )}
+
+        {/* CONDITIONAL DISPLAY & VISIBILITY RULES */}
+        <div className="pt-2 border-t border-slate-200 space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-slate-900 uppercase text-[10px] tracking-wider text-slate-400 flex items-center gap-1">
+              <Eye className="w-3.5 h-3.5" />
+              <span>Règles Conditionnelles d'Affichage</span>
+            </h4>
+          </div>
+          <div>
+            <label className="text-[11px] text-slate-500">Visibilité dynamique</label>
+            <select
+              value={selectedItem.conditional_display?.rule || 'always'}
+              onChange={(e) => {
+                const rule = e.target.value as any;
+                update({
+                  conditional_display: {
+                    enabled: rule !== 'always',
+                    rule,
+                    field_key: selectedItem.conditional_display?.field_key || selectedItem.binding_key,
+                  },
+                });
+              }}
+              className="w-full mt-0.5 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
+            >
+              <option value="always">Toujours afficher (Par défaut)</option>
+              <option value="has_promo">Afficher UNIQUEMENT si l'article est en promotion</option>
+              <option value="has_barcode">Afficher UNIQUEMENT si le code-barres est renseigné</option>
+              <option value="has_tiers">Afficher UNIQUEMENT si des paliers de prix existent</option>
+              <option value="field_gt_zero">Afficher si la valeur numérique est &gt; 0</option>
+              <option value="field_not_empty">Afficher si le champ n'est pas vide</option>
+            </select>
+          </div>
+        </div>
+
+        {/* PRINT FINISH & DIE-CUT MASKS */}
+        <div className="pt-2 border-t border-slate-200 space-y-2">
+          <h4 className="font-bold text-slate-900 uppercase text-[10px] tracking-wider text-slate-400 flex items-center gap-1">
+            <Scissors className="w-3.5 h-3.5" />
+            <span>Finition & Masque d'Impression</span>
+          </h4>
+          <div>
+            <label className="text-[11px] text-slate-500">Traitement spécial / Finition</label>
+            <select
+              value={selectedItem.finish_effect || 'none'}
+              onChange={(e) => update({ finish_effect: e.target.value as any })}
+              className="w-full mt-0.5 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
+            >
+              <option value="none">Standard (Impression quadrichromie)</option>
+              <option value="die_cut">Tracé de Découpe (Ligne rose magenta de forme)</option>
+              <option value="spot_varnish">Vernis Sélectif Brillant (Zone d'enduction UV)</option>
+              <option value="hot_foil">Dorure à Chaud (Marquage or métallisé)</option>
+            </select>
+          </div>
+        </div>
 
         {/* FULL TYPOGRAPHY SECTION FOR TEXT ITEMS */}
         {selectedItem.type === 'text' && (
@@ -1291,6 +1363,236 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* RETAIL AUTOMATION & DYNAMIC CALCULATIONS */}
+              <div className="pt-2 border-t border-slate-200 space-y-2">
+                <h5 className="font-bold text-slate-800 text-[11px] flex items-center gap-1">
+                  <Calculator className="w-3 h-3 text-sky-600" />
+                  <span>Automatisation Métier & Calculs</span>
+                </h5>
+                <div>
+                  <label className="text-[11px] text-slate-500">Mode de Calcul</label>
+                  <select
+                    value={selectedItem.calculation_mode || 'none'}
+                    onChange={(e) => {
+                      const mode = e.target.value as any;
+                      update({
+                        calculation_mode: mode,
+                        unit_price_config:
+                          mode === 'unit_price'
+                            ? selectedItem.unit_price_config || {
+                                enabled: true,
+                                weight_volume_key: 'NET_WEIGHT_KG',
+                                measure_unit: 'kg',
+                              }
+                            : selectedItem.unit_price_config,
+                        secondary_currency_config:
+                          mode === 'secondary_currency'
+                            ? selectedItem.secondary_currency_config || {
+                                enabled: true,
+                                target_currency: 'EUR',
+                                exchange_rate: 655.957,
+                                mode: 'divide',
+                              }
+                            : selectedItem.secondary_currency_config,
+                        dynamic_date_config:
+                          mode === 'dynamic_date'
+                            ? selectedItem.dynamic_date_config || {
+                                enabled: true,
+                                date_type: 'dlc',
+                                offset_days: 3,
+                                format: 'DD/MM/YYYY',
+                                prefix_label: "À consommer jusqu'au :",
+                              }
+                            : selectedItem.dynamic_date_config,
+                      });
+                    }}
+                    className="w-full mt-0.5 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs"
+                  >
+                    <option value="none">Aucun (Texte ou Prix standard)</option>
+                    <option value="unit_price">Calcul Automatique Prix au Kg / Litre</option>
+                    <option value="discount_pct">Calcul Automatique Taux de Remise (%)</option>
+                    <option value="secondary_currency">Double Affichage & Conversion Devise</option>
+                    <option value="dynamic_date">Calculateur de Dates Dynamiques (DLC / DLUO)</option>
+                  </select>
+                </div>
+
+                {/* Specific configs based on mode */}
+                {selectedItem.calculation_mode === 'unit_price' && (
+                  <div className="p-2 bg-sky-50/70 border border-sky-200 rounded space-y-2 mt-1">
+                    <div>
+                      <label className="text-[10px] font-bold text-sky-900">Champ Poids / Volume / Colisage</label>
+                      <select
+                        value={selectedItem.unit_price_config?.weight_volume_key || 'NET_WEIGHT_KG'}
+                        onChange={(e) =>
+                          update({
+                            unit_price_config: {
+                              ...selectedItem.unit_price_config!,
+                              weight_volume_key: e.target.value,
+                              enabled: true,
+                            },
+                          })
+                        }
+                        className="w-full mt-0.5 px-2 py-1 bg-white border border-sky-300 rounded text-xs"
+                      >
+                        <option value="NET_WEIGHT_KG">NET_WEIGHT_KG (Poids Net en kg)</option>
+                        <option value="VOLUME_L">VOLUME_L (Volume Net en Litres)</option>
+                        <option value="CASE_SIZE">CASE_SIZE (Colisage / Nb pièces)</option>
+                        <option value="PACK_UNIT">PACK_UNIT (Format texte e.g. 250g)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-sky-900">Unité Cible</label>
+                      <select
+                        value={selectedItem.unit_price_config?.measure_unit || 'kg'}
+                        onChange={(e) =>
+                          update({
+                            unit_price_config: {
+                              ...selectedItem.unit_price_config!,
+                              measure_unit: e.target.value as any,
+                              enabled: true,
+                            },
+                          })
+                        }
+                        className="w-full mt-0.5 px-2 py-1 bg-white border border-sky-300 rounded text-xs"
+                      >
+                        <option value="kg">au Kilogramme (kg)</option>
+                        <option value="g">au Gramme (g)</option>
+                        <option value="L">au Litre (L)</option>
+                        <option value="cl">au Centilitre (cl)</option>
+                        <option value="ml">au Millilitre (ml)</option>
+                        <option value="piece">à la Pièce (pc)</option>
+                        <option value="carton">au Carton</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {selectedItem.calculation_mode === 'secondary_currency' && (
+                  <div className="p-2 bg-emerald-50/70 border border-emerald-200 rounded space-y-2 mt-1">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-emerald-900">Devise Cible</label>
+                        <input
+                          type="text"
+                          value={selectedItem.secondary_currency_config?.target_currency || 'EUR'}
+                          onChange={(e) =>
+                            update({
+                              secondary_currency_config: {
+                                ...selectedItem.secondary_currency_config!,
+                                target_currency: e.target.value,
+                                enabled: true,
+                              },
+                            })
+                          }
+                          className="w-full mt-0.5 px-2 py-1 bg-white border border-emerald-300 rounded text-xs font-mono uppercase"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-emerald-900">Taux Conversion</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          value={selectedItem.secondary_currency_config?.exchange_rate || 655.957}
+                          onChange={(e) =>
+                            update({
+                              secondary_currency_config: {
+                                ...selectedItem.secondary_currency_config!,
+                                exchange_rate: parseFloat(e.target.value) || 1,
+                                enabled: true,
+                              },
+                            })
+                          }
+                          className="w-full mt-0.5 px-2 py-1 bg-white border border-emerald-300 rounded text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-emerald-900">Opération</label>
+                      <select
+                        value={selectedItem.secondary_currency_config?.mode || 'divide'}
+                        onChange={(e) =>
+                          update({
+                            secondary_currency_config: {
+                              ...selectedItem.secondary_currency_config!,
+                              mode: e.target.value as any,
+                              enabled: true,
+                            },
+                          })
+                        }
+                        className="w-full mt-0.5 px-2 py-1 bg-white border border-emerald-300 rounded text-xs"
+                      >
+                        <option value="divide">Diviser (ex: FCFA ÷ 655.957 = EUR)</option>
+                        <option value="multiply">Multiplier (ex: EUR × 1.08 = USD)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {selectedItem.calculation_mode === 'dynamic_date' && (
+                  <div className="p-2 bg-amber-50/70 border border-amber-200 rounded space-y-2 mt-1">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-amber-900">Type de Date</label>
+                        <select
+                          value={selectedItem.dynamic_date_config?.date_type || 'dlc'}
+                          onChange={(e) =>
+                            update({
+                              dynamic_date_config: {
+                                ...selectedItem.dynamic_date_config!,
+                                date_type: e.target.value as any,
+                                enabled: true,
+                              },
+                            })
+                          }
+                          className="w-full mt-0.5 px-2 py-1 bg-white border border-amber-300 rounded text-xs"
+                        >
+                          <option value="dlc">DLC (Péremption Frais)</option>
+                          <option value="dluo">DLUO (Durabilité Minimale)</option>
+                          <option value="fab_date">Date de Fabrication / Emballage</option>
+                          <option value="today">Date du Jour</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-amber-900">Décalage (Jours)</label>
+                        <input
+                          type="number"
+                          step="1"
+                          value={selectedItem.dynamic_date_config?.offset_days ?? 3}
+                          onChange={(e) =>
+                            update({
+                              dynamic_date_config: {
+                                ...selectedItem.dynamic_date_config!,
+                                offset_days: parseInt(e.target.value, 10) || 0,
+                                enabled: true,
+                              },
+                            })
+                          }
+                          className="w-full mt-0.5 px-2 py-1 bg-white border border-amber-300 rounded text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-amber-900">Libellé Préfixe</label>
+                      <input
+                        type="text"
+                        value={selectedItem.dynamic_date_config?.prefix_label || ''}
+                        onChange={(e) =>
+                          update({
+                            dynamic_date_config: {
+                              ...selectedItem.dynamic_date_config!,
+                              prefix_label: e.target.value,
+                              enabled: true,
+                            },
+                          })
+                        }
+                        placeholder="ex: À consommer jusqu'au :"
+                        className="w-full mt-0.5 px-2 py-1 bg-white border border-amber-300 rounded text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1576,6 +1878,146 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
             </div>
           </div>
         )}
+        {selectedItem.type === 'curved_text' && (
+          <div className="pt-2 border-t border-slate-200 space-y-3">
+            <h4 className="font-bold text-slate-900 mb-1.5 uppercase text-[10px] tracking-wider text-slate-400 flex items-center gap-1">
+              <CircleDot className="w-3.5 h-3.5 text-blue-600" />
+              <span>Texte Circulaire & Arc de Cercle</span>
+            </h4>
+            <div>
+              <label className="text-[11px] text-slate-500">Texte</label>
+              <input
+                type="text"
+                value={(selectedItem as CurvedTextItemProperties).text}
+                onChange={(e) => update({ text: e.target.value })}
+                className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] text-slate-500">Angle de Départ (°)</label>
+                <input
+                  type="number"
+                  step="5"
+                  value={(selectedItem as CurvedTextItemProperties).start_angle_deg ?? 180}
+                  onChange={(e) => update({ start_angle_deg: parseFloat(e.target.value) || 0 })}
+                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-500">Angle de Balayage (°)</label>
+                <input
+                  type="number"
+                  step="5"
+                  min="10"
+                  max="360"
+                  value={(selectedItem as CurvedTextItemProperties).sweep_angle_deg ?? 180}
+                  onChange={(e) => update({ sweep_angle_deg: parseFloat(e.target.value) || 180 })}
+                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] text-slate-500">Taille Police (pt)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="5"
+                  value={(selectedItem as CurvedTextItemProperties).font_size_pt || 10}
+                  onChange={(e) => update({ font_size_pt: parseFloat(e.target.value) || 10 })}
+                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-500">Couleur Texte</label>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="color"
+                    value={(selectedItem as CurvedTextItemProperties).text_color || '#000000'}
+                    onChange={(e) => update({ text_color: e.target.value })}
+                    className="w-8 h-7 p-0 rounded border border-slate-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={(selectedItem as CurvedTextItemProperties).text_color || '#000000'}
+                    onChange={(e) => update({ text_color: e.target.value })}
+                    className="flex-1 px-1.5 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono uppercase"
+                  />
+                </div>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer text-[11px] pt-1 text-slate-700">
+              <input
+                type="checkbox"
+                checked={(selectedItem as CurvedTextItemProperties).clockwise !== false}
+                onChange={(e) => update({ clockwise: e.target.checked })}
+                className="rounded text-blue-600"
+              />
+              <span>Sens horaire (Haut de courbe)</span>
+            </label>
+          </div>
+        )}
+
+        {selectedItem.type === 'pictogram' && (
+          <div className="pt-2 border-t border-slate-200 space-y-3">
+            <h4 className="font-bold text-slate-900 mb-1.5 uppercase text-[10px] tracking-wider text-slate-400 flex items-center gap-1">
+              <Stamp className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Pictogramme Métier & Réglementaire</span>
+            </h4>
+            <div>
+              <label className="text-[11px] text-slate-500">Type de Pictogramme</label>
+              <select
+                value={(selectedItem as PictogramItemProperties).pictogram_type || 'nutriscore_a'}
+                onChange={(e) => update({ pictogram_type: e.target.value as any })}
+                className="w-full mt-0.5 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-emerald-500"
+              >
+                <optgroup label="Nutri-Score Officiel">
+                  <option value="nutriscore_a">Nutri-Score A (Vert foncé)</option>
+                  <option value="nutriscore_b">Nutri-Score B (Vert clair)</option>
+                  <option value="nutriscore_c">Nutri-Score C (Jaune)</option>
+                  <option value="nutriscore_d">Nutri-Score D (Orange)</option>
+                  <option value="nutriscore_e">Nutri-Score E (Rouge)</option>
+                </optgroup>
+                <optgroup label="Éco-Score Environnemental">
+                  <option value="ecoscore_a">Éco-Score A (Très faible impact)</option>
+                  <option value="ecoscore_b">Éco-Score B (Faible impact)</option>
+                  <option value="ecoscore_c">Éco-Score C (Impact modéré)</option>
+                  <option value="ecoscore_d">Éco-Score D (Impact élevé)</option>
+                  <option value="ecoscore_e">Éco-Score E (Très fort impact)</option>
+                </optgroup>
+                <optgroup label="Origine & Labels Bio">
+                  <option value="origin_france">Origine France (Drapeau tricolore)</option>
+                  <option value="origin_local">Origine Locale / Régionale</option>
+                  <option value="bio_ab">Label AB (Agriculture Biologique)</option>
+                  <option value="bio_europe">Euro-feuille (Bio Européen)</option>
+                  <option value="triman_recycling">Logo Triman & Bac Jaune</option>
+                </optgroup>
+                <optgroup label="Allergènes Reconnus">
+                  <option value="allergen_gluten">Allergène : GLUTEN</option>
+                  <option value="allergen_milk">Allergène : LAIT / LACTOSE</option>
+                  <option value="allergen_peanut">Allergène : ARACHIDE</option>
+                  <option value="allergen_egg">Allergène : OEUF</option>
+                  <option value="allergen_fish">Allergène : POISSON</option>
+                  <option value="allergen_crustacean">Allergène : CRUSTACÉS</option>
+                </optgroup>
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-500">Variante Graphique</label>
+              <select
+                value={(selectedItem as PictogramItemProperties).style_variant || 'color'}
+                onChange={(e) => update({ style_variant: e.target.value as any })}
+                className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+              >
+                <option value="color">Couleurs Officielles Complètes</option>
+                <option value="monochrome_black">Monochrome 100% Noir (Thermique)</option>
+                <option value="badge">Style Badge avec Bordure</option>
+              </select>
+            </div>
+          </div>
+        )}
+
         {selectedItem.type === 'tier_price' && (
           <div className="pt-2 border-t border-slate-200 space-y-3">
             <h4 className="font-bold text-slate-900 mb-1.5 uppercase text-[10px] tracking-wider text-slate-400">

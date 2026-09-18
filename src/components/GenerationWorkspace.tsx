@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { LabelTemplate, ProductRecord, ImpositionConfig } from '../types';
+import { LabelTemplate, ProductRecord, ImpositionConfig, PdfExportConfig } from '../types';
 import { SAMPLE_PRODUCTS } from '../sampleData';
 import { LabelRenderer } from './LabelRenderer';
 import { ImpositionCalculator } from '../utils/impositionCalculator';
 import { TierEngine } from '../utils/tierEngine';
 import { DataMappingModal } from './DataMappingModal';
 import { PptxExporter } from '../utils/pptxExporter';
+import { ZplExporter } from '../utils/zplExporter';
+import { AVERY_STANDARD_CATALOG } from '../utils/averyCatalog';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import {
@@ -26,6 +28,9 @@ import {
   FileText,
   Sliders,
   Presentation,
+  Cpu,
+  BookmarkCheck,
+  Settings2,
 } from 'lucide-react';
 
 interface GenerationWorkspaceProps {
@@ -50,7 +55,22 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
     orientation: 'landscape',
     gap_mm: 2.0,
     show_cut_marks: true,
+    start_offset_slot: 0,
   });
+
+  // PDF Export Config
+  const [pdfConfig, setPdfConfig] = useState<PdfExportConfig>({
+    dpi: 300,
+    bleed_mm: 2.0,
+    show_crop_marks: true,
+    show_registration_marks: false,
+    include_calibration_layer: false,
+    color_mode: 'cmyk_sim',
+  });
+
+  // ZPL Config Modal
+  const [zplDpi, setZplDpi] = useState<203 | 300 | 600>(203);
+  const [showZplModal, setShowZplModal] = useState(false);
 
   // Filtered products
   const filteredProducts = useMemo(() => {
@@ -186,6 +206,24 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
     }
   };
 
+  // ZPL Direct Thermal Export
+  const handleExportZpl = () => {
+    try {
+      const zplContent = ZplExporter.generateBatchZpl(template, products, {
+        dpi: zplDpi,
+        quantity: 1,
+        printSpeed: 4,
+        darkness: 15,
+        includeComments: true,
+      });
+      const filename = `thermique_${template.name.toLowerCase().replace(/\s+/g, '_')}_${zplDpi}dpi.zpl`;
+      ZplExporter.downloadZplFile(filename, zplContent);
+      setShowZplModal(false);
+    } catch (err) {
+      alert("Erreur lors de la génération ZPL : " + String(err));
+    }
+  };
+
   // Helper: Build the printable PDF document
   const buildPdfDocument = () => {
     if (!imposition) return null;
@@ -202,16 +240,27 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
     });
 
     const labelsPerPage = imposition.total_per_page;
-    const totalPages = Math.ceil(products.length / labelsPerPage);
+    const startOffset = Math.max(0, Math.min(labelsPerPage - 1, impositionConfig.start_offset_slot || 0));
+    
+    // Calculate total pages considering start offset
+    const totalItemsToPlace = products.length + startOffset;
+    const totalPages = Math.ceil(totalItemsToPlace / labelsPerPage);
+
+    let productCursor = 0;
 
     for (let page = 0; page < totalPages; page++) {
       if (page > 0) doc.addPage();
 
       // Draw labels on page
       for (let slot = 0; slot < labelsPerPage; slot++) {
-        const prodIndex = page * labelsPerPage + slot;
-        if (prodIndex >= products.length) break;
-        const prod = products[prodIndex];
+        // If on page 0 and slot is before start offset, skip this slot (reuse partially printed sheets)
+        if (page === 0 && slot < startOffset) {
+          continue;
+        }
+
+        if (productCursor >= products.length) break;
+        const prod = products[productCursor];
+        productCursor++;
 
         const col = slot % imposition.cols;
         const row = Math.floor(slot / imposition.cols);
@@ -372,6 +421,14 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
             <span>Export Excel</span>
+          </button>
+          <button
+            onClick={() => setShowZplModal(true)}
+            className="px-3 py-1.5 bg-slate-900 hover:bg-black text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
+            title="Exporter au format ZPL pour imprimantes thermiques Zebra/TSC"
+          >
+            <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Export Thermique (ZPL)</span>
           </button>
           <button
             onClick={handleExportPptx}
@@ -541,6 +598,37 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
               Paramètres d'Imposition Planche
             </h3>
 
+            {/* Avery / Standard Formats Preset Quick Picker */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-semibold text-slate-700 flex items-center gap-1">
+                  <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Modèle Planche / Avery</span>
+                </label>
+              </div>
+              <select
+                onChange={(e) => {
+                  const preset = AVERY_STANDARD_CATALOG.find((p) => p.id === e.target.value);
+                  if (preset) {
+                    setImpositionConfig({
+                      ...impositionConfig,
+                      page_size: preset.pageSize === 'ROLL' ? 'CUSTOM' : preset.pageSize,
+                      gap_mm: 0,
+                    });
+                  }
+                }}
+                defaultValue=""
+                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+              >
+                <option value="" disabled>Sélectionner un format standard...</option>
+                {AVERY_STANDARD_CATALOG.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.labelsPerPage}/page)
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Format Papier Physique</label>
               <select
@@ -642,6 +730,43 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
               />
             </div>
 
+            {/* Start Offset / Re-use partially used sheet */}
+            <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
+                  <span>Réutilisation de Planche (Décalage)</span>
+                </label>
+                <span className="text-[10px] font-mono font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                  Sauter: {impositionConfig.start_offset_slot || 0}
+                </span>
+              </div>
+              <p className="text-[10px] text-amber-700 leading-tight">
+                Pour réutiliser une feuille entamée sans gâcher de papier, indiquez le nombre d'étiquettes déjà décollées.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="range"
+                  min="0"
+                  max={Math.max(0, (imposition?.total_per_page || 24) - 1)}
+                  value={impositionConfig.start_offset_slot || 0}
+                  onChange={(e) =>
+                    setImpositionConfig({
+                      ...impositionConfig,
+                      start_offset_slot: parseInt(e.target.value) || 0,
+                    })
+                  }
+                  className="flex-1 accent-amber-600 cursor-pointer"
+                />
+                <button
+                  type="button"
+                  onClick={() => setImpositionConfig({ ...impositionConfig, start_offset_slot: 0 })}
+                  className="px-2 py-0.5 text-[10px] font-semibold bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 rounded"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between pt-1">
               <label className="font-semibold text-slate-700">Repères de coupe (Crop marks)</label>
               <input
@@ -652,6 +777,43 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
                 }
                 className="rounded text-blue-600"
               />
+            </div>
+
+            {/* Advanced PDF Export Config */}
+            <div className="pt-2 border-t border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-semibold text-slate-700 text-xs flex items-center gap-1">
+                  <Settings2 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Résolution & Finition PDF</span>
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-medium block mb-0.5">Résolution (DPI)</span>
+                  <select
+                    value={pdfConfig.dpi}
+                    onChange={(e) => setPdfConfig({ ...pdfConfig, dpi: parseInt(e.target.value) as any })}
+                    className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+                  >
+                    <option value={150}>150 DPI (Brouillon)</option>
+                    <option value={300}>300 DPI (HD Print)</option>
+                    <option value={600}>600 DPI (Ultra Pro)</option>
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-medium block mb-0.5">Fond Perdu (Bleed)</span>
+                  <select
+                    value={pdfConfig.bleed_mm}
+                    onChange={(e) => setPdfConfig({ ...pdfConfig, bleed_mm: parseFloat(e.target.value) })}
+                    className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
+                  >
+                    <option value={0}>0 mm</option>
+                    <option value={1}>1.0 mm</option>
+                    <option value={2}>2.0 mm</option>
+                    <option value={3}>3.0 mm</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             {/* Print Calibration Offset Controls */}
@@ -698,9 +860,6 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
                   />
                 </div>
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">
-                Ajuste les marges physiques pour compenser le glissement du papier de votre imprimante laser/jet d'encre.
-              </p>
             </div>
 
             {/* Imposition Results Summary */}
@@ -718,7 +877,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
                     Par feuille: <strong className="text-blue-700">{imposition.total_per_page} étiquettes</strong>
                   </div>
                   <div>
-                    Feuilles requises: <strong className="text-slate-900">{Math.ceil(products.length / imposition.total_per_page)}</strong>
+                    Feuilles requises: <strong className="text-slate-900">{Math.ceil((products.length + (impositionConfig.start_offset_slot || 0)) / imposition.total_per_page)}</strong>
                   </div>
                   <div>
                     Marge Horiz.: <strong className="text-slate-900">{imposition.horizontal_offset_mm.toFixed(1)} mm</strong>
@@ -732,7 +891,10 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
           </div>
 
           {/* Visual Imposition Sheet Preview */}
-          <div className="flex-1 bg-slate-200 p-8 flex items-center justify-center overflow-auto">
+          <div className="flex-1 bg-slate-200 p-8 flex flex-col items-center justify-center overflow-auto">
+            <div className="mb-2 text-xs font-medium text-slate-600 flex items-center gap-2">
+              <span>Feuille #1 — Cliquez sur un emplacement pour définir l'étiquette de départ</span>
+            </div>
             {imposition && (
               <div
                 className="bg-white shadow-2xl relative border border-slate-300"
@@ -745,7 +907,10 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
                 {Array.from({ length: imposition.total_per_page }).map((_, slotIdx) => {
                   const col = slotIdx % imposition.cols;
                   const row = Math.floor(slotIdx / imposition.cols);
-                  const prod = products[slotIdx];
+                  const startOffset = impositionConfig.start_offset_slot || 0;
+                  const isSkipped = slotIdx < startOffset;
+                  const prodIndex = slotIdx - startOffset;
+                  const prod = prodIndex >= 0 ? products[prodIndex] : undefined;
 
                   const x = imposition.horizontal_offset_mm + col * (imposition.label_total_w_mm + impositionConfig.gap_mm);
                   const y = imposition.vertical_offset_mm + row * (imposition.label_total_h_mm + impositionConfig.gap_mm);
@@ -753,22 +918,42 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
                   return (
                     <div
                       key={slotIdx}
-                      className="absolute border border-slate-300 bg-slate-50/50 flex flex-col justify-between p-1 overflow-hidden"
+                      onClick={() => {
+                        setImpositionConfig({
+                          ...impositionConfig,
+                          start_offset_slot: isSkipped ? 0 : slotIdx,
+                        });
+                      }}
+                      className={`absolute border flex flex-col justify-between p-1 overflow-hidden cursor-pointer transition ${
+                        isSkipped
+                          ? 'border-dashed border-amber-300 bg-amber-50/40 text-amber-500 opacity-60 hover:opacity-100'
+                          : 'border-slate-300 bg-slate-50/50 hover:bg-blue-50/50 hover:border-blue-300'
+                      }`}
                       style={{
                         left: `${x * 1.5}px`,
                         top: `${y * 1.5}px`,
                         width: `${template.width_mm * 1.5}px`,
                         height: `${template.height_mm * 1.5}px`,
                       }}
+                      title={isSkipped ? `Emplacement #${slotIdx + 1} sauté (déjà utilisé). Cliquer pour réactiver.` : `Cliquer pour démarrer à l'emplacement #${slotIdx + 1}`}
                     >
-                      <div className="flex items-center justify-between text-[8px] font-bold text-slate-700">
-                        <span className="truncate">{prod ? prod.ITEMNAME : `Emplacement #${slotIdx + 1}`}</span>
-                        {prod && <span className="text-blue-600">{prod.SELLING_PRICE} F</span>}
-                      </div>
-                      <div className="flex items-center justify-between text-[7px] text-slate-400 font-mono">
-                        <span>{prod?.PRODUCT_SCAN || '3250390123456'}</span>
-                        <span>{template.width_mm}x{template.height_mm}mm</span>
-                      </div>
+                      {isSkipped ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                          <span className="text-[8px] font-bold text-amber-700">Déjà Utilisé (#{slotIdx + 1})</span>
+                          <span className="text-[7px] text-amber-600/80">Sauté</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between text-[8px] font-bold text-slate-700">
+                            <span className="truncate">{prod ? prod.ITEMNAME : `Emplacement #${slotIdx + 1}`}</span>
+                            {prod && <span className="text-blue-600">{prod.SELLING_PRICE} F</span>}
+                          </div>
+                          <div className="flex items-center justify-between text-[7px] text-slate-400 font-mono">
+                            <span>{prod?.PRODUCT_SCAN || '3250390123456'}</span>
+                            <span>{template.width_mm}x{template.height_mm}mm</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
@@ -911,6 +1096,94 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
           onApplyMapping={handleApplyMapping}
           onCancel={() => setMappingModalOpen(false)}
         />
+      )}
+
+      {/* ZPL Thermal Printer Modal */}
+      {showZplModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+                  <Cpu className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Export ZPL II (Thermique Direct)</h3>
+                  <p className="text-[11px] text-slate-500">Imprimantes Zebra, TSC, Honeywell, Godex</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Résolution de la tête thermique</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setZplDpi(203)}
+                    className={`py-2 px-3 rounded-lg border text-center font-medium transition ${
+                      zplDpi === 203
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold shadow-xs'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    203 DPI
+                    <span className="block text-[9px] font-normal text-slate-400">8 dots/mm (Standard)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setZplDpi(300)}
+                    className={`py-2 px-3 rounded-lg border text-center font-medium transition ${
+                      zplDpi === 300
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold shadow-xs'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    300 DPI
+                    <span className="block text-[9px] font-normal text-slate-400">12 dots/mm (Haute Définition)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setZplDpi(600)}
+                    className={`py-2 px-3 rounded-lg border text-center font-medium transition ${
+                      zplDpi === 600
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold shadow-xs'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    600 DPI
+                    <span className="block text-[9px] font-normal text-slate-400">24 dots/mm (Micro texte)</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-600 space-y-1">
+                <p className="text-[11px] font-semibold text-slate-800">Prêt pour le flux d'impression :</p>
+                <p className="text-[10px]">• {products.length} étiquettes prêtes à envoyer en lot</p>
+                <p className="text-[10px]">• Format : {template.width_mm} × {template.height_mm} mm</p>
+                <p className="text-[10px]">• Codes-barres natifs haute vitesse (^BC, ^BE, ^BQ)</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowZplModal(false)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleExportZpl}
+                className="px-4 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-xs flex items-center gap-1.5 transition"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Télécharger fichier .ZPL</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

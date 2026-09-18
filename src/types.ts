@@ -7,6 +7,8 @@ export interface Margins {
 
 export type ItemType =
   | 'text'
+  | 'curved_text'
+  | 'pictogram'
   | 'shape'
   | 'ellipse'
   | 'line'
@@ -15,6 +17,37 @@ export type ItemType =
   | 'barcode'
   | 'tier_price'
   | 'restricted_area';
+
+export interface ConditionalDisplayConfig {
+  enabled: boolean;
+  rule: 'always' | 'has_promo' | 'has_barcode' | 'has_tiers' | 'field_gt_zero' | 'field_not_empty';
+  field_key?: string;
+  compare_value?: string | number;
+}
+
+export interface UnitPriceConfig {
+  enabled: boolean;
+  weight_volume_key: string; // e.g. "NET_WEIGHT_KG", "VOLUME_L", "PACK_UNIT", "CASE_SIZE"
+  measure_unit: 'kg' | 'g' | 'L' | 'cl' | 'ml' | 'piece' | 'carton';
+  custom_multiplier?: number;
+  format_pattern?: string; // e.g. "{price} / {unit}"
+}
+
+export interface SecondaryCurrencyConfig {
+  enabled: boolean;
+  target_currency: string; // e.g. "EUR", "FCFA", "USD", "GBP"
+  exchange_rate: number; // e.g. 655.957 for FCFA -> EUR
+  mode: 'divide' | 'multiply';
+  format_pattern?: string; // e.g. "(~ {price} €)"
+}
+
+export interface DynamicDateConfig {
+  enabled: boolean;
+  date_type: 'dlc' | 'dluo' | 'fab_date' | 'today';
+  offset_days: number; // e.g. +3 days, +30 days
+  format: 'DD/MM/YYYY' | 'DD.MM.YY' | 'DD/MM' | 'YYYY-MM-DD';
+  prefix_label?: string; // e.g. "À consommer jusqu'au :", "Emballé le :"
+}
 
 export interface BaseItemProperties {
   id: string;
@@ -26,7 +59,10 @@ export interface BaseItemProperties {
   rotation: number;
   z_index: number;
   locked: boolean;
+  group_id?: string;
   binding_key?: string;
+  conditional_display?: ConditionalDisplayConfig;
+  finish_effect?: 'none' | 'die_cut' | 'spot_varnish' | 'hot_foil';
 }
 
 export interface TextShadowConfig {
@@ -78,6 +114,12 @@ export interface TextItemProperties extends BaseItemProperties {
   currency_color?: string;
   currency_spacing_pt?: number;
 
+  // Business Engine & Calculation automations
+  calculation_mode?: 'none' | 'unit_price' | 'discount_pct' | 'secondary_currency' | 'dynamic_date';
+  unit_price_config?: UnitPriceConfig;
+  secondary_currency_config?: SecondaryCurrencyConfig;
+  dynamic_date_config?: DynamicDateConfig;
+
   // Promotion badge presets
   promo_badge_type?:
     | 'standard'
@@ -88,6 +130,53 @@ export interface TextItemProperties extends BaseItemProperties {
     | 'unit_price'
     | 'promo_period'
     | 'eco_tax';
+}
+
+export interface CurvedTextItemProperties extends BaseItemProperties {
+  type: 'curved_text';
+  text: string;
+  radius_mm: number;
+  start_angle_deg: number;
+  sweep_angle_deg: number;
+  clockwise: boolean;
+  font_family: string;
+  font_size_pt: number;
+  font_weight: 'normal' | '500' | '600' | 'bold' | '800';
+  font_style: 'normal' | 'italic';
+  text_color: string;
+  letter_spacing_pt?: number;
+}
+
+export type PictogramType =
+  | 'nutriscore_a'
+  | 'nutriscore_b'
+  | 'nutriscore_c'
+  | 'nutriscore_d'
+  | 'nutriscore_e'
+  | 'ecoscore_a'
+  | 'ecoscore_b'
+  | 'ecoscore_c'
+  | 'ecoscore_d'
+  | 'ecoscore_e'
+  | 'origin_france'
+  | 'origin_local'
+  | 'bio_ab'
+  | 'bio_europe'
+  | 'triman_recycling'
+  | 'allergen_gluten'
+  | 'allergen_milk'
+  | 'allergen_peanut'
+  | 'allergen_egg'
+  | 'allergen_fish'
+  | 'allergen_crustacean'
+  | 'symbol_danger_hazard'
+  | 'symbol_cold_chain';
+
+export interface PictogramItemProperties extends BaseItemProperties {
+  type: 'pictogram';
+  pictogram_type: PictogramType;
+  custom_label?: string;
+  style_variant?: 'color' | 'monochrome_black' | 'badge';
 }
 
 export interface ShapeItemProperties extends BaseItemProperties {
@@ -154,6 +243,8 @@ export interface RestrictedAreaItemProperties extends BaseItemProperties {
 
 export type TemplateItem =
   | TextItemProperties
+  | CurvedTextItemProperties
+  | PictogramItemProperties
   | ShapeItemProperties
   | EllipseItemProperties
   | LineItemProperties
@@ -231,6 +322,8 @@ export interface ProductRecord {
   UNIT_PRICE_TEXT?: string; // e.g. "12.50 € / kg"
   ECO_TAX?: string; // e.g. "Dont 0,15 € d'éco-part"
   ORIGIN_COUNTRY?: string; // e.g. "Origine France"
+  NET_WEIGHT_KG?: number; // e.g. 0.25 for 250g
+  VOLUME_L?: number; // e.g. 1.0 for 1L
   ITEM_TYPE?: string;
   CASE_SIZE?: number;
   CASE_UNIT?: string;
@@ -253,10 +346,20 @@ export interface ImpositionConfig {
   margin_left_mm?: number;
   margin_right_mm?: number;
   show_cut_marks: boolean;
+  start_offset_slot?: number; // Start from slot N (skip already printed labels on sheet)
   calibration_x_mm?: number;
   calibration_y_mm?: number;
   custom_page_w_mm?: number;
   custom_page_h_mm?: number;
+}
+
+export interface PdfExportConfig {
+  dpi: 72 | 150 | 300 | 600;
+  bleed_mm: number;
+  show_crop_marks: boolean;
+  show_registration_marks: boolean;
+  include_calibration_layer: boolean;
+  color_mode: 'rgb' | 'cmyk_sim';
 }
 
 export interface ImpositionCalculation {

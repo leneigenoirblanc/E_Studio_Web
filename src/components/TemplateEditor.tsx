@@ -55,6 +55,12 @@ import {
   Crosshair,
   FileImage,
   X,
+  CircleDot,
+  Stamp,
+  Sparkles,
+  Group,
+  Ungroup,
+  Compass,
 } from 'lucide-react';
 
 interface TemplateEditorProps {
@@ -493,12 +499,68 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           label: 'Zone Réservée / Encoche',
         };
         break;
+      case 'curved_text':
+        newItem = {
+          id,
+          type: 'curved_text',
+          x_mm: centerX,
+          y_mm: centerY,
+          w_mm: 35.0,
+          h_mm: 35.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          text: 'QUALITÉ SUPÉRIEURE • ARTISANAL',
+          font_family: 'Plus Jakarta Sans',
+          font_size_pt: 9.0,
+          font_weight: 'bold',
+          font_style: 'normal',
+          text_color: '#0f172a',
+          radius_mm: 15.0,
+          start_angle_deg: 180,
+          sweep_angle_deg: 180,
+          clockwise: true,
+          letter_spacing_pt: 1.0,
+        };
+        break;
+      case 'pictogram':
+        newItem = {
+          id,
+          type: 'pictogram',
+          x_mm: centerX,
+          y_mm: centerY,
+          w_mm: 22.0,
+          h_mm: 12.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          pictogram_type: 'nutriscore_a',
+          style_variant: 'color',
+        };
+        break;
     }
 
     const next = { ...template, items: [...template.items, newItem] };
     setSelectedItemIds([id]);
     pushState(next);
   };
+
+  // 30-Second Auto-Save to localStorage
+  useEffect(() => {
+    const autoSaveKey = `label_craft_autosave_${(template as any).id || template.name}`;
+    const timer = setInterval(() => {
+      try {
+        localStorage.setItem(autoSaveKey, JSON.stringify({
+          template,
+          timestamp: Date.now(),
+        }));
+      } catch (err) {
+        console.warn('Auto-save failed', err);
+      }
+    }, 30000);
+
+    return () => clearInterval(timer);
+  }, [template]);
 
   const handleSave = () => {
     onSaveTemplate(template);
@@ -573,6 +635,22 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     // Select All: Ctrl+A
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
       setSelectedItemIds(template.items.map((it) => it.id));
+      e.preventDefault();
+      return;
+    }
+
+    // Toggle Lock / Group shortcut: Ctrl+G
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+      if (e.shiftKey) {
+        // Unlock all selected items
+        const updated = selectedItems.map((i) => ({ ...i, locked: false }));
+        handleUpdateMultipleItems(updated);
+      } else {
+        // Toggle lock on selected items
+        const anyUnlocked = selectedItems.some((i) => !i.locked);
+        const updated = selectedItems.map((i) => ({ ...i, locked: anyUnlocked }));
+        handleUpdateMultipleItems(updated);
+      }
       e.preventDefault();
       return;
     }
@@ -1062,6 +1140,22 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           >
             <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
             <span>Zone Restreinte</span>
+          </button>
+          <button
+            onClick={() => addItem('curved_text')}
+            className="px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 hover:shadow-xs border border-indigo-200 font-semibold text-indigo-700 flex items-center gap-1.5 transition"
+            title="Ajouter un texte courbé / circulaire (parfait pour sceaux et macarons)"
+          >
+            <CircleDot className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Texte Courbe</span>
+          </button>
+          <button
+            onClick={() => addItem('pictogram')}
+            className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 hover:shadow-xs border border-emerald-200 font-semibold text-emerald-700 flex items-center gap-1.5 transition"
+            title="Ajouter un pictogramme réglementaire (Nutri-Score, Bio, Origine France, Triman, Allergènes...)"
+          >
+            <Stamp className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Pictogramme</span>
           </button>
           <button
             onClick={() => addItem('image')}

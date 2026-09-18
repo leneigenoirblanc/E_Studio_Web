@@ -1,9 +1,12 @@
 import React, { useMemo } from 'react';
 import { LabelTemplate, ProductRecord, TemplateItem } from '../types';
 import { TierEngine } from '../utils/tierEngine';
+import { PricingEngine } from '../utils/pricingEngine';
 import { generateCode128Bars, generateEAN13Bars } from '../utils/barcodeGenerator';
 import { generateQrMatrix } from '../utils/qrGenerator';
 import { SmartGuideLine } from '../utils/smartGuides';
+import { PictogramRenderer } from './PictogramRenderer';
+import { CurvedTextRenderer } from './CurvedTextRenderer';
 
 interface LabelRendererProps {
   template: LabelTemplate;
@@ -91,15 +94,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
 
     switch (item.type) {
       case 'text': {
-        let displayVal = item.text;
-        if (record && item.binding_key && record[item.binding_key] !== undefined) {
-          const raw = record[item.binding_key];
-          if (typeof raw === 'number') {
-            displayVal = raw.toLocaleString('fr-FR');
-          } else {
-            displayVal = String(raw);
-          }
-        }
+        let displayVal = PricingEngine.resolveCalculatedText(item, record);
 
         // Check if item is price or bound to a price domain field
         const isPriceField =
@@ -528,6 +523,12 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         );
       }
 
+      case 'curved_text':
+        return <CurvedTextRenderer item={item} pxPerMm={pxPerMm} />;
+
+      case 'pictogram':
+        return <PictogramRenderer item={item} pxPerMm={pxPerMm} />;
+
       default:
         return null;
     }
@@ -605,6 +606,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
       {/* Template Items */}
       {template.items
         .slice()
+        .filter((item) => !record || PricingEngine.shouldDisplayItem(item, record))
         .sort((a, b) => (a.z_index || 0) - (b.z_index || 0))
         .map((item) => {
           const isSelected =
@@ -612,6 +614,11 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
             selectedItemId === item.id;
           const isHazard = showHazardWarnings && checkHazard(item);
           const restrictedOverlap = checkRestrictedOverlap(item);
+
+          // Finish effects
+          const isDieCut = item.finish_effect === 'die_cut';
+          const isSpotVarnish = item.finish_effect === 'spot_varnish';
+          const isHotFoil = item.finish_effect === 'hot_foil';
 
           return (
             <div
@@ -630,7 +637,13 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                 isSelected
                   ? 'outline-2 outline-blue-600 outline-dashed ring-2 ring-blue-500/20 z-40'
                   : ''
-              } ${restrictedOverlap.isOverlapping ? 'ring-2 ring-rose-500/60' : ''}`}
+              } ${restrictedOverlap.isOverlapping ? 'ring-2 ring-rose-500/60' : ''} ${
+                isDieCut ? 'border-2 border-dashed border-fuchsia-500 shadow-xs' : ''
+              } ${
+                isSpotVarnish ? 'ring-2 ring-amber-400/80 shadow-[inset_0_0_12px_rgba(251,191,36,0.35)]' : ''
+              } ${
+                isHotFoil ? 'ring-2 ring-yellow-500 bg-gradient-to-tr from-amber-100/10 via-yellow-200/20 to-amber-100/10' : ''
+              }`}
               style={{
                 left: `${item.x_mm * pxPerMm}px`,
                 top: `${item.y_mm * pxPerMm}px`,
