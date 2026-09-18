@@ -82,6 +82,14 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
           }
         }
 
+        // Check if item is price or bound to a price domain field
+        const isPriceField =
+          item.is_price ||
+          item.binding_key === 'SELLING_PRICE' ||
+          item.binding_key === 'PROMOPRICE' ||
+          (item.binding_key && item.binding_key.toLowerCase().includes('price')) ||
+          (item.binding_key && item.binding_key.toLowerCase().includes('prix'));
+
         // Alignments
         const textAlignClass =
           item.alignment === 'center'
@@ -102,13 +110,55 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         // Scale font size proportionally
         const fontSizePx = Math.max(7, item.font_size_pt * 1.333 * zoom);
 
-        let finalDisplay = displayVal || item.placeholder || '';
-        if (item.prefix_text) finalDisplay = `${item.prefix_text} ${finalDisplay}`;
-        if (item.suffix_text) finalDisplay = `${finalDisplay} ${item.suffix_text}`;
+        let mainText = displayVal || item.placeholder || '';
+        if (item.prefix_text) mainText = `${item.prefix_text} ${mainText}`;
+        if (item.suffix_text) mainText = `${mainText} ${item.suffix_text}`;
 
         const letterSpacingPx = item.letter_spacing_pt ? `${item.letter_spacing_pt * 1.333 * zoom}px` : undefined;
         const lineHeightStyle = item.line_height_multiplier ? item.line_height_multiplier : 1.25;
         const textTransform = item.text_transform && item.text_transform !== 'none' ? item.text_transform : undefined;
+
+        // Currency separate styling
+        const hasCurrency = (isPriceField || item.currency_symbol) && item.currency_symbol;
+        const currencySym = item.currency_symbol || 'FCFA';
+        const currFontSizePx = item.currency_font_size_pt
+          ? Math.max(5, item.currency_font_size_pt * 1.333 * zoom)
+          : Math.max(5, fontSizePx * 0.6);
+        const currFontFamily = item.currency_font_family || item.font_family;
+        const currFontWeight = item.currency_font_weight || item.font_weight || 'normal';
+        const currFontStyle = item.currency_font_style || 'normal';
+        const currColor = item.currency_color || item.text_color || '#000000';
+        const currSpacingPx = item.currency_spacing_pt ? `${item.currency_spacing_pt * 1.333 * zoom}px` : '4px';
+        const currPosition = item.currency_position || 'after';
+
+        const renderCurrencySpan = () => (
+          <span
+            className="inline-block select-none align-baseline tracking-normal"
+            style={{
+              fontFamily: currFontFamily,
+              fontSize: `${currFontSizePx}px`,
+              fontWeight: currFontWeight,
+              fontStyle: currFontStyle,
+              color: currColor,
+              marginLeft: currPosition === 'after' ? currSpacingPx : undefined,
+              marginRight: currPosition === 'before' ? currSpacingPx : undefined,
+              verticalAlign:
+                currPosition === 'superscript'
+                  ? 'super'
+                  : currPosition === 'subscript'
+                  ? 'sub'
+                  : 'baseline',
+              transform:
+                currPosition === 'superscript'
+                  ? 'translateY(-20%)'
+                  : currPosition === 'subscript'
+                  ? 'translateY(15%)'
+                  : undefined,
+            }}
+          >
+            {currencySym}
+          </span>
+        );
 
         return (
           <div
@@ -120,7 +170,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
             }}
           >
             <div
-              className={`${textAlignClass} w-full whitespace-pre-wrap break-words`}
+              className={`${textAlignClass} w-full whitespace-pre-wrap break-words leading-tight`}
               style={{
                 fontFamily: item.font_family,
                 fontSize: `${fontSizePx}px`,
@@ -133,7 +183,9 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                 textTransform: textTransform as any,
               }}
             >
-              {finalDisplay}
+              {hasCurrency && currPosition === 'before' && renderCurrencySpan()}
+              <span>{mainText}</span>
+              {hasCurrency && (currPosition === 'after' || currPosition === 'superscript' || currPosition === 'subscript') && renderCurrencySpan()}
             </div>
           </div>
         );
@@ -459,7 +511,8 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
             <div
               key={item.id}
               id={`canvas-item-${item.id}`}
-              onClick={(e) => {
+              data-item-id={item.id}
+              onMouseDown={(e) => {
                 if (interactive && onSelectItem) {
                   e.stopPropagation();
                   onSelectItem(item.id, e);
@@ -496,7 +549,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                 />
               )}
 
-              {/* Selection resize handles */}
+              {/* Selection resize handles - Geometric Plus '+' with longer faded extremities & thin circle at intersection */}
               {isSelected && interactive && !item.locked && (
                 <>
                   {/* Top-Left NW */}
@@ -507,9 +560,29 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                         onResizeStart(item.id, 'nw', e);
                       }
                     }}
-                    className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-xs cursor-nwse-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
-                    title="Redimensionner"
-                  />
+                    className="absolute -top-3 -left-3 w-6 h-6 flex items-center justify-center cursor-nwse-resize z-50 group pointer-events-auto select-none"
+                    title="Redimensionner NO (Haut-Gauche)"
+                  >
+                    <svg className="w-6 h-6 overflow-visible transition-transform duration-100 group-hover:scale-125" viewBox="0 0 24 24">
+                      <defs>
+                        <linearGradient id="fade-h-nw" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#2563eb" stopOpacity="0" />
+                          <stop offset="50%" stopColor="#2563eb" stopOpacity="1" />
+                          <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
+                        </linearGradient>
+                        <linearGradient id="fade-v-nw" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="#2563eb" stopOpacity="0" />
+                          <stop offset="50%" stopColor="#2563eb" stopOpacity="1" />
+                          <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="2" y1="12" x2="22" y2="12" stroke="url(#fade-h-nw)" strokeWidth="1.75" strokeLinecap="round" />
+                      <line x1="12" y1="2" x2="12" y2="22" stroke="url(#fade-v-nw)" strokeWidth="1.75" strokeLinecap="round" />
+                      <circle cx="12" cy="12" r="3.2" fill="#ffffff" stroke="#2563eb" strokeWidth="1.5" className="group-hover:fill-blue-50" />
+                      <circle cx="12" cy="12" r="1.2" fill="#2563eb" />
+                    </svg>
+                  </div>
+
                   {/* Top-Right NE */}
                   <div
                     onMouseDown={(e) => {
@@ -518,9 +591,17 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                         onResizeStart(item.id, 'ne', e);
                       }
                     }}
-                    className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-xs cursor-nesw-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
-                    title="Redimensionner"
-                  />
+                    className="absolute -top-3 -right-3 w-6 h-6 flex items-center justify-center cursor-nesw-resize z-50 group pointer-events-auto select-none"
+                    title="Redimensionner NE (Haut-Droite)"
+                  >
+                    <svg className="w-6 h-6 overflow-visible transition-transform duration-100 group-hover:scale-125" viewBox="0 0 24 24">
+                      <line x1="2" y1="12" x2="22" y2="12" stroke="url(#fade-h-nw)" strokeWidth="1.75" strokeLinecap="round" />
+                      <line x1="12" y1="2" x2="12" y2="22" stroke="url(#fade-v-nw)" strokeWidth="1.75" strokeLinecap="round" />
+                      <circle cx="12" cy="12" r="3.2" fill="#ffffff" stroke="#2563eb" strokeWidth="1.5" className="group-hover:fill-blue-50" />
+                      <circle cx="12" cy="12" r="1.2" fill="#2563eb" />
+                    </svg>
+                  </div>
+
                   {/* Bottom-Left SW */}
                   <div
                     onMouseDown={(e) => {
@@ -529,9 +610,17 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                         onResizeStart(item.id, 'sw', e);
                       }
                     }}
-                    className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-xs cursor-nesw-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
-                    title="Redimensionner"
-                  />
+                    className="absolute -bottom-3 -left-3 w-6 h-6 flex items-center justify-center cursor-nesw-resize z-50 group pointer-events-auto select-none"
+                    title="Redimensionner SO (Bas-Gauche)"
+                  >
+                    <svg className="w-6 h-6 overflow-visible transition-transform duration-100 group-hover:scale-125" viewBox="0 0 24 24">
+                      <line x1="2" y1="12" x2="22" y2="12" stroke="url(#fade-h-nw)" strokeWidth="1.75" strokeLinecap="round" />
+                      <line x1="12" y1="2" x2="12" y2="22" stroke="url(#fade-v-nw)" strokeWidth="1.75" strokeLinecap="round" />
+                      <circle cx="12" cy="12" r="3.2" fill="#ffffff" stroke="#2563eb" strokeWidth="1.5" className="group-hover:fill-blue-50" />
+                      <circle cx="12" cy="12" r="1.2" fill="#2563eb" />
+                    </svg>
+                  </div>
+
                   {/* Bottom-Right SE */}
                   <div
                     onMouseDown={(e) => {
@@ -540,9 +629,36 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                         onResizeStart(item.id, 'se', e);
                       }
                     }}
-                    className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-xs cursor-nwse-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
-                    title="Redimensionner"
-                  />
+                    className="absolute -bottom-3 -right-3 w-6 h-6 flex items-center justify-center cursor-nwse-resize z-50 group pointer-events-auto select-none"
+                    title="Redimensionner SE (Bas-Droite)"
+                  >
+                    <svg className="w-6 h-6 overflow-visible transition-transform duration-100 group-hover:scale-125" viewBox="0 0 24 24">
+                      <line x1="2" y1="12" x2="22" y2="12" stroke="url(#fade-h-nw)" strokeWidth="1.75" strokeLinecap="round" />
+                      <line x1="12" y1="2" x2="12" y2="22" stroke="url(#fade-v-nw)" strokeWidth="1.75" strokeLinecap="round" />
+                      <circle cx="12" cy="12" r="3.2" fill="#ffffff" stroke="#2563eb" strokeWidth="1.5" className="group-hover:fill-blue-50" />
+                      <circle cx="12" cy="12" r="1.2" fill="#2563eb" />
+                    </svg>
+                  </div>
+
+                  {/* Middle-Top N */}
+                  <div
+                    onMouseDown={(e) => {
+                      if (onResizeStart) {
+                        e.stopPropagation();
+                        onResizeStart(item.id, 'n', e);
+                      }
+                    }}
+                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-5 h-5 flex items-center justify-center cursor-ns-resize z-50 group pointer-events-auto select-none"
+                    title="Redimensionner Hauteur (Haut)"
+                  >
+                    <svg className="w-5 h-5 overflow-visible transition-transform duration-100 group-hover:scale-125" viewBox="0 0 20 20">
+                      <line x1="2" y1="10" x2="18" y2="10" stroke="url(#fade-h-nw)" strokeWidth="1.5" strokeLinecap="round" />
+                      <line x1="10" y1="2" x2="10" y2="18" stroke="url(#fade-v-nw)" strokeWidth="1.5" strokeLinecap="round" />
+                      <circle cx="10" cy="10" r="2.8" fill="#ffffff" stroke="#2563eb" strokeWidth="1.3" />
+                      <circle cx="10" cy="10" r="1" fill="#2563eb" />
+                    </svg>
+                  </div>
+
                   {/* Middle-Right E */}
                   <div
                     onMouseDown={(e) => {
@@ -551,8 +667,17 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                         onResizeStart(item.id, 'e', e);
                       }
                     }}
-                    className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2.5 h-2.5 bg-white border-2 border-blue-600 rounded-xs cursor-ew-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
-                  />
+                    className="absolute top-1/2 -right-2.5 -translate-y-1/2 w-5 h-5 flex items-center justify-center cursor-ew-resize z-50 group pointer-events-auto select-none"
+                    title="Redimensionner Largeur (Droite)"
+                  >
+                    <svg className="w-5 h-5 overflow-visible transition-transform duration-100 group-hover:scale-125" viewBox="0 0 20 20">
+                      <line x1="2" y1="10" x2="18" y2="10" stroke="url(#fade-h-nw)" strokeWidth="1.5" strokeLinecap="round" />
+                      <line x1="10" y1="2" x2="10" y2="18" stroke="url(#fade-v-nw)" strokeWidth="1.5" strokeLinecap="round" />
+                      <circle cx="10" cy="10" r="2.8" fill="#ffffff" stroke="#2563eb" strokeWidth="1.3" />
+                      <circle cx="10" cy="10" r="1" fill="#2563eb" />
+                    </svg>
+                  </div>
+
                   {/* Middle-Bottom S */}
                   <div
                     onMouseDown={(e) => {
@@ -561,8 +686,35 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                         onResizeStart(item.id, 's', e);
                       }
                     }}
-                    className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white border-2 border-blue-600 rounded-xs cursor-ns-resize z-50 shadow-xs hover:bg-blue-50 hover:scale-125 transition-transform"
-                  />
+                    className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-5 h-5 flex items-center justify-center cursor-ns-resize z-50 group pointer-events-auto select-none"
+                    title="Redimensionner Hauteur (Bas)"
+                  >
+                    <svg className="w-5 h-5 overflow-visible transition-transform duration-100 group-hover:scale-125" viewBox="0 0 20 20">
+                      <line x1="2" y1="10" x2="18" y2="10" stroke="url(#fade-h-nw)" strokeWidth="1.5" strokeLinecap="round" />
+                      <line x1="10" y1="2" x2="10" y2="18" stroke="url(#fade-v-nw)" strokeWidth="1.5" strokeLinecap="round" />
+                      <circle cx="10" cy="10" r="2.8" fill="#ffffff" stroke="#2563eb" strokeWidth="1.3" />
+                      <circle cx="10" cy="10" r="1" fill="#2563eb" />
+                    </svg>
+                  </div>
+
+                  {/* Middle-Left W */}
+                  <div
+                    onMouseDown={(e) => {
+                      if (onResizeStart) {
+                        e.stopPropagation();
+                        onResizeStart(item.id, 'w', e);
+                      }
+                    }}
+                    className="absolute top-1/2 -left-2.5 -translate-y-1/2 w-5 h-5 flex items-center justify-center cursor-ew-resize z-50 group pointer-events-auto select-none"
+                    title="Redimensionner Largeur (Gauche)"
+                  >
+                    <svg className="w-5 h-5 overflow-visible transition-transform duration-100 group-hover:scale-125" viewBox="0 0 20 20">
+                      <line x1="2" y1="10" x2="18" y2="10" stroke="url(#fade-h-nw)" strokeWidth="1.5" strokeLinecap="round" />
+                      <line x1="10" y1="2" x2="10" y2="18" stroke="url(#fade-v-nw)" strokeWidth="1.5" strokeLinecap="round" />
+                      <circle cx="10" cy="10" r="2.8" fill="#ffffff" stroke="#2563eb" strokeWidth="1.3" />
+                      <circle cx="10" cy="10" r="1" fill="#2563eb" />
+                    </svg>
+                  </div>
                 </>
               )}
             </div>

@@ -7,7 +7,11 @@ import {
   TEXT_ALIGNMENTS,
   VERTICAL_ALIGNMENTS,
   TEXT_TRANSFORMS,
+  CURRENCY_SYMBOLS,
   extractCommonProperties,
+  ElementStylePayload,
+  extractElementStyle,
+  applyElementStyle,
 } from '../models/TemplateObjectModel';
 import {
   Trash2,
@@ -26,6 +30,9 @@ import {
   Maximize2,
   Box,
   Sliders,
+  Paintbrush,
+  DollarSign,
+  ClipboardCheck,
 } from 'lucide-react';
 
 interface PropertyInspectorProps {
@@ -37,6 +44,9 @@ interface PropertyInspectorProps {
   onDuplicateItem: (id: string) => void;
   onDuplicateMultipleItems?: (ids: string[]) => void;
   onReorderItem: (id: string, delta: number) => void;
+  copiedStyle?: ElementStylePayload | null;
+  onCopyStyle?: (style: ElementStylePayload) => void;
+  onPasteStyle?: () => void;
 }
 
 export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
@@ -48,6 +58,9 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
   onDuplicateItem,
   onDuplicateMultipleItems,
   onReorderItem,
+  copiedStyle,
+  onCopyStyle,
+  onPasteStyle,
 }) => {
   const count = selectedItems.length;
 
@@ -97,6 +110,12 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
       }
     };
 
+    const handleCopyStyleFromFirst = () => {
+      if (onCopyStyle && selectedItems[0]) {
+        onCopyStyle(extractElementStyle(selectedItems[0]));
+      }
+    };
+
     const allLocked = selectedItems.every((it) => it.locked);
 
     return (
@@ -114,6 +133,24 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
           </div>
 
           <div className="flex items-center gap-1">
+            {onCopyStyle && (
+              <button
+                onClick={handleCopyStyleFromFirst}
+                title="Copier le style du 1er élément (Ctrl+Alt+C)"
+                className="p-1.5 rounded hover:bg-blue-100 text-blue-700 transition"
+              >
+                <Paintbrush className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onPasteStyle && copiedStyle && (
+              <button
+                onClick={onPasteStyle}
+                title="Coller le style sur toute la sélection (Ctrl+Alt+V)"
+                className="p-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition shadow-xs"
+              >
+                <ClipboardCheck className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
               onClick={() => updateMulti({ locked: !allLocked })}
               title={allLocked ? 'Déverrouiller tout' : 'Verrouiller tout'}
@@ -137,6 +174,19 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Quick Style Paste Alert in Multi-Select */}
+        {copiedStyle && onPasteStyle && (
+          <div className="px-3 py-2 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+            <span className="text-[11px] text-blue-700">Style en mémoire prêt à coller</span>
+            <button
+              onClick={onPasteStyle}
+              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded text-[10px]"
+            >
+              Appliquer à la sélection
+            </button>
+          </div>
+        )}
 
         <div className="p-4 space-y-4">
           {/* Dimensions communes */}
@@ -417,6 +467,24 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
           <h3 className="font-bold text-slate-800 capitalize text-sm">{selectedItem.type.replace('_', ' ')}</h3>
         </div>
         <div className="flex items-center gap-1">
+          {onCopyStyle && (
+            <button
+              onClick={() => onCopyStyle(extractElementStyle(selectedItem))}
+              title="Copier le style de cet élément (Ctrl+Alt+C)"
+              className="p-1.5 rounded hover:bg-blue-100 text-blue-700 transition"
+            >
+              <Paintbrush className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {onPasteStyle && copiedStyle && (
+            <button
+              onClick={onPasteStyle}
+              title="Coller le style copié sur cet élément (Ctrl+Alt+V)"
+              className="p-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition shadow-xs"
+            >
+              <ClipboardCheck className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={() => update({ locked: !selectedItem.locked })}
             title={selectedItem.locked ? 'Déverrouiller' : 'Verrouiller'}
@@ -454,6 +522,19 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Copy/Paste Style Notification Bar */}
+      {copiedStyle && onPasteStyle && (
+        <div className="px-3 py-1.5 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+          <span className="text-[11px] text-blue-700">Style en mémoire</span>
+          <button
+            onClick={onPasteStyle}
+            className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded text-[10px]"
+          >
+            Coller le style
+          </button>
+        </div>
+      )}
 
       <div className="p-4 space-y-4">
         {/* Geometry (mm) */}
@@ -836,6 +917,141 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                   />
                 </div>
               </div>
+            </div>
+
+            {/* ATTACHED CURRENCY / PRICE INDEPENDENT TYPOGRAPHY */}
+            <div className="pt-3 border-t border-dashed border-slate-300 space-y-2.5 bg-slate-50/60 p-2.5 rounded-md">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="font-bold text-slate-800 text-xs">Devise Associée & Prix</span>
+                </div>
+                <label className="flex items-center gap-1 text-[11px] text-slate-600 cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={
+                      selectedItem.is_price ||
+                      Boolean(selectedItem.currency_symbol) ||
+                      selectedItem.binding_key === 'SELLING_PRICE' ||
+                      selectedItem.binding_key === 'PROMOPRICE' ||
+                      (selectedItem.binding_key && selectedItem.binding_key.toLowerCase().includes('price'))
+                    }
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      update({
+                        is_price: checked,
+                        currency_symbol: checked ? (selectedItem.currency_symbol || 'FCFA') : undefined,
+                      });
+                    }}
+                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>Activer Devise</span>
+                </label>
+              </div>
+
+              {(selectedItem.is_price || selectedItem.currency_symbol || selectedItem.binding_key?.toLowerCase().includes('price')) && (
+                <div className="space-y-2.5 pt-1">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-500 font-medium">Symbole Devise</label>
+                      <select
+                        value={selectedItem.currency_symbol || 'FCFA'}
+                        onChange={(e) => update({ currency_symbol: e.target.value })}
+                        className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs font-semibold text-emerald-800"
+                      >
+                        {CURRENCY_SYMBOLS.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-slate-500 font-medium">Position Devise</label>
+                      <select
+                        value={selectedItem.currency_position || 'after'}
+                        onChange={(e) => update({ currency_position: e.target.value as any })}
+                        className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+                      >
+                        <option value="after">Après le prix (ex: 2 500 FCFA)</option>
+                        <option value="before">Avant le prix (ex: $ 25.00)</option>
+                        <option value="superscript">Exposant / Haut (ex: 2500 ᶠᶜᶠᵃ)</option>
+                        <option value="subscript">Indice / Bas (ex: 2500 ₍FCFA₎)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-500">Police Devise</label>
+                      <select
+                        value={selectedItem.currency_font_family || selectedItem.font_family}
+                        onChange={(e) => update({ currency_font_family: e.target.value })}
+                        className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+                      >
+                        <option value="">(Identique au prix)</option>
+                        {AVAILABLE_FONTS.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-slate-500">Taille Devise (pt)</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="4"
+                        max="80"
+                        placeholder={String(Math.round(selectedItem.font_size_pt * 0.6))}
+                        value={selectedItem.currency_font_size_pt || ''}
+                        onChange={(e) => update({ currency_font_size_pt: parseFloat(e.target.value) || undefined })}
+                        className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-500">Graisse Devise</label>
+                      <select
+                        value={selectedItem.currency_font_weight || ''}
+                        onChange={(e) => update({ currency_font_weight: (e.target.value as any) || undefined })}
+                        className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+                      >
+                        <option value="">(Identique au prix)</option>
+                        {FONT_WEIGHTS.map((fw) => (
+                          <option key={fw.value} value={fw.value}>
+                            {fw.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-slate-500">Couleur Devise</label>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <input
+                          type="color"
+                          value={selectedItem.currency_color || selectedItem.text_color || '#000000'}
+                          onChange={(e) => update({ currency_color: e.target.value })}
+                          className="w-7 h-6 p-0 rounded border border-slate-300 cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          placeholder="(Auto)"
+                          value={selectedItem.currency_color || ''}
+                          onChange={(e) => update({ currency_color: e.target.value || undefined })}
+                          className="flex-1 px-1.5 py-1 bg-white border border-slate-300 rounded text-[11px] font-mono uppercase"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -1,9 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LabelTemplate, TemplateItem, ProductRecord } from '../types';
 import { LabelRenderer } from './LabelRenderer';
 import { PropertyInspector } from './PropertyInspector';
 import { SAMPLE_PRODUCTS } from '../sampleData';
-import { createObjectInstance } from '../models/TemplateObjectModel';
+import {
+  createObjectInstance,
+  ElementStylePayload,
+  extractElementStyle,
+  applyElementStyle,
+} from '../models/TemplateObjectModel';
 import {
   SmartGuideLine,
   BoxBounds,
@@ -43,6 +48,8 @@ import {
   AlignCenter,
   AlignRight,
   Magnet,
+  Paintbrush,
+  ClipboardCheck,
 } from 'lucide-react';
 
 interface TemplateEditorProps {
@@ -76,9 +83,16 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [previewDataIndex, setPreviewDataIndex] = useState<number | null>(null);
   const [savedNotification, setSavedNotification] = useState(false);
 
+  // Copy / Paste Style Clipboard
+  const [copiedStyle, setCopiedStyle] = useState<ElementStylePayload | null>(null);
+  const [styleToast, setStyleToast] = useState<string | null>(null);
+
   // Dragging & Marquee selection states
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const labelCanvasRef = useRef<HTMLDivElement>(null);
+
   const [isDragging, setIsDragging] = useState(false);
+  const [hasMovedDuringDrag, setHasMovedDuringDrag] = useState(false);
   const [dragStartPos, setDragStartPos] = useState<{
     x: number;
     y: number;
@@ -94,6 +108,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     startY: number;
     origBox: { x: number; y: number; w: number; h: number };
   } | null>(null);
+
+  // Marquee Selection Box State (for bulk / rectangle free selection)
+  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
+  const [marqueeStart, setMarqueeStart] = useState<{ x_mm: number; y_mm: number } | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<{ x_mm: number; y_mm: number; w_mm: number; h_mm: number } | null>(null);
 
   const selectedItems = template.items.filter((i) => selectedItemIds.includes(i.id));
   const currentPreviewRecord: ProductRecord | undefined =
@@ -140,6 +159,27 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       items: template.items.map((it) => (updateMap.has(it.id) ? updateMap.get(it.id)! : it)),
     };
     pushState(next);
+  };
+
+  // Copy / Paste Style handlers
+  const handleCopyStyle = (styleToCopy?: ElementStylePayload) => {
+    let payload = styleToCopy;
+    if (!payload) {
+      if (selectedItems.length === 0) return;
+      payload = extractElementStyle(selectedItems[0]);
+    }
+    setCopiedStyle(payload);
+    setStyleToast('Style copié dans le presse-papiers');
+    setTimeout(() => setStyleToast(null), 2500);
+  };
+
+  const handlePasteStyle = () => {
+    if (!copiedStyle || selectedItems.length === 0) return;
+
+    const updated = selectedItems.map((item) => applyElementStyle(item, copiedStyle));
+    handleUpdateMultipleItems(updated);
+    setStyleToast(`Style appliqué à ${selectedItems.length} élément(s)`);
+    setTimeout(() => setStyleToast(null), 2500);
   };
 
   const handleDeleteItem = (id: string) => {
@@ -448,13 +488,36 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // Keyboard Shortcuts
+  // Keyboard Shortcuts (Undo, Redo, Copy/Paste Style, Duplicate, Nudge, Delete, Select All)
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+    if (
+      document.activeElement?.tagName === 'INPUT' ||
+      document.activeElement?.tagName === 'TEXTAREA' ||
+      document.activeElement?.tagName === 'SELECT'
+    ) {
       return;
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    // Copy Style: Ctrl+Alt+C
+    if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'c' || e.key === 'C')) {
+      if (selectedItems.length > 0) {
+        handleCopyStyle();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    // Paste Style: Ctrl+Alt+V
+    if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'v' || e.key === 'V')) {
+      if (selectedItems.length > 0 && copiedStyle) {
+        handlePasteStyle();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    // Undo: Ctrl+Z
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
       if (e.shiftKey) {
         handleRedo();
       } else {
@@ -464,36 +527,51 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       return;
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+    // Redo: Ctrl+Y
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
       handleRedo();
       e.preventDefault();
       return;
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedItemIds.length > 0) {
+    // Duplicate: Ctrl+D
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selectedItemIds.length > 0) {
       handleDuplicateMultipleItems(selectedItemIds);
+      e.preventDefault();
+      return;
+    }
+
+    // Select All: Ctrl+A
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      setSelectedItemIds(template.items.map((it) => it.id));
       e.preventDefault();
       return;
     }
 
     if (selectedItems.length === 0) return;
 
-    const step = e.shiftKey ? 0.5 : 2.0;
+    // Nudge step: Shift = 0.5mm, Normal = 2.0mm, Alt+Shift = 0.1mm (ultra fine nudge)
+    let step = 2.0;
+    if (e.altKey && e.shiftKey) {
+      step = 0.1;
+    } else if (e.shiftKey) {
+      step = 0.5;
+    }
 
     if (e.key === 'ArrowLeft') {
-      const updated = selectedItems.map((i) => ({ ...i, x_mm: Math.max(0, i.x_mm - step) }));
+      const updated = selectedItems.map((i) => ({ ...i, x_mm: Math.max(0, Number((i.x_mm - step).toFixed(2))) }));
       handleUpdateMultipleItems(updated);
       e.preventDefault();
     } else if (e.key === 'ArrowRight') {
-      const updated = selectedItems.map((i) => ({ ...i, x_mm: i.x_mm + step }));
+      const updated = selectedItems.map((i) => ({ ...i, x_mm: Number((i.x_mm + step).toFixed(2)) }));
       handleUpdateMultipleItems(updated);
       e.preventDefault();
     } else if (e.key === 'ArrowUp') {
-      const updated = selectedItems.map((i) => ({ ...i, y_mm: Math.max(0, i.y_mm - step) }));
+      const updated = selectedItems.map((i) => ({ ...i, y_mm: Math.max(0, Number((i.y_mm - step).toFixed(2))) }));
       handleUpdateMultipleItems(updated);
       e.preventDefault();
     } else if (e.key === 'ArrowDown') {
-      const updated = selectedItems.map((i) => ({ ...i, y_mm: i.y_mm + step }));
+      const updated = selectedItems.map((i) => ({ ...i, y_mm: Number((i.y_mm + step).toFixed(2)) }));
       handleUpdateMultipleItems(updated);
       e.preventDefault();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -505,17 +583,21 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItemIds, template, historyIndex]);
+  }, [selectedItemIds, template, historyIndex, copiedStyle, selectedItems]);
 
-  // Dragging logic with multi-selection support
+  // Object selection on mouse down
   const handleItemMouseDown = (itemId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+
     let newSelected: string[];
     if (e.shiftKey) {
       newSelected = selectedItemIds.includes(itemId)
         ? selectedItemIds.filter((id) => id !== itemId)
         : [...selectedItemIds, itemId];
     } else {
-      newSelected = selectedItemIds.includes(itemId) && selectedItemIds.length > 1 ? selectedItemIds : [itemId];
+      newSelected = selectedItemIds.includes(itemId) && selectedItemIds.length > 1
+        ? selectedItemIds
+        : [itemId];
     }
     setSelectedItemIds(newSelected);
 
@@ -529,6 +611,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
     if (itemsOrigPos.size > 0) {
       setIsDragging(true);
+      setHasMovedDuringDrag(false);
       setDragStartPos({
         x: e.clientX,
         y: e.clientY,
@@ -551,7 +634,28 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  // Canvas background mouse down -> Start bulk / marquee rectangle selection
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // only left click
+    if (!labelCanvasRef.current) return;
+
+    const rect = labelCanvasRef.current.getBoundingClientRect();
+    const scalePxPerMm = 3.78 * zoom;
+    const clickX_mm = (e.clientX - rect.left) / scalePxPerMm;
+    const clickY_mm = (e.clientY - rect.top) / scalePxPerMm;
+
+    // Start Marquee
+    setIsMarqueeSelecting(true);
+    setMarqueeStart({ x_mm: clickX_mm, y_mm: clickY_mm });
+    setMarqueeRect({ x_mm: clickX_mm, y_mm: clickY_mm, w_mm: 0, h_mm: 0 });
+
+    if (!e.shiftKey) {
+      setSelectedItemIds([]);
+    }
+  };
+
+  // Global Pointer / Mouse Move
+  const handleMouseMove = useCallback((e: MouseEvent | React.MouseEvent) => {
     const scalePxPerMm = 3.78 * zoom;
 
     // 1. Resizing with Smart Guides
@@ -627,87 +731,125 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     }
 
     // 2. Dragging Elements with Dynamic Smart Guides
-    if (!isDragging || !dragStartPos) return;
+    if (isDragging && dragStartPos) {
+      const deltaScreenX = e.clientX - dragStartPos.x;
+      const deltaScreenY = e.clientY - dragStartPos.y;
 
-    const deltaX = (e.clientX - dragStartPos.x) / scalePxPerMm;
-    const deltaY = (e.clientY - dragStartPos.y) / scalePxPerMm;
-
-    // Determine primary item or bounding box of moved selection
-    const movingItemIds = Array.from(dragStartPos.itemsOrigPos.keys());
-    const primaryId = selectedItemIds[0] || movingItemIds[0];
-    const primaryOrig = dragStartPos.itemsOrigPos.get(primaryId);
-    const primaryItem = template.items.find((i) => i.id === primaryId);
-
-    if (primaryOrig && primaryItem) {
-      const rawX = primaryOrig.x + deltaX;
-      const rawY = primaryOrig.y + deltaY;
-
-      // Other static boxes on canvas
-      const otherBoxes: BoxBounds[] = template.items
-        .filter((i) => !dragStartPos.itemsOrigPos.has(i.id))
-        .map((i) => ({
-          id: i.id,
-          left: i.x_mm,
-          right: i.x_mm + i.w_mm,
-          top: i.y_mm,
-          bottom: i.y_mm + i.h_mm,
-          centerX: i.x_mm + i.w_mm / 2,
-          centerY: i.y_mm + i.h_mm / 2,
-          width: i.w_mm,
-          height: i.h_mm,
-        }));
-
-      const movingBounds: BoxBounds = {
-        id: primaryItem.id,
-        left: rawX,
-        right: rawX + primaryItem.w_mm,
-        top: rawY,
-        bottom: rawY + primaryItem.h_mm,
-        centerX: rawX + primaryItem.w_mm / 2,
-        centerY: rawY + primaryItem.h_mm / 2,
-        width: primaryItem.w_mm,
-        height: primaryItem.h_mm,
-      };
-
-      const snapRes = computeSmartGuides(
-        movingBounds,
-        otherBoxes,
-        template.width_mm,
-        template.height_mm,
-        showInnerMargins ? template.inner_margins_mm : undefined,
-        smartGuidesEnabled
-      );
-
-      setActiveSmartGuides(snapRes.guides);
-
-      // Calculate effective delta from snap
-      let effectiveDeltaX = deltaX;
-      let effectiveDeltaY = deltaY;
-
-      if (snapRes.guides.length > 0) {
-        effectiveDeltaX = snapRes.snappedX - primaryOrig.x;
-        effectiveDeltaY = snapRes.snappedY - primaryOrig.y;
-      } else if (snapToGrid) {
-        const snap = 0.5;
-        effectiveDeltaX = Math.round((primaryOrig.x + deltaX) / snap) * snap - primaryOrig.x;
-        effectiveDeltaY = Math.round((primaryOrig.y + deltaY) / snap) * snap - primaryOrig.y;
+      if (Math.abs(deltaScreenX) > 2 || Math.abs(deltaScreenY) > 2) {
+        setHasMovedDuringDrag(true);
       }
 
-      const updatedItems = template.items.map((it) => {
-        const orig = dragStartPos.itemsOrigPos.get(it.id);
-        if (!orig) return it;
-        return {
-          ...it,
-          x_mm: Math.max(0, Number((orig.x + effectiveDeltaX).toFixed(2))),
-          y_mm: Math.max(0, Number((orig.y + effectiveDeltaY).toFixed(2))),
+      const deltaX = deltaScreenX / scalePxPerMm;
+      const deltaY = deltaScreenY / scalePxPerMm;
+
+      // Determine primary item or bounding box of moved selection
+      const movingItemIds = Array.from(dragStartPos.itemsOrigPos.keys());
+      const primaryId = selectedItemIds[0] || movingItemIds[0];
+      const primaryOrig = dragStartPos.itemsOrigPos.get(primaryId);
+      const primaryItem = template.items.find((i) => i.id === primaryId);
+
+      if (primaryOrig && primaryItem) {
+        const rawX = primaryOrig.x + deltaX;
+        const rawY = primaryOrig.y + deltaY;
+
+        // Other static boxes on canvas
+        const otherBoxes: BoxBounds[] = template.items
+          .filter((i) => !dragStartPos.itemsOrigPos.has(i.id))
+          .map((i) => ({
+            id: i.id,
+            left: i.x_mm,
+            right: i.x_mm + i.w_mm,
+            top: i.y_mm,
+            bottom: i.y_mm + i.h_mm,
+            centerX: i.x_mm + i.w_mm / 2,
+            centerY: i.y_mm + i.h_mm / 2,
+            width: i.w_mm,
+            height: i.h_mm,
+          }));
+
+        const movingBounds: BoxBounds = {
+          id: primaryItem.id,
+          left: rawX,
+          right: rawX + primaryItem.w_mm,
+          top: rawY,
+          bottom: rawY + primaryItem.h_mm,
+          centerX: rawX + primaryItem.w_mm / 2,
+          centerY: rawY + primaryItem.h_mm / 2,
+          width: primaryItem.w_mm,
+          height: primaryItem.h_mm,
         };
-      });
 
-      setTemplate((prev) => ({ ...prev, items: updatedItems }));
+        const snapRes = computeSmartGuides(
+          movingBounds,
+          otherBoxes,
+          template.width_mm,
+          template.height_mm,
+          showInnerMargins ? template.inner_margins_mm : undefined,
+          smartGuidesEnabled
+        );
+
+        setActiveSmartGuides(snapRes.guides);
+
+        // Calculate effective delta from snap
+        let effectiveDeltaX = deltaX;
+        let effectiveDeltaY = deltaY;
+
+        if (snapRes.guides.length > 0) {
+          effectiveDeltaX = snapRes.snappedX - primaryOrig.x;
+          effectiveDeltaY = snapRes.snappedY - primaryOrig.y;
+        } else if (snapToGrid) {
+          const snap = 0.5;
+          effectiveDeltaX = Math.round((primaryOrig.x + deltaX) / snap) * snap - primaryOrig.x;
+          effectiveDeltaY = Math.round((primaryOrig.y + deltaY) / snap) * snap - primaryOrig.y;
+        }
+
+        const updatedItems = template.items.map((it) => {
+          const orig = dragStartPos.itemsOrigPos.get(it.id);
+          if (!orig) return it;
+          return {
+            ...it,
+            x_mm: Math.max(0, Number((orig.x + effectiveDeltaX).toFixed(2))),
+            y_mm: Math.max(0, Number((orig.y + effectiveDeltaY).toFixed(2))),
+          };
+        });
+
+        setTemplate((prev) => ({ ...prev, items: updatedItems }));
+        return;
+      }
     }
-  };
 
-  const handleMouseUp = () => {
+    // 3. Marquee Selection in Progress
+    if (isMarqueeSelecting && marqueeStart && labelCanvasRef.current) {
+      const rect = labelCanvasRef.current.getBoundingClientRect();
+      const currentX_mm = (e.clientX - rect.left) / scalePxPerMm;
+      const currentY_mm = (e.clientY - rect.top) / scalePxPerMm;
+
+      const x_mm = Math.min(marqueeStart.x_mm, currentX_mm);
+      const y_mm = Math.min(marqueeStart.y_mm, currentY_mm);
+      const w_mm = Math.abs(currentX_mm - marqueeStart.x_mm);
+      const h_mm = Math.abs(currentY_mm - marqueeStart.y_mm);
+
+      setMarqueeRect({ x_mm, y_mm, w_mm, h_mm });
+
+      // Hit-test elements intersecting or enclosed in marquee rectangle
+      const enclosedIds = template.items
+        .filter((it) => {
+          const itX2 = it.x_mm + it.w_mm;
+          const itY2 = it.y_mm + it.h_mm;
+          const mX2 = x_mm + w_mm;
+          const mY2 = y_mm + h_mm;
+
+          // Check AABB rectangle overlap
+          return !(it.x_mm > mX2 || itX2 < x_mm || it.y_mm > mY2 || itY2 < y_mm);
+        })
+        .map((it) => it.id);
+
+      setSelectedItemIds(enclosedIds);
+    }
+  }, [isResizing, resizeState, isDragging, dragStartPos, isMarqueeSelecting, marqueeStart, zoom, template, smartGuidesEnabled, snapToGrid, showInnerMargins, selectedItemIds]);
+
+  // Global Mouse Up -> Clean release of all dragging / resizing / marquee
+  const handleMouseUp = useCallback(() => {
     setActiveSmartGuides([]);
 
     if (isResizing) {
@@ -719,9 +861,40 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     if (isDragging) {
       setIsDragging(false);
       setDragStartPos(null);
-      pushState(template);
+      if (hasMovedDuringDrag) {
+        pushState(template);
+      }
+      setHasMovedDuringDrag(false);
     }
-  };
+
+    if (isMarqueeSelecting) {
+      setIsMarqueeSelecting(false);
+      setMarqueeStart(null);
+      setMarqueeRect(null);
+    }
+  }, [isResizing, isDragging, isMarqueeSelecting, hasMovedDuringDrag, template]);
+
+  // Attach global window listeners to guarantee that releasing the mouse anywhere ends dragging cleanly
+  useEffect(() => {
+    const onWinMouseMove = (e: MouseEvent) => {
+      if (isDragging || isResizing || isMarqueeSelecting) {
+        handleMouseMove(e);
+      }
+    };
+    const onWinMouseUp = () => {
+      if (isDragging || isResizing || isMarqueeSelecting) {
+        handleMouseUp();
+      }
+    };
+
+    window.addEventListener('mousemove', onWinMouseMove);
+    window.addEventListener('mouseup', onWinMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', onWinMouseMove);
+      window.removeEventListener('mouseup', onWinMouseUp);
+    };
+  }, [isDragging, isResizing, isMarqueeSelecting, handleMouseMove, handleMouseUp]);
 
   return (
     <div className="flex flex-col h-full bg-slate-100 overflow-hidden select-none">
@@ -925,6 +1098,28 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               )}
             </div>
           )}
+
+          {/* Quick Style Copy/Paste Toolbar Buttons */}
+          <div className="flex items-center gap-1 ml-3 pl-3 border-l border-slate-200">
+            <button
+              onClick={() => handleCopyStyle()}
+              disabled={selectedItems.length === 0}
+              className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 text-slate-700 text-[11px] font-medium flex items-center gap-1 transition"
+              title="Copier le style de l'élément sélectionné (Ctrl+Alt+C)"
+            >
+              <Paintbrush className="w-3 h-3 text-indigo-600" />
+              <span>Copier Style</span>
+            </button>
+            <button
+              onClick={handlePasteStyle}
+              disabled={!copiedStyle || selectedItems.length === 0}
+              className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 text-slate-700 text-[11px] font-medium flex items-center gap-1 transition"
+              title="Appliquer le style copié aux éléments sélectionnés (Ctrl+Alt+V)"
+            >
+              <ClipboardCheck className="w-3 h-3 text-emerald-600" />
+              <span>Coller Style</span>
+            </button>
+          </div>
         </div>
 
         {/* View Controls & Data Preview Toggle */}
@@ -1044,14 +1239,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       </div>
 
       {/* Main Workspace Area: Canvas + Property Inspector */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Toast feedback for Copy/Paste style */}
+        {styleToast && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white text-xs px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 backdrop-blur-xs animate-in fade-in slide-in-from-top-2">
+            <ClipboardCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{styleToast}</span>
+          </div>
+        )}
+
         {/* Canvas Center Stage */}
         <div
           ref={canvasContainerRef}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onClick={() => setSelectedItemIds([])}
-          className="flex-1 overflow-auto p-12 flex items-center justify-center relative"
+          onMouseDown={handleCanvasMouseDown}
+          className="flex-1 overflow-auto p-12 flex items-center justify-center relative cursor-default"
           style={{
             backgroundColor: '#e2e8f0',
             backgroundImage:
@@ -1062,8 +1263,13 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         >
           {/* Label Canvas Frame */}
           <div
+            ref={labelCanvasRef}
             className="relative shadow-2xl rounded-xs transition-transform"
-            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => {
+              // If click didn't land directly on an item, it starts marquee
+              if ((e.target as HTMLElement).closest('[data-item-id]')) return;
+              handleCanvasMouseDown(e);
+            }}
           >
             <LabelRenderer
               template={template}
@@ -1079,6 +1285,19 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               interactive={true}
               className="ring-1 ring-slate-300"
             />
+
+            {/* Marquee Selection Rectangle Overlay */}
+            {isMarqueeSelecting && marqueeRect && (
+              <div
+                className="absolute border border-blue-500 bg-blue-500/15 pointer-events-none z-50 rounded-2xs"
+                style={{
+                  left: `${marqueeRect.x_mm * 3.78 * zoom}px`,
+                  top: `${marqueeRect.y_mm * 3.78 * zoom}px`,
+                  width: `${marqueeRect.w_mm * 3.78 * zoom}px`,
+                  height: `${marqueeRect.h_mm * 3.78 * zoom}px`,
+                }}
+              />
+            )}
           </div>
         </div>
 
@@ -1092,6 +1311,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           onDuplicateItem={handleDuplicateItem}
           onDuplicateMultipleItems={handleDuplicateMultipleItems}
           onReorderItem={handleReorderItem}
+          copiedStyle={copiedStyle}
+          onCopyStyle={handleCopyStyle}
+          onPasteStyle={handlePasteStyle}
         />
       </div>
     </div>

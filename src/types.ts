@@ -43,6 +43,17 @@ export interface TextItemProperties extends BaseItemProperties {
   border_width?: number;
   corner_radius?: number;
   placeholder?: string;
+
+  // Dedicated Price & Currency separate typography & configuration
+  is_price?: boolean;
+  currency_symbol?: string; // e.g. "FCFA", "€", "$", "MAD", "DZD", "CHF", "£"
+  currency_position?: 'after' | 'before' | 'superscript' | 'subscript';
+  currency_font_family?: string;
+  currency_font_size_pt?: number;
+  currency_font_weight?: 'normal' | '500' | '600' | 'bold' | '800';
+  currency_font_style?: 'normal' | 'italic';
+  currency_color?: string;
+  currency_spacing_pt?: number;
 }
 
 export interface ShapeItemProperties extends BaseItemProperties {

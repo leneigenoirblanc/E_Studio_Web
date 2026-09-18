@@ -226,6 +226,17 @@ export interface CommonProperties {
   border_width?: number;
   corner_radius?: number;
 
+  // Currency properties
+  is_price?: boolean;
+  currency_symbol?: string;
+  currency_position?: 'after' | 'before' | 'superscript' | 'subscript';
+  currency_font_family?: string;
+  currency_font_size_pt?: number;
+  currency_font_weight?: string;
+  currency_font_style?: string;
+  currency_color?: string;
+  currency_spacing_pt?: number;
+
   // Barcode / Elements
   bar_color?: string;
   barcode_type?: string;
@@ -258,6 +269,15 @@ export function extractCommonProperties(items: TemplateItem[]): CommonProperties
       border_color: it.border_color,
       border_width: it.border_width,
       corner_radius: it.corner_radius,
+      is_price: it.is_price,
+      currency_symbol: it.currency_symbol,
+      currency_position: it.currency_position,
+      currency_font_family: it.currency_font_family,
+      currency_font_size_pt: it.currency_font_size_pt,
+      currency_font_weight: it.currency_font_weight,
+      currency_font_style: it.currency_font_style,
+      currency_color: it.currency_color,
+      currency_spacing_pt: it.currency_spacing_pt,
       bar_color: it.bar_color,
       barcode_type: it.barcode_type,
       show_text: it.show_text,
@@ -287,6 +307,15 @@ export function extractCommonProperties(items: TemplateItem[]): CommonProperties
     'border_color',
     'border_width',
     'corner_radius',
+    'is_price',
+    'currency_symbol',
+    'currency_position',
+    'currency_font_family',
+    'currency_font_size_pt',
+    'currency_font_weight',
+    'currency_font_style',
+    'currency_color',
+    'currency_spacing_pt',
     'bar_color',
     'barcode_type',
     'show_text',
@@ -303,4 +332,167 @@ export function extractCommonProperties(items: TemplateItem[]): CommonProperties
   }
 
   return common;
+}
+
+export const CURRENCY_SYMBOLS = [
+  { value: 'FCFA', label: 'FCFA (Franc CFA)' },
+  { value: '€', label: '€ (Euro)' },
+  { value: '$', label: '$ (Dollar)' },
+  { value: 'MAD', label: 'MAD (Dirham marocain)' },
+  { value: 'DZD', label: 'DZD (Dinar algérien)' },
+  { value: 'TND', label: 'TND (Dinar tunisien)' },
+  { value: 'CHF', label: 'CHF (Franc suisse)' },
+  { value: '£', label: '£ (Livre sterling)' },
+  { value: 'XOF', label: 'XOF' },
+  { value: 'XAF', label: 'XAF' },
+];
+
+/**
+ * Style payload for Copy Style / Paste Style actions
+ */
+export interface ElementStylePayload {
+  // Typography
+  font_family?: string;
+  font_size_pt?: number;
+  font_weight?: string;
+  font_style?: string;
+  text_decoration?: string;
+  text_color?: string;
+  alignment?: string;
+  valign?: string;
+  letter_spacing_pt?: number;
+  line_height_multiplier?: number;
+  text_transform?: string;
+  
+  // Fill & Colors
+  fill_color?: string;
+  bg_color?: string;
+  
+  // Borders & Outlines
+  border_color?: string;
+  border_width?: number;
+  corner_radius?: number;
+  color?: string; // for line
+  thickness?: number; // for line
+  style?: string; // for line
+
+  // Price & Currency styling
+  is_price?: boolean;
+  currency_symbol?: string;
+  currency_position?: 'after' | 'before' | 'superscript' | 'subscript';
+  currency_font_family?: string;
+  currency_font_size_pt?: number;
+  currency_font_weight?: 'normal' | '500' | '600' | 'bold' | '800';
+  currency_font_style?: 'normal' | 'italic';
+  currency_color?: string;
+  currency_spacing_pt?: number;
+
+  // Barcode styling
+  bar_color?: string;
+  module_color?: string;
+  background_color?: string;
+}
+
+/**
+ * Extracts all transferable styling properties from an element
+ */
+export function extractElementStyle(item: TemplateItem): ElementStylePayload {
+  const it = item as any;
+  const style: ElementStylePayload = {};
+
+  if (it.font_family !== undefined) style.font_family = it.font_family;
+  if (it.font_size_pt !== undefined) style.font_size_pt = it.font_size_pt;
+  if (it.font_weight !== undefined) style.font_weight = it.font_weight;
+  if (it.font_style !== undefined) style.font_style = it.font_style;
+  if (it.text_decoration !== undefined) style.text_decoration = it.text_decoration;
+  if (it.text_color !== undefined) style.text_color = it.text_color;
+  if (it.alignment !== undefined) style.alignment = it.alignment;
+  if (it.valign !== undefined) style.valign = it.valign;
+  if (it.letter_spacing_pt !== undefined) style.letter_spacing_pt = it.letter_spacing_pt;
+  if (it.line_height_multiplier !== undefined) style.line_height_multiplier = it.line_height_multiplier;
+  if (it.text_transform !== undefined) style.text_transform = it.text_transform;
+
+  if (it.fill_color !== undefined) style.fill_color = it.fill_color;
+  if (it.border_color !== undefined) style.border_color = it.border_color;
+  if (it.border_width !== undefined) style.border_width = it.border_width;
+  if (it.corner_radius !== undefined) style.corner_radius = it.corner_radius;
+
+  if (it.color !== undefined) style.color = it.color;
+  if (it.thickness !== undefined) style.thickness = it.thickness;
+  if (it.style !== undefined) style.style = it.style;
+
+  if (it.is_price !== undefined) style.is_price = it.is_price;
+  if (it.currency_symbol !== undefined) style.currency_symbol = it.currency_symbol;
+  if (it.currency_position !== undefined) style.currency_position = it.currency_position;
+  if (it.currency_font_family !== undefined) style.currency_font_family = it.currency_font_family;
+  if (it.currency_font_size_pt !== undefined) style.currency_font_size_pt = it.currency_font_size_pt;
+  if (it.currency_font_weight !== undefined) style.currency_font_weight = it.currency_font_weight;
+  if (it.currency_font_style !== undefined) style.currency_font_style = it.currency_font_style;
+  if (it.currency_color !== undefined) style.currency_color = it.currency_color;
+  if (it.currency_spacing_pt !== undefined) style.currency_spacing_pt = it.currency_spacing_pt;
+
+  if (it.bar_color !== undefined) style.bar_color = it.bar_color;
+  if (it.module_color !== undefined) style.module_color = it.module_color;
+  if (it.background_color !== undefined) style.background_color = it.background_color;
+
+  return style;
+}
+
+/**
+ * Applies a copied style payload to a target element safely depending on its type
+ */
+export function applyElementStyle(target: TemplateItem, style: ElementStylePayload): TemplateItem {
+  const result: any = { ...target };
+
+  if (target.type === 'text') {
+    if (style.font_family !== undefined) result.font_family = style.font_family;
+    if (style.font_size_pt !== undefined) result.font_size_pt = style.font_size_pt;
+    if (style.font_weight !== undefined) result.font_weight = style.font_weight;
+    if (style.font_style !== undefined) result.font_style = style.font_style;
+    if (style.text_decoration !== undefined) result.text_decoration = style.text_decoration;
+    if (style.text_color !== undefined) result.text_color = style.text_color;
+    if (style.alignment !== undefined) result.alignment = style.alignment;
+    if (style.valign !== undefined) result.valign = style.valign;
+    if (style.letter_spacing_pt !== undefined) result.letter_spacing_pt = style.letter_spacing_pt;
+    if (style.line_height_multiplier !== undefined) result.line_height_multiplier = style.line_height_multiplier;
+    if (style.text_transform !== undefined) result.text_transform = style.text_transform;
+
+    if (style.fill_color !== undefined) result.fill_color = style.fill_color;
+    if (style.border_color !== undefined) result.border_color = style.border_color;
+    if (style.border_width !== undefined) result.border_width = style.border_width;
+    if (style.corner_radius !== undefined) result.corner_radius = style.corner_radius;
+
+    if (style.is_price !== undefined) result.is_price = style.is_price;
+    if (style.currency_symbol !== undefined) result.currency_symbol = style.currency_symbol;
+    if (style.currency_position !== undefined) result.currency_position = style.currency_position;
+    if (style.currency_font_family !== undefined) result.currency_font_family = style.currency_font_family;
+    if (style.currency_font_size_pt !== undefined) result.currency_font_size_pt = style.currency_font_size_pt;
+    if (style.currency_font_weight !== undefined) result.currency_font_weight = style.currency_font_weight;
+    if (style.currency_font_style !== undefined) result.currency_font_style = style.currency_font_style;
+    if (style.currency_color !== undefined) result.currency_color = style.currency_color;
+    if (style.currency_spacing_pt !== undefined) result.currency_spacing_pt = style.currency_spacing_pt;
+  } else if (target.type === 'shape' || target.type === 'ellipse') {
+    if (style.fill_color !== undefined) result.fill_color = style.fill_color;
+    if (style.border_color !== undefined) result.border_color = style.border_color;
+    if (style.border_width !== undefined) result.border_width = style.border_width;
+    if (target.type === 'shape' && style.corner_radius !== undefined) {
+      result.corner_radius = style.corner_radius;
+    }
+  } else if (target.type === 'line') {
+    if (style.color !== undefined) result.color = style.color;
+    if (style.text_color !== undefined) result.color = style.text_color;
+    if (style.border_color !== undefined) result.color = style.border_color;
+    if (style.thickness !== undefined) result.thickness = style.thickness;
+    if (style.border_width !== undefined) result.thickness = style.border_width;
+    if (style.style !== undefined) result.style = style.style;
+  } else if (target.type === 'barcode') {
+    if (style.bar_color !== undefined) result.bar_color = style.bar_color;
+    if (style.text_color !== undefined) result.bar_color = style.text_color;
+  } else if (target.type === 'qrcode') {
+    if (style.module_color !== undefined) result.module_color = style.module_color;
+    if (style.text_color !== undefined) result.module_color = style.text_color;
+    if (style.fill_color !== undefined) result.background_color = style.fill_color;
+  }
+
+  return result as TemplateItem;
 }
