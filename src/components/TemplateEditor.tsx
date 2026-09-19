@@ -69,6 +69,7 @@ import {
   Keyboard,
   Ruler,
   Grid,
+  Cpu,
 } from 'lucide-react';
 
 interface TemplateEditorProps {
@@ -76,6 +77,7 @@ interface TemplateEditorProps {
   onSaveTemplate: (updated: LabelTemplate) => void;
   onBackToHome: () => void;
   onOpenGeneration: (template: LabelTemplate) => void;
+  onOpenRulesModal?: () => void;
 }
 
 export const TemplateEditor: React.FC<TemplateEditorProps> = ({
@@ -83,6 +85,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   onSaveTemplate,
   onBackToHome,
   onOpenGeneration,
+  onOpenRulesModal,
 }) => {
   const [template, setTemplate] = useState<LabelTemplate>(initialTemplate);
   // Multi-selection state
@@ -1158,6 +1161,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           >
             <Keyboard className="w-4 h-4 text-slate-600" />
           </button>
+
+          {onOpenRulesModal && (
+            <button
+              onClick={onOpenRulesModal}
+              title="Ouvrir le moteur de règles omni-canal et simulateur de périphériques (ESL / Print / LCD)"
+              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
+            >
+              <Cpu className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Règles Omni-Canal</span>
+            </button>
+          )}
 
           <div className="h-4 w-px bg-slate-200 mx-1" />
 

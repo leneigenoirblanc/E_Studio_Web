@@ -6,6 +6,7 @@ import { TemplateEditor } from './components/TemplateEditor';
 import { GenerationWorkspace } from './components/GenerationWorkspace';
 import { NewGabaritWizard } from './components/NewGabaritWizard';
 import { PythonCodeModal } from './components/PythonCodeModal';
+import { OmniChannelStudioModal } from './components/OmniChannelStudioModal';
 
 const STORAGE_KEY = 'estudio_templates_v1';
 
@@ -29,6 +30,7 @@ export function App() {
   const [activeTemplate, setActiveTemplate] = useState<LabelTemplate | null>(null);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isPythonModalOpen, setIsPythonModalOpen] = useState(false);
+  const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
 
   // Persist templates to localStorage
   useEffect(() => {
@@ -113,6 +115,7 @@ export function App() {
           onDeleteTemplate={handleDeleteTemplate}
           onImportTemplate={handleImportTemplate}
           onOpenPythonModal={() => setIsPythonModalOpen(true)}
+          onOpenRulesModal={() => setIsRulesModalOpen(true)}
         />
       )}
 
@@ -125,6 +128,7 @@ export function App() {
             setActiveTemplate(tpl);
             setCurrentView('generation');
           }}
+          onOpenRulesModal={() => setIsRulesModalOpen(true)}
         />
       )}
 
@@ -134,6 +138,13 @@ export function App() {
           onBack={() => setCurrentView('home')}
         />
       )}
+
+      {/* Omni-Channel Rules Engine & Simulator Modal */}
+      <OmniChannelStudioModal
+        isOpen={isRulesModalOpen}
+        onClose={() => setIsRulesModalOpen(false)}
+        currentTemplateName={activeTemplate?.name}
+      />
 
       {/* New Gabarit Wizard Modal */}
       <NewGabaritWizard

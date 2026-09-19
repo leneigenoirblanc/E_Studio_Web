@@ -15,6 +15,7 @@ import {
   Tag,
   Grid,
   FileCode,
+  Cpu,
 } from 'lucide-react';
 
 interface HomeDashboardProps {
@@ -26,6 +27,7 @@ interface HomeDashboardProps {
   onDeleteTemplate: (templateName: string) => void;
   onImportTemplate: (template: LabelTemplate) => void;
   onOpenPythonModal: () => void;
+  onOpenRulesModal: () => void;
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
@@ -37,6 +39,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onDeleteTemplate,
   onImportTemplate,
   onOpenPythonModal,
+  onOpenRulesModal,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -82,6 +85,14 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button
+              onClick={onOpenRulesModal}
+              className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-sm transition"
+              title="Ouvrir le moteur de règles headless omni-canal et simulateur multi-device (ESL / Print / LCD)"
+            >
+              <Cpu className="w-4 h-4 text-blue-200" />
+              <span>Règles Omni-Canal (ESL / Print / LCD)</span>
+            </button>
             <button
               onClick={onOpenPythonModal}
               className="px-3.5 py-2 bg-amber-50 border border-amber-300 hover:bg-amber-100 text-amber-900 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
