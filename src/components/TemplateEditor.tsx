@@ -70,7 +70,12 @@ import {
   Ruler,
   Grid,
   Cpu,
+  Settings,
+  HelpCircle,
+  Hand,
 } from 'lucide-react';
+import { ContextTooltip, useTooltip } from '../context/TooltipContext';
+import { ViewportZoomToolbar } from './ViewportZoomToolbar';
 
 interface TemplateEditorProps {
   initialTemplate: LabelTemplate;
@@ -95,7 +100,19 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [history, setHistory] = useState<LabelTemplate[]>([initialTemplate]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
-  const [zoom, setZoom] = useState(1.25);
+  const { uiPreferences, openPreferencesModal } = useTooltip();
+  const [zoom, setZoom] = useState(uiPreferences.defaultZoom || 1.25);
+  const [activeTool, setActiveTool] = useState<'select' | 'marquee' | 'pan'>('select');
+
+  // Marquee Drag-to-Zoom State
+  const [isZoomMarquee, setIsZoomMarquee] = useState(false);
+  const [zoomMarqueeStart, setZoomMarqueeStart] = useState<{ x_mm: number; y_mm: number } | null>(null);
+  const [zoomMarqueeRect, setZoomMarqueeRect] = useState<{ x_mm: number; y_mm: number; w_mm: number; h_mm: number } | null>(null);
+
+  // Hand Pan Tool State
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
+
   const [showBleed, setShowBleed] = useState(true);
   const [showInnerMargins, setShowInnerMargins] = useState(true);
   const [showHazardWarnings, setShowHazardWarnings] = useState(true);
@@ -122,6 +139,100 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   // Dragging & Marquee selection states
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const labelCanvasRef = useRef<HTMLDivElement>(null);
+
+  // Pointer-Centric & Anchor Zoom Engine
+  const handleZoomWithAnchor = useCallback(
+    (nextZoom: number, anchorPoint?: { clientX: number; clientY: number }) => {
+      const clampedZoom = Math.min(8.0, Math.max(0.1, Number(nextZoom.toFixed(3))));
+      if (clampedZoom === zoom) return;
+
+      if (!canvasContainerRef.current || !labelCanvasRef.current) {
+        setZoom(clampedZoom);
+        return;
+      }
+
+      const container = canvasContainerRef.current;
+      const canvas = labelCanvasRef.current;
+      const canvasRect = canvas.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+
+      let clientX: number;
+      let clientY: number;
+
+      if (anchorPoint) {
+        clientX = anchorPoint.clientX;
+        clientY = anchorPoint.clientY;
+      } else {
+        // Center of the visible viewport container
+        clientX = containerRect.left + container.clientWidth / 2;
+        clientY = containerRect.top + container.clientHeight / 2;
+      }
+
+      const pointMmX = (clientX - canvasRect.left) / (3.78 * zoom);
+      const pointMmY = (clientY - canvasRect.top) / (3.78 * zoom);
+
+      const deltaScrollX = pointMmX * 3.78 * (clampedZoom - zoom);
+      const deltaScrollY = pointMmY * 3.78 * (clampedZoom - zoom);
+
+      setZoom(clampedZoom);
+
+      container.scrollLeft += deltaScrollX;
+      container.scrollTop += deltaScrollY;
+    },
+    [zoom]
+  );
+
+  // Preset zoom methods: Fit to Sheet & Fit to Width
+  const handleFitToSheet = useCallback(() => {
+    if (!canvasContainerRef.current) return;
+    const container = canvasContainerRef.current;
+    const availW = Math.max(100, container.clientWidth - 120);
+    const availH = Math.max(100, container.clientHeight - 120);
+    const scaleW = availW / (template.width_mm * 3.78);
+    const scaleH = availH / (template.height_mm * 3.78);
+    const fitZoom = Math.min(8.0, Math.max(0.1, Number(Math.min(scaleW, scaleH).toFixed(2))));
+    setZoom(fitZoom);
+
+    requestAnimationFrame(() => {
+      if (!canvasContainerRef.current || !labelCanvasRef.current) return;
+      const cont = canvasContainerRef.current;
+      const canvas = labelCanvasRef.current;
+      cont.scrollLeft = Math.max(0, (canvas.offsetWidth - cont.clientWidth) / 2);
+      cont.scrollTop = Math.max(0, (canvas.offsetHeight - cont.clientHeight) / 2);
+    });
+  }, [template.width_mm, template.height_mm]);
+
+  const handleFitToWidth = useCallback(() => {
+    if (!canvasContainerRef.current) return;
+    const container = canvasContainerRef.current;
+    const availW = Math.max(100, container.clientWidth - 120);
+    const scaleW = availW / (template.width_mm * 3.78);
+    const fitZoom = Math.min(8.0, Math.max(0.1, Number(scaleW.toFixed(2))));
+    setZoom(fitZoom);
+  }, [template.width_mm]);
+
+  // Non-passive wheel event listener for Pointer-Centric zoom
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const isPointerCentric = uiPreferences.zoomMethod === 'pointer';
+      const isCtrlKey = e.ctrlKey || e.metaKey;
+
+      if (isPointerCentric || isCtrlKey) {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        const targetZoom = zoom * factor;
+        handleZoomWithAnchor(targetZoom, { clientX: e.clientX, clientY: e.clientY });
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [zoom, uiPreferences.zoomMethod, handleZoomWithAnchor]);
 
   const [isDragging, setIsDragging] = useState(false);
   const [hasMovedDuringDrag, setHasMovedDuringDrag] = useState(false);
@@ -687,6 +798,50 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       return;
     }
 
+    // Zoom In: Ctrl/Cmd + Plus or Equal
+    if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd')) {
+      e.preventDefault();
+      handleZoomWithAnchor(zoom + 0.1);
+      return;
+    }
+
+    // Zoom Out: Ctrl/Cmd + Minus
+    if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.code === 'NumpadSubtract')) {
+      e.preventDefault();
+      handleZoomWithAnchor(Math.max(0.1, zoom - 0.1));
+      return;
+    }
+
+    // Reset Zoom: Ctrl/Cmd + 0
+    if ((e.ctrlKey || e.metaKey) && (e.key === '0' || e.code === 'Numpad0')) {
+      e.preventDefault();
+      handleZoomWithAnchor(1.0);
+      return;
+    }
+
+    // Alt + A: Open Accessibility & UI Preferences Modal
+    if (e.altKey && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      openPreferencesModal();
+      return;
+    }
+
+    // Tool switching hotkeys (when not editing an input)
+    const isTextInput =
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLTextAreaElement ||
+      (e.target as HTMLElement)?.isContentEditable;
+
+    if (!isTextInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key.toLowerCase() === 'v') {
+        setActiveTool('select');
+      } else if (e.key.toLowerCase() === 'z') {
+        setActiveTool('marquee');
+      } else if (e.key.toLowerCase() === 'h') {
+        setActiveTool('pan');
+      }
+    }
+
     // Undo: Ctrl+Z
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
       if (e.shiftKey) {
@@ -777,6 +932,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
   // Object selection on mouse down
   const handleItemMouseDown = (itemId: string, e: React.MouseEvent) => {
+    // If using Pan or Marquee Zoom tools, delegate directly to canvas handler
+    if (activeTool === 'pan' || activeTool === 'marquee') {
+      handleCanvasMouseDown(e);
+      return;
+    }
+
     e.stopPropagation();
 
     let newSelected: string[];
@@ -824,9 +985,22 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     });
   };
 
-  // Canvas background mouse down -> Start bulk / marquee rectangle selection
+  // Canvas background mouse down -> Start bulk selection, marquee zoom or hand pan
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // only left click
+
+    // 1. Hand Pan Tool
+    if (activeTool === 'pan' && canvasContainerRef.current) {
+      setIsPanning(true);
+      setPanStart({
+        x: e.clientX,
+        y: e.clientY,
+        scrollLeft: canvasContainerRef.current.scrollLeft,
+        scrollTop: canvasContainerRef.current.scrollTop,
+      });
+      return;
+    }
+
     if (!labelCanvasRef.current) return;
 
     const rect = labelCanvasRef.current.getBoundingClientRect();
@@ -834,7 +1008,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     const clickX_mm = (e.clientX - rect.left) / scalePxPerMm;
     const clickY_mm = (e.clientY - rect.top) / scalePxPerMm;
 
-    // Start Marquee
+    // 2. Marquee Drag-to-Zoom Tool
+    if (activeTool === 'marquee') {
+      setIsZoomMarquee(true);
+      setZoomMarqueeStart({ x_mm: clickX_mm, y_mm: clickY_mm });
+      setZoomMarqueeRect({ x_mm: clickX_mm, y_mm: clickY_mm, w_mm: 0, h_mm: 0 });
+      return;
+    }
+
+    // 3. Normal Object Selection Marquee
     setIsMarqueeSelecting(true);
     setMarqueeStart({ x_mm: clickX_mm, y_mm: clickY_mm });
     setMarqueeRect({ x_mm: clickX_mm, y_mm: clickY_mm, w_mm: 0, h_mm: 0 });
@@ -846,7 +1028,31 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
   // Global Pointer / Mouse Move
   const handleMouseMove = useCallback((e: MouseEvent | React.MouseEvent) => {
+    // 0. Hand Panning
+    if (isPanning && panStart && canvasContainerRef.current) {
+      const dx = e.clientX - panStart.x;
+      const dy = e.clientY - panStart.y;
+      canvasContainerRef.current.scrollLeft = panStart.scrollLeft - dx;
+      canvasContainerRef.current.scrollTop = panStart.scrollTop - dy;
+      return;
+    }
+
     const scalePxPerMm = 3.78 * zoom;
+
+    // 0.1 Marquee Drag-to-Zoom
+    if (isZoomMarquee && zoomMarqueeStart && labelCanvasRef.current) {
+      const rect = labelCanvasRef.current.getBoundingClientRect();
+      const currentX_mm = (e.clientX - rect.left) / scalePxPerMm;
+      const currentY_mm = (e.clientY - rect.top) / scalePxPerMm;
+
+      const x_mm = Math.min(zoomMarqueeStart.x_mm, currentX_mm);
+      const y_mm = Math.min(zoomMarqueeStart.y_mm, currentY_mm);
+      const w_mm = Math.abs(currentX_mm - zoomMarqueeStart.x_mm);
+      const h_mm = Math.abs(currentY_mm - zoomMarqueeStart.y_mm);
+
+      setZoomMarqueeRect({ x_mm, y_mm, w_mm, h_mm });
+      return;
+    }
 
     // 1. Resizing with Smart Guides
     if (isResizing && resizeState) {
@@ -1038,11 +1244,48 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
       setSelectedItemIds(enclosedIds);
     }
-  }, [isResizing, resizeState, isDragging, dragStartPos, isMarqueeSelecting, marqueeStart, zoom, template, smartGuidesEnabled, snapToGrid, showInnerMargins, selectedItemIds]);
+  }, [isResizing, resizeState, isDragging, dragStartPos, isMarqueeSelecting, marqueeStart, isPanning, panStart, isZoomMarquee, zoomMarqueeStart, zoom, template, smartGuidesEnabled, snapToGrid, showInnerMargins, selectedItemIds]);
 
-  // Global Mouse Up -> Clean release of all dragging / resizing / marquee
+  // Global Mouse Up -> Clean release of all dragging / resizing / marquee / pan
   const handleMouseUp = useCallback(() => {
     setActiveSmartGuides([]);
+
+    if (isPanning) {
+      setIsPanning(false);
+      setPanStart(null);
+    }
+
+    if (isZoomMarquee && zoomMarqueeRect) {
+      setIsZoomMarquee(false);
+      const { x_mm, y_mm, w_mm, h_mm } = zoomMarqueeRect;
+      setZoomMarqueeRect(null);
+      setZoomMarqueeStart(null);
+
+      if (w_mm >= 3 && h_mm >= 3 && canvasContainerRef.current && labelCanvasRef.current) {
+        const container = canvasContainerRef.current;
+        const availW = Math.max(100, container.clientWidth - 100);
+        const availH = Math.max(100, container.clientHeight - 100);
+        const scaleX = availW / (w_mm * 3.78);
+        const scaleY = availH / (h_mm * 3.78);
+        const targetZoom = Math.min(8.0, Math.max(0.1, Number(Math.min(scaleX, scaleY).toFixed(3))));
+
+        const centerMmX = x_mm + w_mm / 2;
+        const centerMmY = y_mm + h_mm / 2;
+
+        setZoom(targetZoom);
+
+        requestAnimationFrame(() => {
+          if (!canvasContainerRef.current || !labelCanvasRef.current) return;
+          const cont = canvasContainerRef.current;
+          const canvas = labelCanvasRef.current;
+          const targetPxX = centerMmX * 3.78 * targetZoom;
+          const targetPxY = centerMmY * 3.78 * targetZoom;
+
+          cont.scrollLeft = canvas.offsetLeft + targetPxX - cont.clientWidth / 2;
+          cont.scrollTop = canvas.offsetTop + targetPxY - cont.clientHeight / 2;
+        });
+      }
+    }
 
     if (isResizing) {
       setIsResizing(false);
@@ -1070,17 +1313,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       setMarqueeStart(null);
       setMarqueeRect(null);
     }
-  }, [isResizing, isDragging, isMarqueeSelecting, hasMovedDuringDrag, template]);
+  }, [isResizing, isDragging, isMarqueeSelecting, isPanning, isZoomMarquee, zoomMarqueeRect, hasMovedDuringDrag, template]);
 
   // Attach global window listeners to guarantee that releasing the mouse anywhere ends dragging cleanly
   useEffect(() => {
     const onWinMouseMove = (e: MouseEvent) => {
-      if (isDragging || isResizing || isMarqueeSelecting) {
+      if (isDragging || isResizing || isMarqueeSelecting || isPanning || isZoomMarquee) {
         handleMouseMove(e);
       }
     };
     const onWinMouseUp = () => {
-      if (isDragging || isResizing || isMarqueeSelecting) {
+      if (isDragging || isResizing || isMarqueeSelecting || isPanning || isZoomMarquee) {
         handleMouseUp();
       }
     };
@@ -1092,20 +1335,27 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       window.removeEventListener('mousemove', onWinMouseMove);
       window.removeEventListener('mouseup', onWinMouseUp);
     };
-  }, [isDragging, isResizing, isMarqueeSelecting, handleMouseMove, handleMouseUp]);
+  }, [isDragging, isResizing, isMarqueeSelecting, isPanning, isZoomMarquee, handleMouseMove, handleMouseUp]);
 
   return (
     <div className="flex flex-col h-full bg-slate-100 overflow-hidden select-none">
       {/* Top Application Bar */}
       <header className="h-14 bg-white border-b border-slate-200 px-4 flex items-center justify-between z-30 shrink-0 shadow-xs">
         <div className="flex items-center gap-3">
-          <button
-            onClick={onBackToHome}
-            className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg flex items-center gap-1 transition"
+          <ContextTooltip
+            title="Gabarits d'Étiquettes"
+            content="Revenir au tableau de bord des modèles et étiquettes"
+            shortcut="Esc"
+            category="Navigation"
           >
-            <ChevronLeft className="w-4 h-4" />
-            <span>Gabarits</span>
-          </button>
+            <button
+              onClick={onBackToHome}
+              className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg flex items-center gap-1 transition"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Gabarits</span>
+            </button>
+          </ContextTooltip>
           <div className="h-5 w-px bg-slate-200" />
           <div>
             <h1 className="text-sm font-bold text-slate-900 leading-none truncate max-w-md">{template.name}</h1>
@@ -1115,62 +1365,106 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
         </div>
 
-        {/* Primary Action Buttons & Undo/Redo/Search/Shortcuts */}
+        {/* Primary Action Buttons & Undo/Redo/Search/Shortcuts/Preferences */}
         <div className="flex items-center gap-2">
           {/* History Stack Controls */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 mr-1">
-            <button
-              onClick={handleUndo}
-              disabled={historyIndex <= 0}
-              title="Annuler la dernière action (Ctrl+Z)"
-              className="p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 transition flex items-center gap-1"
+            <ContextTooltip
+              title="Annuler (Undo)"
+              content="Annuler la dernière modification effectuée sur le gabarit"
+              shortcut="Ctrl+Z"
+              category="Historique"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
+              <button
+                onClick={handleUndo}
+                disabled={historyIndex <= 0}
+                className="p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 transition flex items-center gap-1"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </ContextTooltip>
             <span className="text-[10px] font-mono text-slate-500 font-bold px-1.5 border-x border-slate-200">
               {historyIndex + 1}/{history.length}
             </span>
-            <button
-              onClick={handleRedo}
-              disabled={historyIndex >= history.length - 1}
-              title="Rétablir l'action annulée (Ctrl+Y)"
-              className="p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 transition flex items-center gap-1"
+            <ContextTooltip
+              title="Rétablir (Redo)"
+              content="Rétablir la dernière action annulée"
+              shortcut="Ctrl+Y"
+              category="Historique"
             >
-              <RotateCw className="w-3.5 h-3.5" />
-            </button>
+              <button
+                onClick={handleRedo}
+                disabled={historyIndex >= history.length - 1}
+                className="p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 transition flex items-center gap-1"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+              </button>
+            </ContextTooltip>
           </div>
 
           {/* Find & Replace Global Trigger */}
-          <button
-            onClick={() => setIsFindReplaceOpen(true)}
-            title="Rechercher & Remplacer globalement (Ctrl+F)"
-            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
+          <ContextTooltip
+            title="Rechercher & Remplacer"
+            content="Chercher des mentions textuelles ou variables et les remplacer dans tous les calques"
+            shortcut="Ctrl+F"
+            category="Édition"
           >
-            <Search className="w-3.5 h-3.5 text-blue-600" />
-            <span>Rechercher...</span>
-            <kbd className="hidden sm:inline-block px-1 py-0.2 bg-white border border-slate-300 rounded font-mono text-[9px] text-slate-500">
-              Ctrl+F
-            </kbd>
-          </button>
+            <button
+              onClick={() => setIsFindReplaceOpen(true)}
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
+            >
+              <Search className="w-3.5 h-3.5 text-blue-600" />
+              <span>Rechercher...</span>
+              <kbd className="hidden sm:inline-block px-1 py-0.2 bg-white border border-slate-300 rounded font-mono text-[9px] text-slate-500">
+                Ctrl+F
+              </kbd>
+            </button>
+          </ContextTooltip>
 
           {/* Keyboard Shortcuts Trigger */}
-          <button
-            onClick={() => setIsShortcutsOpen(true)}
-            title="Consulter tous les raccourcis clavier pro"
-            className="p-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-lg transition"
+          <ContextTooltip
+            title="Raccourcis Clavier Pro"
+            content="Afficher l'aide-mémoire et les combinaisons touches professionnelles"
+            shortcut="?"
+            category="Aide"
           >
-            <Keyboard className="w-4 h-4 text-slate-600" />
-          </button>
+            <button
+              onClick={() => setIsShortcutsOpen(true)}
+              className="p-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-lg transition"
+            >
+              <Keyboard className="w-4 h-4 text-slate-600" />
+            </button>
+          </ContextTooltip>
+
+          {/* Accessibility & UI Preferences Trigger */}
+          <ContextTooltip
+            title="Accessibilité & Préférences UI"
+            content="Configurer le système d'info-bulles contextuelles (délai, opacité) et le mode de zoom du viewport"
+            shortcut="Alt+A"
+            category="Préférences"
+          >
+            <button
+              onClick={openPreferencesModal}
+              className="p-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-lg transition flex items-center justify-center text-amber-700 hover:text-amber-800"
+            >
+              <Settings className="w-4 h-4 text-slate-700" />
+            </button>
+          </ContextTooltip>
 
           {onOpenRulesModal && (
-            <button
-              onClick={onOpenRulesModal}
-              title="Ouvrir le moteur de règles omni-canal et simulateur de périphériques (ESL / Print / LCD)"
-              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
+            <ContextTooltip
+              title="Moteur de Règles Omni-Canal"
+              content="Configurer les règles dynamiques et simuler l'affichage sur ESL (encre électronique), étiquette papier ou écran LCD"
+              category="Automatisation"
             >
-              <Cpu className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Règles Omni-Canal</span>
-            </button>
+              <button
+                onClick={onOpenRulesModal}
+                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
+              >
+                <Cpu className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Règles Omni-Canal</span>
+              </button>
+            </ContextTooltip>
           )}
 
           <div className="h-4 w-px bg-slate-200 mx-1" />
@@ -1181,143 +1475,186 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               Sauvegardé !
             </span>
           )}
-          <button
-            onClick={handleSave}
-            className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
+          <ContextTooltip
+            title="Enregistrer le Gabarit"
+            content="Sauvegarder immédiatement les dimensions, calques et règles dans la mémoire du studio"
+            shortcut="Ctrl+S"
+            category="Fichier"
           >
-            <Save className="w-3.5 h-3.5 text-slate-600" />
-            <span>Enregistrer</span>
-          </button>
-          <button
-            onClick={exportJson}
-            title="Exporter le gabarit au format JSON"
-            className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
+            <button
+              onClick={handleSave}
+              className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
+            >
+              <Save className="w-3.5 h-3.5 text-slate-600" />
+              <span>Enregistrer</span>
+            </button>
+          </ContextTooltip>
+          <ContextTooltip
+            title="Exporter Gabarit JSON"
+            content="Télécharger l'intégralité du gabarit et des éléments vectoriels au format standard JSON"
+            category="Export"
           >
-            <Download className="w-3.5 h-3.5 text-slate-600" />
-            <span>Export JSON</span>
-          </button>
-          <button
-            onClick={() => onOpenGeneration(template)}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
+            <button
+              onClick={exportJson}
+              className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-600" />
+              <span>Export JSON</span>
+            </button>
+          </ContextTooltip>
+          <ContextTooltip
+            title="Atelier d'Imposition & Impression"
+            content="Basculer vers l'espace de génération par lots, imposition de planches A4/A3/Rouleau et exports ZPL/PDF"
+            category="Production"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Générer étiquettes</span>
-          </button>
+            <button
+              onClick={() => onOpenGeneration(template)}
+              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Générer étiquettes</span>
+            </button>
+          </ContextTooltip>
         </div>
       </header>
 
       {/* Ergonomic Tools Ribbon Toolbar */}
       <div className="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between shrink-0 overflow-x-auto text-xs gap-3 whitespace-nowrap scrollbar-thin">
-        {/* Insert Palette Group */}
-        <div className="flex items-center gap-1 shrink-0">
-          <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 tracking-wider select-none shrink-0">
-            Insérer
-          </span>
-          <div className="flex items-center bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs gap-0.5 shrink-0">
-            <button
-              onClick={() => addItem('text')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter un champ texte"
-            >
-              <Type className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              <span>Texte</span>
-            </button>
-            <button
-              onClick={() => addItem('rich_text')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter un texte riche avec multi-segments"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-              <span>Texte Riche</span>
-            </button>
-            <button
-              onClick={() => addItem('shape')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter un rectangle"
-            >
-              <Square className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-              <span>Rectangle</span>
-            </button>
-            <button
-              onClick={() => addItem('ellipse')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter une ellipse"
-            >
-              <Circle className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-              <span>Ellipse</span>
-            </button>
-            <button
-              onClick={() => addItem('line')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter une ligne"
-            >
-              <Minus className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-              <span>Ligne</span>
-            </button>
-            <button
-              onClick={() => addItem('barcode')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter un code-barres"
-            >
-              <Barcode className="w-3.5 h-3.5 text-slate-800 shrink-0" />
-              <span>Code-barres</span>
-            </button>
-            <button
-              onClick={() => addItem('qrcode')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter un QR Code"
-            >
-              <QrCode className="w-3.5 h-3.5 text-slate-800 shrink-0" />
-              <span>QR Code</span>
-            </button>
-            <button
-              onClick={() => addItem('tier_price')}
-              className="px-2 py-1 rounded bg-sky-50 hover:bg-sky-100 font-semibold text-sky-800 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter un tableau de prix par volume/palier"
-            >
-              <DollarSign className="w-3.5 h-3.5 text-sky-700 shrink-0" />
-              <span>Paliers Prix</span>
-            </button>
-            <button
-              onClick={() => addItem('price_block')}
-              className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-800 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter un bloc de prix avec centimes flottants et symbole personnalisable"
-            >
-              <DollarSign className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-              <span>Prix Centimes</span>
-            </button>
-            <button
-              onClick={() => addItem('restricted_area')}
-              className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 font-semibold text-rose-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter une zone restreinte non imprimable"
-            >
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-              <span>Zone Restreinte</span>
-            </button>
-            <button
-              onClick={() => addItem('curved_text')}
-              className="px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 font-semibold text-indigo-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter un texte circulaire / courbé"
-            >
-              <CircleDot className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-              <span>Texte Courbe</span>
-            </button>
-            <button
-              onClick={() => addItem('pictogram')}
-              className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter un pictogramme réglementaire"
-            >
-              <Stamp className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Pictogramme</span>
-            </button>
-            <button
-              onClick={() => addItem('image')}
-              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-              title="Ajouter une image"
-            >
-              <ImageIcon className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-              <span>Image</span>
-            </button>
+        {/* Insert Palette Clusters */}
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Cluster 1: Typographie & Prix */}
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[10px] uppercase font-bold text-slate-400 mr-0.5 tracking-wider select-none shrink-0">
+              Textes & Prix
+            </span>
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs gap-0.5 shrink-0">
+              <button
+                onClick={() => addItem('text')}
+                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter un champ texte standard"
+              >
+                <Type className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span>Texte</span>
+              </button>
+              <button
+                onClick={() => addItem('rich_text')}
+                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter un texte riche avec multi-segments"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>Texte Riche</span>
+              </button>
+              <button
+                onClick={() => addItem('price_block')}
+                className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-800 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter un bloc de prix avec centimes flottants"
+              >
+                <DollarSign className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                <span>Prix Centimes</span>
+              </button>
+              <button
+                onClick={() => addItem('tier_price')}
+                className="px-2 py-1 rounded bg-sky-50 hover:bg-sky-100 font-semibold text-sky-800 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter un tableau de prix par volume/palier"
+              >
+                <DollarSign className="w-3.5 h-3.5 text-sky-700 shrink-0" />
+                <span>Paliers Prix</span>
+              </button>
+              <button
+                onClick={() => addItem('curved_text')}
+                className="px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 font-semibold text-indigo-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter un texte circulaire / courbé"
+              >
+                <CircleDot className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>Courbe</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="h-4 w-px bg-slate-300 shrink-0" />
+
+          {/* Cluster 2: Formes & Codes */}
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[10px] uppercase font-bold text-slate-400 mr-0.5 tracking-wider select-none shrink-0">
+              Formes & Codes
+            </span>
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs gap-0.5 shrink-0">
+              <button
+                onClick={() => addItem('shape')}
+                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter un rectangle"
+              >
+                <Square className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                <span>Rectangle</span>
+              </button>
+              <button
+                onClick={() => addItem('ellipse')}
+                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter une ellipse"
+              >
+                <Circle className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                <span>Ellipse</span>
+              </button>
+              <button
+                onClick={() => addItem('line')}
+                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter une ligne"
+              >
+                <Minus className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                <span>Ligne</span>
+              </button>
+              <button
+                onClick={() => addItem('barcode')}
+                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter un code-barres EAN/Code128"
+              >
+                <Barcode className="w-3.5 h-3.5 text-slate-800 shrink-0" />
+                <span>Code-barres</span>
+              </button>
+              <button
+                onClick={() => addItem('qrcode')}
+                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter un QR Code"
+              >
+                <QrCode className="w-3.5 h-3.5 text-slate-800 shrink-0" />
+                <span>QR Code</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="h-4 w-px bg-slate-300 shrink-0" />
+
+          {/* Cluster 3: Médias & Sécurité */}
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[10px] uppercase font-bold text-slate-400 mr-0.5 tracking-wider select-none shrink-0">
+              Médias & Normes
+            </span>
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs gap-0.5 shrink-0">
+              <button
+                onClick={() => addItem('image')}
+                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter une image"
+              >
+                <ImageIcon className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                <span>Image</span>
+              </button>
+              <button
+                onClick={() => addItem('pictogram')}
+                className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter un pictogramme réglementaire (Nutri-score, Bio, Eco, etc.)"
+              >
+                <Stamp className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Pictogramme</span>
+              </button>
+              <button
+                onClick={() => addItem('restricted_area')}
+                className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 font-semibold text-rose-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+                title="Ajouter une zone restreinte non imprimable"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span>Zone Restreinte</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1650,8 +1987,36 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                 }}
               />
             )}
+
+            {/* Zoom Marquee Region Box Overlay */}
+            {isZoomMarquee && zoomMarqueeRect && (
+              <div
+                className="absolute border-2 border-dashed border-blue-600 bg-blue-500/20 pointer-events-none z-50 rounded-xs shadow-lg"
+                style={{
+                  left: `${zoomMarqueeRect.x_mm * 3.78 * zoom}px`,
+                  top: `${zoomMarqueeRect.y_mm * 3.78 * zoom}px`,
+                  width: `${zoomMarqueeRect.w_mm * 3.78 * zoom}px`,
+                  height: `${zoomMarqueeRect.h_mm * 3.78 * zoom}px`,
+                }}
+              >
+                <div className="absolute top-1 left-1 bg-blue-600 text-white text-[9px] font-mono font-bold px-1.5 py-0.5 rounded shadow-xs">
+                  Zoom: {Math.round(zoomMarqueeRect.w_mm)} × {Math.round(zoomMarqueeRect.h_mm)} mm
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Floating Viewport Zoom & Navigation Toolbar */}
+        <ViewportZoomToolbar
+          zoom={zoom}
+          onZoomChange={(newZoom, anchorPoint) => handleZoomWithAnchor(newZoom, anchorPoint)}
+          onFitToSheet={handleFitToSheet}
+          onFitToWidth={handleFitToWidth}
+          activeTool={activeTool}
+          onToolChange={setActiveTool}
+          zoomMethod={uiPreferences.zoomMethod}
+        />
 
         {/* Right Inspector Dock with full Multi-Selection Support */}
         <PropertyInspector

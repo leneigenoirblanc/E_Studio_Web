@@ -194,4 +194,100 @@ export const SAMPLE_PRODUCTS: ProductRecord[] = [
       { qty: 180, unit_price: 320 },
     ],
   },
+  // --- Assortment Cluster Sample Candidates (All Flavors/Sizes) ---
+  {
+    id: "PROD-007",
+    STORE_NAME: "SUPERMARCHÉ CENTRAL",
+    PRODUCT_SCAN: "8000570001017",
+    PARTNO: "MART-BIA",
+    ITEMNAME: "Martini Vermouth 100cl Bianco",
+    ITEMDESCRIPTION: "Apéritif italien aromatisé aux herbes et vanille",
+    DIV_NAME: "LIQUIDES",
+    DEPT_NAME: "VINS & ALCOOLS",
+    CATEGORY_NAME: "APÉRITIFS",
+    BRAND_INFO: "Martini & Rossi",
+    SELLING_PRICE: 1250,
+    ORIGIN_COUNTRY: "Italie",
+    price_tiers: [
+      { min_qty: 1, unit_price: 1250, label: "Base Price", is_base: true },
+      { min_qty: 3, unit_price: 1100, label: "3+ Units" },
+      { min_qty: 6, unit_price: 990, label: "6+ Units" },
+    ],
+  },
+  {
+    id: "PROD-008",
+    STORE_NAME: "SUPERMARCHÉ CENTRAL",
+    PRODUCT_SCAN: "8000570001024",
+    PARTNO: "MART-ROS",
+    ITEMNAME: "Martini Vermouth 100cl Rosso",
+    ITEMDESCRIPTION: "Apéritif italien doux aux notes de caramel et d'agrumes",
+    DIV_NAME: "LIQUIDES",
+    DEPT_NAME: "VINS & ALCOOLS",
+    CATEGORY_NAME: "APÉRITIFS",
+    BRAND_INFO: "Martini & Rossi",
+    SELLING_PRICE: 1250,
+    ORIGIN_COUNTRY: "Italie",
+    price_tiers: [
+      { min_qty: 1, unit_price: 1250, label: "Base Price", is_base: true },
+      { min_qty: 3, unit_price: 1100, label: "3+ Units" },
+      { min_qty: 6, unit_price: 990, label: "6+ Units" },
+    ],
+  },
+  {
+    id: "PROD-009",
+    STORE_NAME: "SUPERMARCHÉ CENTRAL",
+    PRODUCT_SCAN: "8000570001031",
+    PARTNO: "MART-RSO",
+    ITEMNAME: "Martini Vermouth 100cl Rosato",
+    ITEMDESCRIPTION: "Apéritif italien aux notes épicées de clou de girofle et cannelle",
+    DIV_NAME: "LIQUIDES",
+    DEPT_NAME: "VINS & ALCOOLS",
+    CATEGORY_NAME: "APÉRITIFS",
+    BRAND_INFO: "Martini & Rossi",
+    SELLING_PRICE: 1250,
+    ORIGIN_COUNTRY: "Italie",
+    price_tiers: [
+      { min_qty: 1, unit_price: 1250, label: "Base Price", is_base: true },
+      { min_qty: 3, unit_price: 1100, label: "3+ Units" },
+      { min_qty: 6, unit_price: 990, label: "6+ Units" },
+    ],
+  },
+  // --- Seafood Regulatory Item ---
+  {
+    id: "PROD-010",
+    STORE_NAME: "SUPERMARCHÉ CENTRAL",
+    PRODUCT_SCAN: "2801234015802",
+    PARTNO: "POIS-SAUM",
+    ITEMNAME: "Pavé de Saumon Atlantique Frais",
+    ITEMDESCRIPTION: "Salmo salar élevé en eaux froides de Norvège",
+    DIV_NAME: "FRAIS",
+    DEPT_NAME: "MARÉE & POISSONNERIE",
+    CATEGORY_NAME: "POISSONNERIE",
+    SELLING_PRICE: 2490,
+    PROMOPRICE: 1990,
+    PROMO_LABEL: "OFFRE MARÉE",
+    UNIT_PRICE_TEXT: "19.90 € / kg",
+    ORIGIN_COUNTRY: "Norvège",
+    FAO_ZONE: "Zone FAO 27.IIa (Mer de Norvège)",
+    FISHING_GEAR: "Chalut pélagique / Aquaculture certifiée ASC",
+    PRODUCTION_METHOD: "Élevé en Norvège",
+  },
 ];
+
+// Sample multi-row implicit data structure simulating ERP exports
+export const SAMPLE_IMPLICIT_MULTI_ROW_DATA = [
+  { SKU: 'EAN-32503901', ITEMNAME: 'Boisson Énergisante Monster 500ml', QTY: 1, SELLING_PRICE: 2.20, CATEGORY_NAME: 'BOISSONS' },
+  { SKU: 'EAN-32503901', ITEMNAME: 'Boisson Énergisante Monster 500ml', QTY: 4, SELLING_PRICE: 1.95, CATEGORY_NAME: 'BOISSONS' },
+  { SKU: 'EAN-32503901', ITEMNAME: 'Boisson Énergisante Monster 500ml', QTY: 12, SELLING_PRICE: 1.70, CATEGORY_NAME: 'BOISSONS' },
+  { SKU: 'EAN-32503901', ITEMNAME: 'Boisson Énergisante Monster 500ml', QTY: 24, SELLING_PRICE: 1.50, CATEGORY_NAME: 'BOISSONS' },
+
+  { SKU: 'EAN-32503902', ITEMNAME: 'Farine de Blé T55 Francine 1kg', QTY: 1, SELLING_PRICE: 1.40, CATEGORY_NAME: 'ÉPICERIE' },
+  { SKU: 'EAN-32503902', ITEMNAME: 'Farine de Blé T55 Francine 1kg', QTY: 5, SELLING_PRICE: 1.25, CATEGORY_NAME: 'ÉPICERIE' },
+  { SKU: 'EAN-32503902', ITEMNAME: 'Farine de Blé T55 Francine 1kg', QTY: 10, SELLING_PRICE: 1.10, CATEGORY_NAME: 'ÉPICERIE' },
+
+  // Anomaly test product (missing qty, inverted price progression)
+  { SKU: 'EAN-32503903', ITEMNAME: 'Piles Alcalines AA x4 PowerMax', QTY: 1, SELLING_PRICE: 4.50, CATEGORY_NAME: 'BAZAR' },
+  { SKU: 'EAN-32503903', ITEMNAME: 'Piles Alcalines AA x4 PowerMax', QTY: 1, SELLING_PRICE: 4.80, CATEGORY_NAME: 'BAZAR' }, // Duplicate with conflicting price!
+  { SKU: 'EAN-32503903', ITEMNAME: 'Piles Alcalines AA x4 PowerMax', QTY: 3, SELLING_PRICE: 5.20, CATEGORY_NAME: 'BAZAR' }, // Inverted price anomaly!
+];
+

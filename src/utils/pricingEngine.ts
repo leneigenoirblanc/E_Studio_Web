@@ -14,6 +14,15 @@ export class PricingEngine {
   static getProductFieldValue(record: ProductRecord | null | undefined, bindingKey: string): any {
     if (!record || !bindingKey) return undefined;
 
+    // Check custom name override (Virtual assortment substitution)
+    if (
+      (bindingKey === 'ITEMNAME' || bindingKey === 'DESIGNATION' || bindingKey === 'PRODUCT_NAME') &&
+      record.custom_name_override &&
+      record.custom_name_override.trim() !== ''
+    ) {
+      return record.custom_name_override;
+    }
+
     // 1. Direct property match
     if (record[bindingKey] !== undefined && record[bindingKey] !== null && record[bindingKey] !== '') {
       return record[bindingKey];

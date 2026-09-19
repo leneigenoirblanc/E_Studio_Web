@@ -122,7 +122,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
             : 'justify-start';
 
         // Scale font size proportionally
-        const fontSizePx = Math.max(7, item.font_size_pt * 1.333 * zoom);
+        const baseFontSizePx = Math.max(7, item.font_size_pt * 1.333 * zoom);
 
         let mainText = displayVal || item.placeholder || '';
         if (item.prefix_text) mainText = `${item.prefix_text} ${mainText}`;
@@ -132,6 +132,18 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         const letterSpacingPx = item.letter_spacing_pt ? `${item.letter_spacing_pt * 1.333 * zoom}px` : undefined;
         const lineHeightStyle = item.line_height_multiplier ? item.line_height_multiplier : 1.25;
         const textTransform = item.text_transform && item.text_transform !== 'none' ? item.text_transform : undefined;
+
+        // Auto-scale to prevent text box overflow and neighboring element overlap
+        const availableBoxWidth = Math.max(16, itemW - 4);
+        const estCharWidth = baseFontSizePx * 0.52;
+        const approxLines = Math.max(1, Math.ceil((mainText.length * estCharWidth) / availableBoxWidth));
+        const estTextHeight = approxLines * (baseFontSizePx * (typeof lineHeightStyle === 'number' ? lineHeightStyle : 1.25));
+
+        let fontSizePx = baseFontSizePx;
+        if (estTextHeight > itemH && itemH > 8) {
+          const autoShrink = Math.max(0.65, (itemH - 2) / estTextHeight);
+          fontSizePx = Math.max(6, Math.round(baseFontSizePx * autoShrink));
+        }
 
         // Shadow styling
         let textShadowStyle: string | undefined = undefined;
@@ -331,18 +343,30 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         const decSizePt = item.decimal_style?.font_size_pt || Math.max(9, Math.round(intSizePt * 0.52));
         const currSizePt = item.currency_style?.font_size_pt || Math.max(9, Math.round(intSizePt * 0.48));
 
-        const intSizePx = Math.max(10, intSizePt * 1.333 * zoom);
-        const decSizePx = Math.max(7, decSizePt * 1.333 * zoom);
-        const currSizePx = Math.max(7, currSizePt * 1.333 * zoom);
+        const baseIntSizePx = Math.max(10, intSizePt * 1.333 * zoom);
+        const baseDecSizePx = Math.max(7, decSizePt * 1.333 * zoom);
+        const baseCurrSizePx = Math.max(7, currSizePt * 1.333 * zoom);
 
         const currencySym = item.currency_symbol || '€';
         const currPos = item.currency_position || 'after';
         const decShift = item.decimal_style?.baseline_shift || 'superscript';
 
+        // Auto-scale to guarantee price never wraps or overflows
+        const estIntWidth = String(integerPart).length * (baseIntSizePx * 0.60);
+        const estDecWidth = decimalPart ? (String(decimalPart).length * (baseDecSizePx * 0.60)) + 6 : 0;
+        const estCurrWidth = currencySym ? (baseCurrSizePx * 0.70 * currencySym.length) + 6 : 0;
+        const totalEstPriceWidth = estIntWidth + estDecWidth + estCurrWidth;
+        const availableW = Math.max(16, itemW - 4);
+
+        const priceScale = totalEstPriceWidth > availableW ? Math.max(0.55, availableW / totalEstPriceWidth) : 1;
+        const intSizePx = Math.max(8, Math.round(baseIntSizePx * priceScale));
+        const decSizePx = Math.max(6, Math.round(baseDecSizePx * priceScale));
+        const currSizePx = Math.max(6, Math.round(baseCurrSizePx * priceScale));
+
         return (
           <div className={`w-full h-full flex flex-col ${vAlignClass} overflow-hidden p-0.5 select-none`}>
             <div
-              className={`w-full flex items-baseline leading-none ${textAlignClass}`}
+              className={`w-full flex items-baseline leading-none flex-nowrap whitespace-nowrap ${textAlignClass}`}
               style={{ fontFamily: item.font_family || 'Plus Jakarta Sans' }}
             >
               {/* Currency Before */}

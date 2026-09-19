@@ -369,6 +369,19 @@ export interface PriceTier {
   unit_price: number;
 }
 
+export interface PriceTierBreak {
+  min_qty: number;
+  unit_price: number;
+  label?: string;
+  is_base?: boolean;
+  error?: string;
+}
+
+export interface StructureValidationError {
+  has_error: boolean;
+  issues: string[];
+}
+
 export interface ProductRecord {
   id: string;
   STORE_NAME?: string;
@@ -404,7 +417,77 @@ export interface ProductRecord {
   TAX_TYPE?: string;
   IMAGE_PATH?: string;
   TIERS?: PriceTier[];
+  price_tiers?: PriceTierBreak[];
+  tier_anomaly?: StructureValidationError;
+
+  // Clustering / Assortment metadata
+  is_virtual_assortment?: boolean;
+  assortment_id?: string;
+  assortment_tag?: string;
+  cluster_root_name?: string;
+  cluster_discriminators?: string[];
+  cluster_type?: 'flavor' | 'size' | 'mixed';
+  cluster_count?: number;
+  cluster_member_ids?: string[];
+  custom_name_override?: string;
+
+  // Data-driven template & print overrides
+  assigned_template?: string;
+  forced_copies?: number;
+
   [custom_key: string]: any;
+}
+
+export interface BlueprintOverlayConfig {
+  image_url?: string | null;
+  opacity: number; // 0 to 1
+  visible: boolean;
+  scale_pct: number; // 50 to 200
+  offset_x_mm: number;
+  offset_y_mm: number;
+  locked: boolean;
+}
+
+export interface SlotNudgeOffset {
+  [slot_index: number]: {
+    nudge_x_mm: number;
+    nudge_y_mm: number;
+  };
+}
+
+export interface ImpositionPreset {
+  id: string;
+  name: string;
+  description: string;
+  manufacturer?: string;
+  config: ImpositionConfig;
+  blueprint?: BlueprintOverlayConfig;
+  slot_nudges?: SlotNudgeOffset;
+  snap_grid_mm?: number;
+}
+
+export interface MultiSlotDefinition {
+  id: string;
+  name: string;
+  x_mm: number;
+  y_mm: number;
+  w_mm: number;
+  h_mm: number;
+  assigned_product_id?: string | null;
+  assigned_product?: ProductRecord | null;
+  highlight_color?: string;
+}
+
+export interface MultiSlotTemplate {
+  id: string;
+  name: string;
+  page_size: 'A4' | 'A3' | 'A5' | 'LETTER';
+  orientation: 'portrait' | 'landscape';
+  width_mm: number;
+  height_mm: number;
+  banner_title?: string;
+  banner_bg?: string;
+  slots: MultiSlotDefinition[];
 }
 
 export interface ImpositionConfig {
@@ -423,6 +506,9 @@ export interface ImpositionConfig {
   calibration_y_mm?: number;
   custom_page_w_mm?: number;
   custom_page_h_mm?: number;
+  blueprint_overlay?: BlueprintOverlayConfig;
+  slot_nudges?: SlotNudgeOffset;
+  snap_grid_mm?: number; // 0.1, 0.5, 1.0, 5.0 mm
 }
 
 export interface PdfExportConfig {

@@ -81,7 +81,14 @@ export class TierEngine {
       }
     }
 
-    const tiers: PriceTier[] = Array.isArray(record.TIERS) ? record.TIERS : [];
+    let tiers: PriceTier[] = Array.isArray(record.TIERS) ? record.TIERS : [];
+    if (tiers.length === 0 && Array.isArray(record.price_tiers) && record.price_tiers.length > 0) {
+      tiers = record.price_tiers.map((t) => ({
+        qty: t.min_qty,
+        unit_price: t.unit_price,
+        label: t.label || `${t.min_qty}+ Units`,
+      }));
+    }
 
     // Helper to calculate graduated price
     const calculateGraduated = (targetIndex: number) => {

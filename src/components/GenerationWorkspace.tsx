@@ -9,6 +9,12 @@ import { DataMappingModal } from './DataMappingModal';
 import { PptxExporter } from '../utils/pptxExporter';
 import { ZplExporter } from '../utils/zplExporter';
 import { AVERY_STANDARD_CATALOG } from '../utils/averyCatalog';
+import { DEFAULT_TEMPLATES } from '../defaultTemplates';
+import { TierPricingStudio } from './TierPricingStudio';
+import { ProductClusteringStudio } from './ProductClusteringStudio';
+import { MultiSlotSignageStudio } from './MultiSlotSignageStudio';
+import { ImpositionCalibrationBoard } from './ImpositionCalibrationBoard';
+import { ContextTooltip, useTooltip } from '../context/TooltipContext';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import {
@@ -32,6 +38,12 @@ import {
   Cpu,
   BookmarkCheck,
   Settings2,
+  TrendingDown,
+  Boxes,
+  LayoutGrid,
+  Compass,
+  ChevronDown,
+  Settings,
 } from 'lucide-react';
 
 interface GenerationWorkspaceProps {
@@ -43,7 +55,14 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
   const [products, setProducts] = useState<ProductRecord[]>(SAMPLE_PRODUCTS);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'preview' | 'data' | 'imposition'>('preview');
+  const [activeTab, setActiveTab] = useState<
+    'preview' | 'data' | 'imposition' | 'tiers' | 'clustering' | 'multislot' | 'blueprint'
+  >('preview');
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+
+  const handleUpdateSingleProduct = (updated: ProductRecord) => {
+    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  };
 
   // Excel Mapping Modal State
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
@@ -468,108 +487,301 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
 
   return (
     <div className="flex flex-col h-full bg-slate-100 overflow-hidden select-none">
-      {/* Top Header */}
-      <header className="h-14 bg-white border-b border-slate-200 px-4 flex items-center justify-between shrink-0 shadow-xs z-30">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg flex items-center gap-1 transition"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            <span>Retour Gabarits</span>
-          </button>
-          <div className="h-5 w-px bg-slate-200" />
-          <div>
-            <h1 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <span>Génération d'Étiquettes</span>
-              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-full border border-blue-200">
-                Gabarit: {template.name}
-              </span>
-            </h1>
-            <p className="text-[11px] text-slate-500 font-mono">
-              {products.length} articles chargés • Gabarit figé ({template.width_mm} × {template.height_mm} mm)
-            </p>
+      {/* Top Header Bar */}
+      <header className="bg-white border-b border-slate-200 shrink-0 shadow-xs z-30">
+        {/* Tier 1: Master Action Bar */}
+        <div className="h-14 px-4 flex items-center justify-between border-b border-slate-100">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={onBack}
+              className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg flex items-center gap-1 transition shrink-0"
+              title="Revenir à l'accueil des gabarits"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Gabarits</span>
+            </button>
+            <div className="h-5 w-px bg-slate-200 shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-bold text-slate-900 truncate">
+                  {template.name}
+                </span>
+                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[11px] font-bold rounded-full border border-blue-200 shrink-0">
+                  {template.width_mm} × {template.height_mm} mm
+                </span>
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[11px] font-semibold rounded-full shrink-0">
+                  {products.length} articles
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Master Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            <ContextTooltip
+              title="Importer Données (Excel/CSV)"
+              content="Charger un catalogue d'articles, codes EAN, désignations et grilles tarifaires dégressives"
+              category="Données"
+            >
+              <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition">
+                <Upload className="w-3.5 h-3.5 text-slate-600" />
+                <span>Importer Données</span>
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
+              </label>
+            </ContextTooltip>
+
+            {/* Exporter Dropdown Menu */}
+            <div className="relative">
+              <ContextTooltip
+                title="Options d'Exportation"
+                content="Générer des fichiers Excel, commandes ZPL directes pour imprimantes Zebra, ou fiches PowerPoint"
+                category="Export"
+              >
+                <button
+                  onClick={() => setExportDropdownOpen((prev) => !prev)}
+                  className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Exporter</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              </ContextTooltip>
+
+              {exportDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setExportDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1.5 animate-in fade-in-50 duration-100">
+                    <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
+                      Formats d'Exportation
+                    </div>
+                    <button
+                      onClick={() => {
+                        setExportDropdownOpen(false);
+                        handleExportExcel();
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 rounded-lg flex items-center gap-2.5 transition"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="font-semibold">Tableur Excel (.xlsx)</div>
+                        <div className="text-[10px] text-slate-400">Catalogue articles & paliers</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setExportDropdownOpen(false);
+                        setShowZplModal(true);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 rounded-lg flex items-center gap-2.5 transition"
+                    >
+                      <Cpu className="w-4 h-4 text-slate-800 shrink-0" />
+                      <div>
+                        <div className="font-semibold">Zebra / TSC (.zpl)</div>
+                        <div className="text-[10px] text-slate-400">Flux thermique direct industriel</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setExportDropdownOpen(false);
+                        handleExportPptx();
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-amber-50 hover:text-amber-900 rounded-lg flex items-center gap-2.5 transition"
+                    >
+                      <Presentation className="w-4 h-4 text-amber-600 shrink-0" />
+                      <div>
+                        <div className="font-semibold">PowerPoint (.pptx)</div>
+                        <div className="text-[10px] text-slate-400">Diaporama & fiches de rayon</div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <ContextTooltip
+              title="Impression Directe Navigateur"
+              content="Envoyer directement la planche d'étiquettes vers l'imprimante laser ou thermique par défaut"
+              category="Production"
+            >
+              <button
+                onClick={handleDirectPrint}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+              >
+                <Printer className="w-3.5 h-3.5 text-white" />
+                <span>Imprimer Direct</span>
+              </button>
+            </ContextTooltip>
+
+            <ContextTooltip
+              title="Télécharger Planche PDF HD"
+              content="Générer un PDF vectoriel haute définition 300 DPI avec traits de coupe et repères de pose"
+              category="Production"
+            >
+              <button
+                onClick={handleGeneratePdf}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Télécharger PDF Planche</span>
+              </button>
+            </ContextTooltip>
           </div>
         </div>
 
-        {/* View Switcher Tabs */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
-          <button
-            onClick={() => setActiveTab('preview')}
-            className={`px-3 py-1 font-semibold rounded-md flex items-center gap-1.5 transition ${
-              activeTab === 'preview' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Aperçu Étiquette</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('imposition')}
-            className={`px-3 py-1 font-semibold rounded-md flex items-center gap-1.5 transition ${
-              activeTab === 'imposition' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Grid className="w-3.5 h-3.5" />
-            <span>Imposition Planche</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('data')}
-            className={`px-3 py-1 font-semibold rounded-md flex items-center gap-1.5 transition ${
-              activeTab === 'data' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Tableau Articles ({products.length})</span>
-          </button>
-        </div>
+        {/* Tier 2: Ergonomic 3-Phase Workflow Ribbon */}
+        <div className="px-4 py-2 bg-slate-50 flex items-center justify-between gap-4 overflow-x-auto text-xs">
+          <div className="flex items-center gap-6">
+            {/* Phase 1: Données & Paliers */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
+                1. Données :
+              </span>
+              <ContextTooltip
+                title="Catalogue Données"
+                content="Gestion du catalogue de produits et des colonnes de données dynamiques"
+                category="Données"
+              >
+                <button
+                  onClick={() => setActiveTab('data')}
+                  className={`px-2.5 py-1 font-semibold rounded-lg flex items-center gap-1.5 transition ${
+                    activeTab === 'data'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Catalogue ({products.length})</span>
+                </button>
+              </ContextTooltip>
+              <ContextTooltip
+                title="Tarification Dégressive & Paliers"
+                content="Configurer les remises sur quantité (ex: 2e à -50%, lot de 3) et prix unitaire au litre/kg"
+                category="Tarification"
+              >
+                <button
+                  onClick={() => setActiveTab('tiers')}
+                  className={`px-2.5 py-1 font-semibold rounded-lg flex items-center gap-1.5 transition ${
+                    activeTab === 'tiers'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                  }`}
+                >
+                  <TrendingDown className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Paliers & Dégressif</span>
+                </button>
+              </ContextTooltip>
+              <ContextTooltip
+                title="Clustering Root Tool"
+                content="Moteur sémantique d'assortiments : regroupe automatiquement les variantes d'un produit (parfums, teintes, formats) pour une étiquette unifiée"
+                category="Clustering Sémantique"
+              >
+                <button
+                  onClick={() => setActiveTab('clustering')}
+                  className={`px-2.5 py-1 font-semibold rounded-lg flex items-center gap-1.5 transition ${
+                    activeTab === 'clustering'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                  }`}
+                >
+                  <Boxes className="w-3.5 h-3.5 text-purple-500" />
+                  <span>Assortiments & Variantes</span>
+                </button>
+              </ContextTooltip>
+            </div>
 
-        {/* Export & Print actions */}
-        <div className="flex items-center gap-2">
-          <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition">
-            <Upload className="w-3.5 h-3.5 text-slate-600" />
-            <span>Importer Excel / CSV</span>
-            <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
-          </label>
-          <button
-            onClick={handleExportExcel}
-            className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
-            title="Exporter catalogue au format Excel"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Export Excel</span>
-          </button>
-          <button
-            onClick={() => setShowZplModal(true)}
-            className="px-3 py-1.5 bg-slate-900 hover:bg-black text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
-            title="Exporter au format ZPL pour imprimantes thermiques Zebra/TSC"
-          >
-            <Cpu className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Export Thermique (ZPL)</span>
-          </button>
-          <button
-            onClick={handleExportPptx}
-            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
-            title="Exporter planche en diapositives PowerPoint éditables (.pptx)"
-          >
-            <Presentation className="w-3.5 h-3.5 text-white" />
-            <span>Export PowerPoint</span>
-          </button>
-          <button
-            onClick={handleDirectPrint}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
-            title="Impression directe sur imprimante physique"
-          >
-            <Printer className="w-3.5 h-3.5 text-white" />
-            <span>Imprimer Direct</span>
-          </button>
-          <button
-            onClick={handleGeneratePdf}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
-            title="Télécharger planche complète en PDF"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Télécharger PDF</span>
-          </button>
+            <div className="h-4 w-px bg-slate-300 hidden md:block" />
+
+            {/* Phase 2: Signalétique & Imposition */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
+                2. Mise en Page :
+              </span>
+              <ContextTooltip
+                title="Panneaux Multi-Slots & Règles"
+                content="Banderoles et bacs soldeurs multi-produits avec affectation conditionnelle intelligente"
+                category="Mise en Page"
+              >
+                <button
+                  onClick={() => setActiveTab('multislot')}
+                  className={`px-2.5 py-1 font-semibold rounded-lg flex items-center gap-1.5 transition ${
+                    activeTab === 'multislot'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Multi-Slots & Règles</span>
+                </button>
+              </ContextTooltip>
+              <ContextTooltip
+                title="Imposition Planche & Gabarits Avery"
+                content="Calcul automatique du nombre d'étiquettes par feuille A4/A3, marges, caniveaux et repères"
+                category="Imposition"
+              >
+                <button
+                  onClick={() => setActiveTab('imposition')}
+                  className={`px-2.5 py-1 font-semibold rounded-lg flex items-center gap-1.5 transition ${
+                    activeTab === 'imposition'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                  }`}
+                >
+                  <Grid className="w-3.5 h-3.5" />
+                  <span>Imposition Planche</span>
+                </button>
+              </ContextTooltip>
+              <ContextTooltip
+                title="Calibration Blueprint & Repérage"
+                content="Ajustement fin au millimètre par rapport aux supports pré-imprimés physiques"
+                category="Calibration"
+              >
+                <button
+                  onClick={() => setActiveTab('blueprint')}
+                  className={`px-2.5 py-1 font-semibold rounded-lg flex items-center gap-1.5 transition ${
+                    activeTab === 'blueprint'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                  }`}
+                >
+                  <Compass className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Calibration Blueprint</span>
+                </button>
+              </ContextTooltip>
+            </div>
+
+            <div className="h-4 w-px bg-slate-300 hidden md:block" />
+
+            {/* Phase 3: BÀT & Validation */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
+                3. BÀT :
+              </span>
+              <ContextTooltip
+                title="Aperçu BÀT Unitaire"
+                content="Bon à Tirer unitaire avec carrousel de défilement article par article et validation visuelle"
+                category="Contrôle Qualité"
+              >
+                <button
+                  onClick={() => setActiveTab('preview')}
+                  className={`px-2.5 py-1 font-semibold rounded-lg flex items-center gap-1.5 transition ${
+                    activeTab === 'preview'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Aperçu BÀT Unitaire</span>
+                </button>
+              </ContextTooltip>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-slate-400 font-mono hidden lg:block">
+            Workflow E-Studio v2.4 • Prêt pour l'impression
+          </div>
         </div>
       </header>
 
@@ -619,7 +831,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
                       <div className="flex items-center justify-between">
                         <span className="font-mono text-[10px] text-slate-400 font-bold">{p.PARTNO}</span>
                         <span className="font-bold text-xs text-slate-900">
-                          {p.SELLING_PRICE.toLocaleString('fr-FR')} F
+                          {(Number(p.SELLING_PRICE) || 0).toLocaleString('fr-FR')} F
                         </span>
                       </div>
                       <p className="font-semibold text-xs text-slate-800 truncate mt-0.5">{p.ITEMNAME}</p>
@@ -1234,6 +1446,45 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
             </table>
           </div>
         </div>
+      )}
+
+      {/* Tab 4: Paliers Tarifaires & Ingestion Dégressive Studio */}
+      {activeTab === 'tiers' && (
+        <TierPricingStudio
+          products={products}
+          onUpdateProduct={handleUpdateSingleProduct}
+          onBatchUpdateProducts={setProducts}
+        />
+      )}
+
+      {/* Tab 5: Regroupement & Assortiments Studio */}
+      {activeTab === 'clustering' && (
+        <ProductClusteringStudio
+          products={products}
+          onAddVirtualAssortment={(virtualItem) => setProducts([virtualItem, ...products])}
+          onRemoveProduct={(id) => setProducts(products.filter((p) => p.id !== id))}
+          onUpdateProduct={handleUpdateSingleProduct}
+        />
+      )}
+
+      {/* Tab 6: Signalétique Multi-Slots & Attribution par Règles */}
+      {activeTab === 'multislot' && (
+        <MultiSlotSignageStudio
+          products={products}
+          templates={DEFAULT_TEMPLATES}
+          onUpdateProduct={handleUpdateSingleProduct}
+          onSelectTemplateForCanvas={() => {}}
+        />
+      )}
+
+      {/* Tab 7: Calibration d'Imposition Blueprint Stock */}
+      {activeTab === 'blueprint' && (
+        <ImpositionCalibrationBoard
+          template={template}
+          products={products}
+          impositionConfig={impositionConfig}
+          onUpdateImpositionConfig={setImpositionConfig}
+        />
       )}
 
       {/* Excel / CSV Built-in Data Mapping Modal */}
