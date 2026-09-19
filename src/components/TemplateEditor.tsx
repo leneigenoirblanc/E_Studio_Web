@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LabelTemplate, TemplateItem, ProductRecord } from '../types';
 import { LabelRenderer } from './LabelRenderer';
 import { PropertyInspector } from './PropertyInspector';
+import { LiveValidationSidebar } from './LiveValidationSidebar';
 import { FindReplaceModal } from './FindReplaceModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { CanvasRulers } from './CanvasRulers';
@@ -1908,7 +1909,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         </div>
       </div>
 
-      {/* Main Workspace Area: Canvas + Property Inspector */}
+      {/* Main Workspace Area: 3-Pane Layout (Left Inspector, Center Canvas, Right Live Validation) */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Toast feedback for Copy/Paste style */}
         {styleToast && (
@@ -1918,7 +1919,23 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
         )}
 
-        {/* Canvas Center Stage */}
+        {/* 1. Left Persistent Property Inspector Dock */}
+        <PropertyInspector
+          selectedItems={selectedItems}
+          allItems={template.items}
+          onUpdateItem={handleUpdateItem}
+          onUpdateMultipleItems={handleUpdateMultipleItems}
+          onDeleteItem={handleDeleteItem}
+          onDeleteMultipleItems={handleDeleteMultipleItems}
+          onDuplicateItem={handleDuplicateItem}
+          onDuplicateMultipleItems={handleDuplicateMultipleItems}
+          onReorderItem={handleReorderItem}
+          copiedStyle={copiedStyle}
+          onCopyStyle={handleCopyStyle}
+          onPasteStyle={handlePasteStyle}
+        />
+
+        {/* 2. Central Responsive Canvas Stage */}
         <div
           ref={canvasContainerRef}
           onMouseDown={handleCanvasMouseDown}
@@ -2005,33 +2022,25 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               </div>
             )}
           </div>
+
+          {/* Floating Viewport Zoom & Navigation Toolbar (docked bottom center) */}
+          <ViewportZoomToolbar
+            zoom={zoom}
+            onZoomChange={(newZoom, anchorPoint) => handleZoomWithAnchor(newZoom, anchorPoint)}
+            onFitToSheet={handleFitToSheet}
+            onFitToWidth={handleFitToWidth}
+            activeTool={activeTool}
+            onToolChange={setActiveTool}
+            zoomMethod={uiPreferences.zoomMethod}
+          />
         </div>
 
-        {/* Floating Viewport Zoom & Navigation Toolbar */}
-        <ViewportZoomToolbar
-          zoom={zoom}
-          onZoomChange={(newZoom, anchorPoint) => handleZoomWithAnchor(newZoom, anchorPoint)}
-          onFitToSheet={handleFitToSheet}
-          onFitToWidth={handleFitToWidth}
-          activeTool={activeTool}
-          onToolChange={setActiveTool}
-          zoomMethod={uiPreferences.zoomMethod}
-        />
-
-        {/* Right Inspector Dock with full Multi-Selection Support */}
-        <PropertyInspector
-          selectedItems={selectedItems}
-          allItems={template.items}
-          onUpdateItem={handleUpdateItem}
-          onUpdateMultipleItems={handleUpdateMultipleItems}
-          onDeleteItem={handleDeleteItem}
-          onDeleteMultipleItems={handleDeleteMultipleItems}
-          onDuplicateItem={handleDuplicateItem}
-          onDuplicateMultipleItems={handleDuplicateMultipleItems}
-          onReorderItem={handleReorderItem}
-          copiedStyle={copiedStyle}
-          onCopyStyle={handleCopyStyle}
-          onPasteStyle={handlePasteStyle}
+        {/* 3. Right Persistent Live Validation Sidebar */}
+        <LiveValidationSidebar
+          template={template}
+          onApplyTemplateFix={(updated) => pushState(updated)}
+          onSelectItem={(id) => setSelectedItemIds([id])}
+          selectedItemId={selectedItemIds[0] || null}
         />
       </div>
 

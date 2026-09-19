@@ -336,6 +336,72 @@ export interface CalibrationImageConfig {
   print_in_output: boolean; // whether to include in print/PDF output or keep as reference overlay only
 }
 
+export type ColorPaletteMode = 'full_color' | 'eink_bw' | 'eink_bwr' | 'eink_bwy' | 'eink_4color' | 'monochrome';
+export type DitheringMethod = 'none' | 'floyd_steinberg' | 'atkinson' | 'ordered';
+
+export interface CustomFont {
+  id: string;
+  name: string;
+  family: string;
+  source: 'google' | 'system' | 'custom_upload';
+  url?: string;
+  category?: 'sans-serif' | 'serif' | 'display' | 'monospace' | 'handwriting';
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  user: string;
+  action: string;
+  product_id?: string;
+  product_name?: string;
+  template_name?: string;
+  details: string;
+  previous_snapshot?: any;
+  new_snapshot?: any;
+}
+
+export interface EcoRenderingConfig {
+  enabled: boolean;
+  defer_minor_text_edits: boolean;
+  immediate_trigger_fields: string[]; // e.g. ['SELLING_PRICE', 'PROMOPRICE', 'PRODUCT_SCAN']
+  scheduled_window: 'weekly_batch' | 'nightly' | 'manual';
+}
+
+export type RulerPositionMode = 'floating' | 'window' | 'canvas' | 'sheet' | 'template';
+
+export interface RulerSettings {
+  mode: RulerPositionMode;
+  visible: boolean;
+  unit: 'mm' | 'cm' | 'inch' | 'pt';
+  step_mm: number; // 1, 5, 10
+  show_guides: boolean;
+}
+
+export interface DualPriceDisplayConfig {
+  enabled: boolean;
+  mode: 'ht_and_ttc' | 'dual_currency';
+  tax_rate?: number; // e.g. 20 for 20%
+  secondary_currency?: string; // e.g. "USD"
+  exchange_rate?: number; // e.g. 1.08
+  layout: 'side_by_side' | 'stacked';
+  primary_label?: string; // e.g. "TTC" or "EUR"
+  secondary_label?: string; // e.g. "HT" or "$"
+  secondary_font_size_ratio?: number; // e.g. 0.65
+}
+
+export interface BrandAwareConfig {
+  strip_brand_from_name: boolean;
+  strip_brand_from_description: boolean;
+  brand_placeholder_text?: string;
+}
+
+export interface BatchSpoolConfig {
+  batch_size: number; // e.g. 500
+  group_by_field: 'DEPT_NAME' | 'CATEGORY_NAME' | 'STORE_NAME' | 'VENDOR_NAME' | 'none';
+  sort_order: 'aisle_order' | 'alphabetical' | 'sku_order';
+}
+
 export interface LabelTemplate {
   schema_version: number;
   name: string;
@@ -352,6 +418,10 @@ export interface LabelTemplate {
   background_image_locked?: boolean;
   background_image_in_output?: boolean;
   calibration_image?: CalibrationImageConfig | null;
+  blueprint?: BlueprintOverlayConfig | null;
+  color_palette_mode?: ColorPaletteMode;
+  dithering_method?: DitheringMethod;
+  brand_aware?: BrandAwareConfig;
   default_imposition?: ImpositionConfig;
   items: TemplateItem[];
 }
@@ -530,4 +600,19 @@ export interface ImpositionCalculation {
   vertical_offset_mm: number;
   label_total_w_mm: number;
   label_total_h_mm: number;
+}
+
+export interface TooltipSettings {
+  enabled: boolean;
+  hoverDelayMs: number; // 100ms - 2000ms (default 400ms)
+  opacityPercent: number; // 50% - 100% (default 95%)
+  autoDismissSec: number; // 0 = Infinite, or 2 - 15 seconds (default 6s)
+}
+
+export type ZoomMethod = 'pointer' | 'keyboard' | 'slider' | 'marquee';
+
+export interface UiPreferences {
+  tooltipSettings: TooltipSettings;
+  zoomMethod: ZoomMethod;
+  defaultZoom: number;
 }

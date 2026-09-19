@@ -5,12 +5,16 @@ import { HomeDashboard } from './components/HomeDashboard';
 import { TemplateEditor } from './components/TemplateEditor';
 import { GenerationWorkspace } from './components/GenerationWorkspace';
 import { NewGabaritWizard } from './components/NewGabaritWizard';
-import { PythonCodeModal } from './components/PythonCodeModal';
 import { OmniChannelStudioModal } from './components/OmniChannelStudioModal';
+import { TooltipProvider, useTooltip } from './context/TooltipContext';
+import { AccessibilityPreferencesModal } from './components/AccessibilityPreferencesModal';
+import { FontManagerModal } from './components/FontManagerModal';
+import { AuditTrailModal } from './components/AuditTrailModal';
 
 const STORAGE_KEY = 'estudio_templates_v1';
 
-export function App() {
+function AppContent() {
+  const { isPreferencesModalOpen, closePreferencesModal } = useTooltip();
   const [templates, setTemplates] = useState<LabelTemplate[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -29,8 +33,9 @@ export function App() {
   const [currentView, setCurrentView] = useState<'home' | 'editor' | 'generation'>('home');
   const [activeTemplate, setActiveTemplate] = useState<LabelTemplate | null>(null);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [isPythonModalOpen, setIsPythonModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
+  const [isFontManagerOpen, setIsFontManagerOpen] = useState(false);
+  const [isAuditTrailOpen, setIsAuditTrailOpen] = useState(false);
 
   // Persist templates to localStorage
   useEffect(() => {
@@ -114,8 +119,9 @@ export function App() {
           onDuplicateTemplate={handleDuplicateTemplate}
           onDeleteTemplate={handleDeleteTemplate}
           onImportTemplate={handleImportTemplate}
-          onOpenPythonModal={() => setIsPythonModalOpen(true)}
           onOpenRulesModal={() => setIsRulesModalOpen(true)}
+          onOpenAuditLogs={() => setIsAuditTrailOpen(true)}
+          onOpenFontManager={() => setIsFontManagerOpen(true)}
         />
       )}
 
@@ -146,6 +152,18 @@ export function App() {
         currentTemplateName={activeTemplate?.name}
       />
 
+      {/* Font Manager Modal */}
+      <FontManagerModal
+        isOpen={isFontManagerOpen}
+        onClose={() => setIsFontManagerOpen(false)}
+      />
+
+      {/* Audit Trail Modal */}
+      <AuditTrailModal
+        isOpen={isAuditTrailOpen}
+        onClose={() => setIsAuditTrailOpen(false)}
+      />
+
       {/* New Gabarit Wizard Modal */}
       <NewGabaritWizard
         isOpen={isWizardOpen}
@@ -153,12 +171,20 @@ export function App() {
         onCreate={handleCreateNewTemplate}
       />
 
-      {/* Python Source Code & Desktop GUI Modal */}
-      <PythonCodeModal
-        isOpen={isPythonModalOpen}
-        onClose={() => setIsPythonModalOpen(false)}
+      {/* Accessibility & UI Preferences Modal */}
+      <AccessibilityPreferencesModal
+        isOpen={isPreferencesModalOpen}
+        onClose={closePreferencesModal}
       />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <TooltipProvider>
+      <AppContent />
+    </TooltipProvider>
   );
 }
 

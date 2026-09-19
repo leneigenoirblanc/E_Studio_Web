@@ -18,6 +18,8 @@ import {
   FileCode,
   Cpu,
   Settings,
+  History,
+  Type,
 } from 'lucide-react';
 
 interface HomeDashboardProps {
@@ -28,8 +30,9 @@ interface HomeDashboardProps {
   onDuplicateTemplate: (template: LabelTemplate) => void;
   onDeleteTemplate: (templateName: string) => void;
   onImportTemplate: (template: LabelTemplate) => void;
-  onOpenPythonModal: () => void;
   onOpenRulesModal: () => void;
+  onOpenAuditLogs?: () => void;
+  onOpenFontManager?: () => void;
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
@@ -40,8 +43,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onDuplicateTemplate,
   onDeleteTemplate,
   onImportTemplate,
-  onOpenPythonModal,
   onOpenRulesModal,
+  onOpenAuditLogs,
+  onOpenFontManager,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { openPreferencesModal } = useTooltip();
@@ -89,6 +93,34 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
           <div className="flex items-center gap-2.5">
             <ContextTooltip
+              title="Polices & Typographies"
+              content="Gérer les polices web et typographies installées pour les étiquettes"
+              category="Typographie"
+            >
+              <button
+                onClick={onOpenFontManager}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+              >
+                <Type className="w-3.5 h-3.5 text-slate-600" />
+                <span>Polices</span>
+              </button>
+            </ContextTooltip>
+
+            <ContextTooltip
+              title="Journal d'Audit & Traçabilité"
+              content="Consulter les logs et l'historique complet des actions effectuées"
+              category="Traçabilité"
+            >
+              <button
+                onClick={onOpenAuditLogs}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+              >
+                <History className="w-3.5 h-3.5 text-slate-600" />
+                <span>Audit</span>
+              </button>
+            </ContextTooltip>
+
+            <ContextTooltip
               title="Préférences & Accessibilité"
               content="Configurer le système d'info-bulles contextuelles (délai, opacité) et le mode de zoom par défaut"
               category="Système"
@@ -113,20 +145,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               >
                 <Cpu className="w-4 h-4 text-blue-200" />
                 <span>Règles Omni-Canal (ESL / Print / LCD)</span>
-              </button>
-            </ContextTooltip>
-
-            <ContextTooltip
-              title="Application Bureau Python"
-              content="Télécharger ou exécuter la version native Python (PySide6 / ReportLab) avec génération PDF ultra-rapide"
-              category="Desktop"
-            >
-              <button
-                onClick={onOpenPythonModal}
-                className="px-3.5 py-2 bg-amber-50 border border-amber-300 hover:bg-amber-100 text-amber-900 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
-              >
-                <FileCode className="w-4 h-4 text-amber-700" />
-                <span>Version Python (PySide6)</span>
               </button>
             </ContextTooltip>
 
