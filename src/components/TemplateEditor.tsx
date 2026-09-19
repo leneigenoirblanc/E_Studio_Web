@@ -2,10 +2,14 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LabelTemplate, TemplateItem, ProductRecord } from '../types';
 import { LabelRenderer } from './LabelRenderer';
 import { PropertyInspector } from './PropertyInspector';
-import { LiveValidationSidebar } from './LiveValidationSidebar';
+import { SmartNavTreeSidebar } from './SmartNavTreeSidebar';
+import { ContextualFloatingRibbon } from './ContextualFloatingRibbon';
+import { FloatingDiagnosticCapsule } from './FloatingDiagnosticCapsule';
+import { DiagnosticHeatmapOverlay } from './DiagnosticHeatmapOverlay';
 import { FindReplaceModal } from './FindReplaceModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { CanvasRulers } from './CanvasRulers';
+import { FloatingRulerHUD } from './FloatingRulerHUD';
 import { SAMPLE_PRODUCTS } from '../sampleData';
 import {
   createObjectInstance,
@@ -101,8 +105,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [history, setHistory] = useState<LabelTemplate[]>([initialTemplate]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
-  const { uiPreferences, openPreferencesModal } = useTooltip();
-  const [zoom, setZoom] = useState(uiPreferences.defaultZoom || 1.25);
+  const { uiPreferences, updateUIPreferences, openPreferencesModal, rulerSettings } = useTooltip();
+  const [zoom, setZoom] = useState(uiPreferences?.defaultZoom || 1.25);
   const [activeTool, setActiveTool] = useState<'select' | 'marquee' | 'pan'>('select');
 
   // Marquee Drag-to-Zoom State
@@ -125,6 +129,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [previewDataIndex, setPreviewDataIndex] = useState<number | null>(null);
   const [savedNotification, setSavedNotification] = useState(false);
 
+  // Context-Driven Adaptive Workspace & Diagnostic States
+  const [isNavCollapsed, setIsNavCollapsed] = useState(false);
+  const [isInspectorDrawerOpen, setIsInspectorDrawerOpen] = useState(true);
+  const [isHeatmapActive, setIsHeatmapActive] = useState(false);
+
   // Modals state
   const [showCalibrationModal, setShowCalibrationModal] = useState(false);
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
@@ -140,6 +149,24 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   // Dragging & Marquee selection states
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const labelCanvasRef = useRef<HTMLDivElement>(null);
+
+  const [canvasOffsetPx, setCanvasOffsetPx] = useState({ left: 0, top: 0 });
+
+  useEffect(() => {
+    const updateOffset = () => {
+      if (labelCanvasRef.current && canvasContainerRef.current) {
+        const labelRect = labelCanvasRef.current.getBoundingClientRect();
+        const containerRect = canvasContainerRef.current.getBoundingClientRect();
+        setCanvasOffsetPx({
+          left: labelRect.left - containerRect.left,
+          top: labelRect.top - containerRect.top,
+        });
+      }
+    };
+    updateOffset();
+    window.addEventListener('resize', updateOffset);
+    return () => window.removeEventListener('resize', updateOffset);
+  }, [zoom, template.width_mm, template.height_mm]);
 
   // Pointer-Centric & Anchor Zoom Engine
   const handleZoomWithAnchor = useCallback(
@@ -218,7 +245,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     if (!container) return;
 
     const handleWheel = (e: WheelEvent) => {
-      const isPointerCentric = uiPreferences.zoomMethod === 'pointer';
+      const isPointerCentric = uiPreferences?.zoomMethod === 'pointer';
       const isCtrlKey = e.ctrlKey || e.metaKey;
 
       if (isPointerCentric || isCtrlKey) {
@@ -233,7 +260,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [zoom, uiPreferences.zoomMethod, handleZoomWithAnchor]);
+  }, [zoom, uiPreferences?.zoomMethod, handleZoomWithAnchor]);
 
   const [isDragging, setIsDragging] = useState(false);
   const [hasMovedDuringDrag, setHasMovedDuringDrag] = useState(false);
@@ -458,12 +485,113 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     }
   };
 
-  const addItem = (type: TemplateItem['type']) => {
+  const addItem = (type: TemplateItem['type'] | string, customField?: string) => {
     const id = `item_${Date.now()}`;
     let newItem: TemplateItem;
 
     const centerX = Math.max(2, (template.width_mm - 40) / 2);
     const centerY = Math.max(2, (template.height_mm - 15) / 2);
+
+    if (customField) {
+      if (type === 'barcode') {
+        newItem = {
+          id,
+          type: 'barcode',
+          x_mm: centerX,
+          y_mm: centerY,
+          w_mm: 48.0,
+          h_mm: 16.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          code: '3250390123456',
+          barcode_type: 'ean13',
+          show_text: true,
+          bar_color: '#000000',
+          binding_key: customField,
+        };
+      } else if (type === 'qrcode') {
+        newItem = {
+          id,
+          type: 'qrcode',
+          x_mm: centerX,
+          y_mm: centerY,
+          w_mm: 20.0,
+          h_mm: 20.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          content: 'https://monmagasin.fr',
+          module_color: '#000000',
+          background_color: '#ffffff',
+          binding_key: customField,
+        };
+      } else if (type === 'price' || type === 'price_block') {
+        newItem = {
+          id,
+          type: 'price_block',
+          x_mm: centerX,
+          y_mm: centerY,
+          w_mm: 36.0,
+          h_mm: 14.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          binding_key: customField,
+          currency_symbol: '€',
+          currency_position: 'after',
+          integer_style: {
+            font_size_pt: 24.0,
+            font_weight: 'bold',
+            text_color: customField === 'DISCPRICE' ? '#dc2626' : '#0f172a',
+          },
+          decimal_style: {
+            font_size_pt: 12.0,
+            font_weight: 'bold',
+            text_color: customField === 'DISCPRICE' ? '#dc2626' : '#0f172a',
+          },
+          currency_style: {
+            font_size_pt: 10.0,
+            font_weight: 'bold',
+            text_color: customField === 'DISCPRICE' ? '#dc2626' : '#0f172a',
+          },
+          alignment: 'right',
+          valign: 'middle',
+        };
+      } else {
+        newItem = {
+          id,
+          type: 'text',
+          x_mm: centerX,
+          y_mm: centerY,
+          w_mm: 45.0,
+          h_mm: 12.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          text: `{{${customField}}}`,
+          font_family: 'Plus Jakarta Sans',
+          font_size_pt: 12.0,
+          font_weight: 'bold',
+          font_style: 'normal',
+          text_decoration: 'none',
+          text_color: '#0f172a',
+          alignment: 'left',
+          valign: 'top',
+          wrap: true,
+          overflow: 'autofit_shrink',
+          letter_spacing_pt: 0,
+          line_height_multiplier: 1.25,
+          text_transform: 'none',
+          binding_key: customField,
+        };
+      }
+      const next = { ...template, items: [...template.items, newItem] };
+      setSelectedItemIds([id]);
+      setIsInspectorDrawerOpen(true);
+      pushState(next);
+      return;
+    }
 
     switch (type) {
       case 'text':
@@ -840,6 +968,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         setActiveTool('marquee');
       } else if (e.key.toLowerCase() === 'h') {
         setActiveTool('pan');
+      } else if (e.key.toLowerCase() === 'm') {
+        setIsHeatmapActive((prev) => !prev);
+      } else if (e.key === '[' || e.key === ']') {
+        if (e.key === '[') setIsNavCollapsed((prev) => !prev);
+        if (e.key === ']') setIsInspectorDrawerOpen((prev) => !prev);
       }
     }
 
@@ -1022,7 +1155,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     setMarqueeStart({ x_mm: clickX_mm, y_mm: clickY_mm });
     setMarqueeRect({ x_mm: clickX_mm, y_mm: clickY_mm, w_mm: 0, h_mm: 0 });
 
-    if (!e.shiftKey) {
+    if (!e.shiftKey && !uiPreferences?.lockPropertyInspector) {
       setSelectedItemIds([]);
     }
   };
@@ -1826,11 +1959,38 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               <Crosshair className="w-3 h-3 text-amber-600" />
               <span>Calibrer</span>
             </button>
+
+            {/* Diagnostic Heatmap Direct Toggle */}
+            <button
+              onClick={() => setIsHeatmapActive(!isHeatmapActive)}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold flex items-center gap-1 transition ${
+                isHeatmapActive
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              title="Activer/Désactiver le calque Heatmap de diagnostic visuel (Touche M)"
+            >
+              <span className={`w-2 h-2 rounded-full ${isHeatmapActive ? 'bg-slate-950' : 'bg-amber-500'}`} />
+              <span>Heatmap</span>
+            </button>
           </div>
         </div>
 
         {/* Data Simulator & Zoom */}
         <div className="flex items-center gap-2">
+          {/* Toggle Inspector Drawer */}
+          <button
+            onClick={() => setIsInspectorDrawerOpen(!isInspectorDrawerOpen)}
+            className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border ${
+              isInspectorDrawerOpen && selectedItems.length > 0
+                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+            title="Afficher/Masquer le tiroir d'inspection contextuel"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Inspecteur</span>
+          </button>
           {/* Data Binding Simulator */}
           <div className="flex items-center gap-1 bg-white border border-slate-200/80 rounded-lg px-2 py-1 shadow-2xs">
             <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
@@ -1909,7 +2069,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         </div>
       </div>
 
-      {/* Main Workspace Area: 3-Pane Layout (Left Inspector, Center Canvas, Right Live Validation) */}
+      {/* Main Workspace Area: Context-Adaptive 2-Pane Layout + Unified Diagnostic Layer */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Toast feedback for Copy/Paste style */}
         {styleToast && (
@@ -1919,35 +2079,82 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
         )}
 
-        {/* 1. Left Persistent Property Inspector Dock */}
-        <PropertyInspector
-          selectedItems={selectedItems}
-          allItems={template.items}
-          onUpdateItem={handleUpdateItem}
-          onUpdateMultipleItems={handleUpdateMultipleItems}
+        {/* 1. Left Smart Navigation & Structural Tree (Collapsible Dock) */}
+        <SmartNavTreeSidebar
+          template={template}
+          selectedItemIds={selectedItemIds}
+          onSelectItem={(id, multi) => {
+            if (multi) {
+              setSelectedItemIds((prev) =>
+                prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+              );
+            } else {
+              setSelectedItemIds([id]);
+            }
+            setIsInspectorDrawerOpen(true);
+          }}
+          onUpdateItem={(id, patch) => {
+            const item = template.items.find((i) => i.id === id);
+            if (item) handleUpdateItem({ ...item, ...patch } as TemplateItem);
+          }}
           onDeleteItem={handleDeleteItem}
-          onDeleteMultipleItems={handleDeleteMultipleItems}
           onDuplicateItem={handleDuplicateItem}
-          onDuplicateMultipleItems={handleDuplicateMultipleItems}
-          onReorderItem={handleReorderItem}
-          copiedStyle={copiedStyle}
-          onCopyStyle={handleCopyStyle}
-          onPasteStyle={handlePasteStyle}
+          onReorderItem={(id, dir) => handleReorderItem(id, dir === 'up' ? 1 : -1)}
+          onAddNewItem={(type, customField) => addItem(type as any, customField)}
+          isCollapsed={uiPreferences?.lockLeftSidebar ? false : isNavCollapsed}
+          onToggleCollapse={() => {
+            if (uiPreferences?.lockLeftSidebar) return;
+            setIsNavCollapsed(!isNavCollapsed);
+          }}
         />
 
-        {/* 2. Central Responsive Canvas Stage */}
+        {/* 2. Central Responsive Canvas Stage (The Hero Zone - up to 85% width) */}
         <div
           ref={canvasContainerRef}
           onMouseDown={handleCanvasMouseDown}
           className="flex-1 overflow-auto p-12 flex items-center justify-center relative cursor-default"
           style={{
-            backgroundColor: '#e2e8f0',
-            backgroundImage:
-              'radial-gradient(#cbd5e1 1.5px, transparent 1.5px), radial-gradient(#cbd5e1 1.5px, #e2e8f0 1.5px)',
+            backgroundColor: isHeatmapActive ? '#090d16' : '#e2e8f0',
+            backgroundImage: isHeatmapActive
+              ? 'radial-gradient(#1e293b 1.5px, transparent 1.5px), radial-gradient(#1e293b 1.5px, #090d16 1.5px)'
+              : 'radial-gradient(#cbd5e1 1.5px, transparent 1.5px), radial-gradient(#cbd5e1 1.5px, #e2e8f0 1.5px)',
             backgroundSize: '24px 24px',
             backgroundPosition: '0 0, 12px 12px',
           }}
         >
+          {/* Independent Draggable Floating Ruler HUD */}
+          <FloatingRulerHUD
+            width_mm={template.width_mm}
+            height_mm={template.height_mm}
+            mousePosMm={mousePosMm}
+          />
+
+          {/* Floating On-Canvas Diagnostic Capsule (HUD Top Center) */}
+          <FloatingDiagnosticCapsule
+            template={template}
+            onApplyTemplateFix={(updated) => pushState(updated)}
+            onSelectItem={(id) => {
+              setSelectedItemIds([id]);
+              setIsInspectorDrawerOpen(true);
+            }}
+            isHeatmapActive={isHeatmapActive}
+            onToggleHeatmap={() => setIsHeatmapActive(!isHeatmapActive)}
+          />
+
+          {/* Viewport Frame Rulers (Anchored to top and left of viewport container) */}
+          {showRulers && uiPreferences?.rulerMode === 'window_frame' && (
+            <CanvasRulers
+              width_mm={template.width_mm}
+              height_mm={template.height_mm}
+              zoom={zoom}
+              mousePosMm={mousePosMm}
+              rulerMode="window_frame"
+              canvasOffsetPx={canvasOffsetPx}
+              showTopRuler={rulerSettings.showHorizontal}
+              showLeftRuler={rulerSettings.showVertical}
+            />
+          )}
+
           {/* Label Canvas Frame */}
           <div
             ref={labelCanvasRef}
@@ -1968,15 +2175,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               handleCanvasMouseDown(e);
             }}
           >
-            {/* Rulers Overlay */}
-            {showRulers && (
+            {/* Sheet Margins Workspace Rulers */}
+            {showRulers && uiPreferences?.rulerMode === 'sheet_margins' && rulerSettings.showSheet !== false && (
               <CanvasRulers
                 width_mm={template.width_mm}
                 height_mm={template.height_mm}
                 zoom={zoom}
                 mousePosMm={mousePosMm}
+                rulerMode="sheet_margins"
+                rulerOffsetPx={uiPreferences?.rulerOffsetPx || 40}
+                showTopRuler={rulerSettings.showHorizontal}
+                showLeftRuler={rulerSettings.showVertical}
               />
             )}
+
             <LabelRenderer
               template={template}
               record={currentPreviewRecord}
@@ -1991,6 +2203,14 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               interactive={true}
               className="ring-1 ring-slate-300"
             />
+
+            {/* Diagnostic Heatmap Canvas Overlay */}
+            {isHeatmapActive && (
+              <DiagnosticHeatmapOverlay
+                template={template}
+                zoom={zoom}
+              />
+            )}
 
             {/* Marquee Selection Rectangle Overlay */}
             {isMarqueeSelecting && marqueeRect && (
@@ -2023,6 +2243,21 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             )}
           </div>
 
+          {/* Non-Intrusive Floating Action Ribbon (anchored top center in viewport, never overlaps Property Inspector) */}
+          {selectedItems.length > 0 && selectedItems[0] && (
+            <ContextualFloatingRibbon
+              selectedItem={selectedItems[0]}
+              selectedItemsCount={selectedItems.length}
+              template={template}
+              zoom={zoom}
+              onUpdateItem={handleUpdateItem}
+              onDuplicateItem={handleDuplicateItem}
+              onDeleteItem={handleDeleteItem}
+              onReorderItem={(id, dir) => handleReorderItem(id, dir === 'up' ? 1 : -1)}
+              onOpenInspectorDrawer={() => setIsInspectorDrawerOpen(true)}
+            />
+          )}
+
           {/* Floating Viewport Zoom & Navigation Toolbar (docked bottom center) */}
           <ViewportZoomToolbar
             zoom={zoom}
@@ -2031,17 +2266,30 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             onFitToWidth={handleFitToWidth}
             activeTool={activeTool}
             onToolChange={setActiveTool}
-            zoomMethod={uiPreferences.zoomMethod}
+            zoomMethod={uiPreferences?.zoomMethod || 'pointer'}
           />
         </div>
 
-        {/* 3. Right Persistent Live Validation Sidebar */}
-        <LiveValidationSidebar
-          template={template}
-          onApplyTemplateFix={(updated) => pushState(updated)}
-          onSelectItem={(id) => setSelectedItemIds([id])}
-          selectedItemId={selectedItemIds[0] || null}
-        />
+        {/* 3. Right Adaptive Contextual Inspector Drawer (Always visible by default) */}
+        {isInspectorDrawerOpen && (
+          <div className="h-full z-20 shrink-0 animate-in slide-in-from-right-4 duration-200 shadow-2xl">
+            <PropertyInspector
+              selectedItems={selectedItems}
+              allItems={template.items}
+              onUpdateItem={handleUpdateItem}
+              onUpdateMultipleItems={handleUpdateMultipleItems}
+              onDeleteItem={handleDeleteItem}
+              onDeleteMultipleItems={handleDeleteMultipleItems}
+              onDuplicateItem={handleDuplicateItem}
+              onDuplicateMultipleItems={handleDuplicateMultipleItems}
+              onReorderItem={handleReorderItem}
+              copiedStyle={copiedStyle}
+              onCopyStyle={handleCopyStyle}
+              onPasteStyle={handlePasteStyle}
+              onClose={() => setIsInspectorDrawerOpen(false)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Editor Status Bar */}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CustomFont } from '../types';
-import { getLoadedFonts, saveCustomFont, removeCustomFont } from '../utils/fontManager';
-import { Type, Plus, Trash2, X } from 'lucide-react';
+import { getLoadedFonts, saveCustomFont, removeCustomFont, registerFontFromFile } from '../utils/fontManager';
+import { Type, Plus, Trash2, X, Upload } from 'lucide-react';
 
 interface FontManagerModalProps {
   isOpen: boolean;
@@ -20,8 +20,29 @@ export const FontManagerModal: React.FC<FontManagerModalProps> = ({
   const [category, setCategory] = useState<'sans-serif' | 'serif' | 'display' | 'monospace'>('sans-serif');
   const [previewText, setPreviewText] = useState('12.99 € - PRIX PROMO 2+1 OFFERT');
   const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const font = await registerFontFromFile(files[i]);
+        if (onFontAdded) onFontAdded(font);
+      }
+      setFonts(getLoadedFonts());
+    } catch (err: any) {
+      setError(`Erreur lors de l'importation de la police : ${err.message || 'Fichier invalide'}`);
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
+  };
 
   const handleAddFont = () => {
     if (!fontName.trim()) {
@@ -123,13 +144,25 @@ export const FontManagerModal: React.FC<FontManagerModalProps> = ({
 
             {error && <div className="text-red-600 text-xs font-semibold">{error}</div>}
 
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between pt-1 border-t border-indigo-100">
+              <label className="cursor-pointer px-3 py-1.5 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition">
+                <Upload className="w-3.5 h-3.5" />
+                <span>{isUploading ? 'Chargement...' : 'Importer fichier (.ttf, .otf, .woff2)'}</span>
+                <input
+                  type="file"
+                  accept=".ttf,.otf,.woff,.woff2"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  disabled={isUploading}
+                />
+              </label>
+
               <button
                 onClick={handleAddFont}
                 className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Installer la Police</span>
+                <span>Installer la Webfont</span>
               </button>
             </div>
           </div>

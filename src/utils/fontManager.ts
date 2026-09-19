@@ -65,3 +65,39 @@ export function removeCustomFont(fontId: string): void {
     console.error('Failed to remove custom font', e);
   }
 }
+
+export function registerFontFromFile(file: File): Promise<CustomFont> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const buffer = e.target?.result as ArrayBuffer;
+        const fontName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        const fontFace = new FontFace(fontName, buffer);
+        const loadedFace = await fontFace.load();
+        document.fonts.add(loadedFace);
+
+        const blob = new Blob([buffer]);
+        const dataUrlReader = new FileReader();
+        dataUrlReader.onload = () => {
+          const dataUrl = dataUrlReader.result as string;
+          const newFont: CustomFont = {
+            id: `custom_font_${Date.now()}`,
+            name: fontName,
+            family: `"${fontName}", sans-serif`,
+            source: 'custom_upload',
+            url: dataUrl,
+            category: 'sans-serif',
+          };
+          saveCustomFont(newFont);
+          resolve(newFont);
+        };
+        dataUrlReader.readAsDataURL(blob);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsArrayBuffer(file);
+  });
+}

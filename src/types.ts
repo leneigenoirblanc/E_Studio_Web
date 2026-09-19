@@ -299,6 +299,29 @@ export interface TierPriceItemProperties extends BaseItemProperties {
     text_color?: string;
     border_color?: string;
   };
+  // Typography & Styling (matching Text properties)
+  font_family?: string;
+  font_size_pt?: number;
+  font_weight?: 'normal' | '500' | '600' | 'bold' | '800';
+  font_style?: 'normal' | 'italic';
+  text_decoration?: 'none' | 'underline' | 'line-through' | 'underline line-through';
+  text_color?: string;
+  alignment?: 'left' | 'center' | 'right' | 'justify';
+  valign?: 'top' | 'middle' | 'bottom';
+  wrap?: boolean;
+  overflow?: 'autofit_shrink' | 'clip' | 'overflow';
+  letter_spacing_pt?: number;
+  line_height_multiplier?: number;
+  text_transform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+  fill_color?: string;
+  border_color?: string;
+  border_width?: number;
+  corner_radius?: number;
+  placeholder?: string;
+  highlight_color?: string;
+  text_shadow?: TextShadowConfig;
+  subscript_superscript?: 'none' | 'subscript' | 'superscript';
+  strikethrough_color?: string;
 }
 
 export interface RestrictedAreaItemProperties extends BaseItemProperties {

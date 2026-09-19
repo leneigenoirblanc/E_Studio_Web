@@ -66,6 +66,7 @@ import {
   Magnet,
   Plus,
   Link2,
+  X,
 } from 'lucide-react';
 
 interface PropertyInspectorProps {
@@ -81,6 +82,7 @@ interface PropertyInspectorProps {
   copiedStyle?: ElementStylePayload | null;
   onCopyStyle?: (style: ElementStylePayload) => void;
   onPasteStyle?: () => void;
+  onClose?: () => void;
 }
 
 export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
@@ -96,19 +98,28 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
   copiedStyle,
   onCopyStyle,
   onPasteStyle,
+  onClose,
 }) => {
   const count = selectedItems.length;
 
   if (count === 0) {
     return (
-      <div className="w-80 bg-white border-r border-slate-200 p-6 text-slate-500 text-sm flex flex-col items-center justify-center text-center h-full select-none shrink-0 z-10">
+      <div className="w-80 bg-white border-l border-slate-200 p-6 text-slate-500 text-sm flex flex-col items-center justify-center text-center h-full select-none shrink-0 z-10">
         <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
           <Sliders className="w-6 h-6" />
         </div>
         <p className="font-semibold text-slate-700">Aucun élément sélectionné</p>
         <p className="text-xs text-slate-400 mt-1 max-w-xs">
-          Sélectionnez un ou plusieurs objets (en maintenant Shift ou par rectangle de sélection) pour éditer leurs paramètres.
+          Sélectionnez un ou plusieurs objets pour afficher leurs propriétés contextuelles.
         </p>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="mt-4 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+          >
+            Fermer l'inspecteur
+          </button>
+        )}
       </div>
     );
   }
@@ -154,7 +165,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
     const allLocked = selectedItems.every((it) => it.locked);
 
     return (
-      <div className="w-80 bg-white border-r border-slate-200 h-full flex flex-col text-xs text-slate-700 select-none overflow-y-auto shrink-0 z-10">
+      <div className="w-80 bg-white border-l border-slate-200 h-full flex flex-col text-xs text-slate-700 select-none overflow-y-auto shrink-0 z-10 shadow-lg">
         {/* Multi-Selection Header */}
         <div className="p-3 border-b border-slate-200 bg-blue-50/70 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -207,6 +218,15 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded ml-1"
+                title="Fermer l'inspecteur"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -494,7 +514,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
   };
 
   return (
-    <div className="w-80 bg-white border-r border-slate-200 h-full flex flex-col text-xs text-slate-700 select-none overflow-y-auto shrink-0 z-10">
+    <div className="w-80 bg-white border-l border-slate-200 h-full flex flex-col text-xs text-slate-700 select-none overflow-y-auto shrink-0 z-10 shadow-lg">
       {/* Header with quick actions */}
       <div className="p-3 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between">
         <div>
@@ -541,6 +561,15 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
           >
             <ArrowDown className="w-3.5 h-3.5" />
           </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Fermer l'inspecteur"
+              className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition ml-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={() => onDuplicateItem(selectedItem.id)}
             title="Dupliquer"
@@ -860,46 +889,50 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
           )}
         </div>
 
-        {/* FULL TYPOGRAPHY SECTION FOR TEXT ITEMS */}
-        {selectedItem.type === 'text' && (
+        {/* FULL TYPOGRAPHY SECTION FOR TEXT & TIER PRICE ITEMS */}
+        {(selectedItem.type === 'text' || selectedItem.type === 'tier_price') && (
           <div className="pt-2 border-t border-slate-200 space-y-3">
             <h4 className="font-bold text-slate-900 mb-1.5 uppercase text-[10px] tracking-wider text-slate-400 flex items-center gap-1">
               <Type className="w-3.5 h-3.5" />
               <span>Typographie & Texte</span>
             </h4>
-            <div>
-              <label className="text-[11px] text-slate-500">Texte / Valeur par défaut</label>
-              <textarea
-                rows={2}
-                value={selectedItem.text ?? ''}
-                onChange={(e) => update({ text: e.target.value })}
-                className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
-              />
-            </div>
+            {selectedItem.type === 'text' && (
+              <div>
+                <label className="text-[11px] text-slate-500">Texte / Valeur par défaut</label>
+                <textarea
+                  rows={2}
+                  value={selectedItem.text ?? ''}
+                  onChange={(e) => update({ text: e.target.value })}
+                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
+                />
+              </div>
+            )}
 
             {/* Prefix & Suffix */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[11px] text-slate-500">Préfixe</label>
-                <input
-                  type="text"
-                  placeholder="ex: Réf: "
-                  value={selectedItem.prefix_text || ''}
-                  onChange={(e) => update({ prefix_text: e.target.value })}
-                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
-                />
+            {selectedItem.type === 'text' && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] text-slate-500">Préfixe</label>
+                  <input
+                    type="text"
+                    placeholder="ex: Réf: "
+                    value={selectedItem.prefix_text || ''}
+                    onChange={(e) => update({ prefix_text: e.target.value })}
+                    className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-500">Suffixe</label>
+                  <input
+                    type="text"
+                    placeholder="ex: TTC"
+                    value={selectedItem.suffix_text || ''}
+                    onChange={(e) => update({ suffix_text: e.target.value })}
+                    className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-[11px] text-slate-500">Suffixe</label>
-                <input
-                  type="text"
-                  placeholder="ex: TTC"
-                  value={selectedItem.suffix_text || ''}
-                  onChange={(e) => update({ suffix_text: e.target.value })}
-                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
-                />
-              </div>
-            </div>
+            )}
 
             {/* Quick Size Presets & Size Input */}
             <div className="space-y-1.5">
@@ -1367,7 +1400,8 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
             </div>
 
             {/* ATTACHED CURRENCY / PRICE INDEPENDENT TYPOGRAPHY */}
-            <div className="pt-3 border-t border-dashed border-slate-300 space-y-2.5 bg-slate-50/60 p-2.5 rounded-md">
+            {selectedItem.type === 'text' && (
+              <div className="pt-3 border-t border-dashed border-slate-300 space-y-2.5 bg-slate-50/60 p-2.5 rounded-md">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
@@ -1730,6 +1764,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                 )}
               </div>
             </div>
+            )}
           </div>
         )}
 

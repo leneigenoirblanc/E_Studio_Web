@@ -124,3 +124,27 @@ export class DataDrivenTemplateEngine {
     };
   }
 }
+
+/**
+ * Brand Deduplication Helper
+ * Strips brand name string from ITEMNAME / ITEMDESCRIPTION if a Brand Logo asset is present on the tag template
+ * (e.g. stripping "Logitech" from "Logitech MX Master 3" -> "MX Master 3")
+ */
+export function applyBrandDeduplication(
+  productName: string,
+  brandName?: string,
+  enabled: boolean = true
+): string {
+  if (!enabled || !brandName || !brandName.trim() || !productName) {
+    return productName;
+  }
+
+  const trimmedBrand = brandName.trim();
+  if (trimmedBrand.length < 2) return productName;
+
+  const escapedBrand = trimmedBrand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`\\b${escapedBrand}\\b`, 'gi');
+
+  const cleaned = productName.replace(regex, '').replace(/\s+/g, ' ').trim();
+  return cleaned || productName;
+}

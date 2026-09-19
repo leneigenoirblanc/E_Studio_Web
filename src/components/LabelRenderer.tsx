@@ -8,6 +8,8 @@ import { SmartGuideLine } from '../utils/smartGuides';
 import { PictogramRenderer } from './PictogramRenderer';
 import { CurvedTextRenderer } from './CurvedTextRenderer';
 
+import { applyBrandDeduplication } from '../utils/dataDrivenTemplateEngine';
+
 interface LabelRendererProps {
   template: LabelTemplate;
   record?: ProductRecord;
@@ -125,6 +127,9 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         const baseFontSizePx = Math.max(7, item.font_size_pt * 1.333 * zoom);
 
         let mainText = displayVal || item.placeholder || '';
+        if (record && record.BRAND_INFO && (item.binding_key === 'ITEMNAME' || item.binding_key === 'ITEMDESCRIPTION')) {
+          mainText = applyBrandDeduplication(mainText, record.BRAND_INFO, true);
+        }
         if (item.prefix_text) mainText = `${item.prefix_text} ${mainText}`;
         if (item.suffix_text) mainText = `${mainText} ${item.suffix_text}`;
         mainText = PricingEngine.injectNonBreakingSpaces(mainText);
@@ -725,35 +730,106 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
           }
         }
 
+        // Default fallbacks based on status
+        const defaultBg = isError || !crossConditionMet
+          ? '#fef2f2' // rose-50
+          : isFallback
+          ? '#fffbeb' // amber-50
+          : '#f0f9ff'; // sky-50
+
+        const defaultBorderColor = isError || !crossConditionMet
+          ? '#fca5a5' // rose-300
+          : isFallback
+          ? '#fcd34d' // amber-300
+          : '#bae6fd'; // sky-300
+
+        const defaultTextColor = isError || !crossConditionMet
+          ? '#991b1b' // rose-800
+          : isFallback
+          ? '#78350f' // amber-900
+          : '#082f49'; // sky-950
+
+        const bgColor = item.fill_color || defaultBg;
+        const borderColor = item.border_color || defaultBorderColor;
+        const borderStyle = item.border_width && item.border_width > 0 
+          ? `${item.border_width * zoom}px solid ${borderColor}`
+          : `1px solid ${borderColor}`;
+        const textColor = item.text_color || defaultTextColor;
+        const borderRadius = item.corner_radius !== undefined 
+          ? `${item.corner_radius * pxPerMm}px` 
+          : '4px';
+
+        // Scale font size proportionally
+        const baseFontSizePx = item.font_size_pt 
+          ? Math.max(7, item.font_size_pt * 1.333 * zoom) 
+          : Math.max(7.5, 8.5 * zoom);
+
+        const letterSpacingPx = item.letter_spacing_pt ? `${item.letter_spacing_pt * 1.333 * zoom}px` : undefined;
+        const lineHeightStyle = item.line_height_multiplier ? item.line_height_multiplier : 1.2;
+        const textTransform = item.text_transform && item.text_transform !== 'none' ? item.text_transform : undefined;
+
+        // Shadow styling
+        let textShadowStyle: string | undefined = undefined;
+        if (item.text_shadow && item.text_shadow.enabled) {
+          const s = item.text_shadow;
+          textShadowStyle = `${(s.offset_x_px || 1) * zoom}px ${(s.offset_y_px || 1) * zoom}px ${(s.blur_px || 2) * zoom}px ${s.color || '#000000'}`;
+        }
+
+        const justifyClass = item.alignment === 'center'
+          ? 'justify-center'
+          : item.alignment === 'right'
+          ? 'justify-end'
+          : 'justify-between';
+
+        const alignSelfClass = item.valign === 'middle'
+          ? 'items-center'
+          : item.valign === 'bottom'
+          ? 'items-end'
+          : 'items-start';
+
         return (
           <div
-            className={`w-full h-full flex items-center justify-between px-2 py-1 rounded border transition-colors ${
-              isError || !crossConditionMet
-                ? 'bg-rose-50 border-rose-300 text-rose-800'
-                : isFallback
-                ? 'bg-amber-50 border-amber-300 text-amber-900'
-                : 'bg-sky-50 border-sky-300 text-sky-950'
-            }`}
+            className={`w-full h-full flex ${alignSelfClass} ${justifyClass} px-2 py-1 transition-colors overflow-hidden`}
+            style={{
+              backgroundColor: bgColor,
+              border: borderStyle,
+              borderRadius: borderRadius,
+            }}
           >
-            <div className="flex items-center gap-1.5 truncate">
+            <div className={`flex items-center gap-1.5 truncate ${item.alignment === 'center' ? 'justify-center w-full' : item.alignment === 'right' ? 'justify-end w-full' : ''}`}>
               <span
-                className="font-bold truncate tracking-tight"
-                style={{ fontSize: `${Math.max(7.5, 8.5 * zoom)}px` }}
+                style={{
+                  fontFamily: item.font_family,
+                  fontSize: `${baseFontSizePx}px`,
+                  fontWeight: item.font_weight || 'bold',
+                  fontStyle: item.font_style || 'normal',
+                  textDecoration: item.text_decoration || 'none',
+                  textDecorationColor: item.strikethrough_color || textColor,
+                  color: textColor,
+                  letterSpacing: letterSpacingPx,
+                  lineHeight: lineHeightStyle,
+                  textTransform: textTransform as any,
+                  textShadow: textShadowStyle,
+                  backgroundColor: item.highlight_color && item.highlight_color !== 'transparent' ? item.highlight_color : undefined,
+                  padding: item.highlight_color && item.highlight_color !== 'transparent' ? '0 2px' : undefined,
+                  borderRadius: '2px',
+                }}
+                className="truncate tracking-tight"
               >
                 {tierText}
               </span>
               <span
                 className={`text-[9px] px-1 py-0.2 rounded font-semibold uppercase tracking-wider shrink-0 ${
                   strategy === 'graduated'
-                    ? 'bg-indigo-100 text-indigo-700'
-                    : 'bg-sky-100 text-sky-700'
+                    ? 'bg-indigo-100/80 text-indigo-700'
+                    : 'bg-sky-100/80 text-sky-700'
                 }`}
               >
                 {strategy === 'graduated' ? 'Cumulatif' : 'Volume'}
               </span>
             </div>
             {item.strict_required && !record && (
-              <span className="text-rose-500 font-bold ml-1 text-xs">*</span>
+              <span className="text-rose-500 font-bold ml-1 text-xs shrink-0">*</span>
             )}
           </div>
         );

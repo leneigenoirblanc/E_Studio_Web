@@ -1,5 +1,6 @@
 import pptxgen from 'pptxgenjs';
 import { LabelTemplate, ProductRecord, ImpositionConfig, ImpositionCalculation } from '../types';
+import { TierEngine } from './tierEngine';
 
 /**
  * Converts mm to inches for pptxgenjs layout
@@ -216,20 +217,53 @@ export class PptxExporter {
             }
 
             case 'tier_price': {
-              const prefix = item.prefix_text || 'À partir de';
-              const unit = item.unit_label || 'FCFA';
-              const price = prod.SELLING_PRICE || 0;
-              slide.addText(`${prefix} ${price.toLocaleString('fr-FR')} ${unit}`, {
+              let tierText = `[${item.prefix_text}] Palier #${item.primary_tier} (${item.unit_label})`;
+              const resolved = TierEngine.resolve(
+                {
+                  primary_index: Math.max(0, item.primary_tier - 1),
+                  keyword_prefix: item.prefix_text,
+                  unit_label: item.unit_label,
+                  strict_required: item.strict_required,
+                  fallback_to_base_price: item.fallback_to_base_price ?? true,
+                  pricing_strategy: item.pricing_strategy,
+                  cross_conditional: item.cross_conditional,
+                },
+                prod
+              );
+
+              if (resolved) {
+                if (resolved.error) {
+                  tierText = resolved.text_qty;
+                } else {
+                  tierText = `${resolved.text_qty} : ${resolved.formatted_price}${resolved.is_fallback ? ' (base)' : ''}`;
+                }
+              }
+
+              // Apply custom typography parameters
+              const fontSize = item.font_size_pt || 9;
+              const fontFace = item.font_family || 'Calibri';
+              const bold = item.font_weight === 'bold' || item.font_weight === '600' || item.font_weight === '800';
+              const italic = item.font_style === 'italic';
+              const underline = item.text_decoration === 'underline' || item.text_decoration === 'underline line-through'
+                ? { style: 'sng' as const }
+                : undefined;
+              const color = (item.text_color || '#0369A1').replace('#', '');
+              const align = item.alignment || 'left';
+              const valign = item.valign === 'middle' ? 'middle' : item.valign === 'bottom' ? 'bottom' : 'top';
+
+              slide.addText(tierText, {
                 x: itemX_in,
                 y: itemY_in,
                 w: itemW_in,
                 h: itemH_in,
-                fontSize: 9,
-                fontFace: 'Calibri',
-                bold: true,
-                color: '0369A1',
-                align: 'left',
-                valign: 'middle',
+                fontSize: fontSize,
+                fontFace: fontFace,
+                bold: bold,
+                italic: italic,
+                underline: underline,
+                color: color,
+                align: align as any,
+                valign: valign as any,
               });
               break;
             }

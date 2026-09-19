@@ -10,6 +10,7 @@ import {
   Hand,
   Maximize,
   HelpCircle,
+  Ruler,
 } from 'lucide-react';
 import { ContextTooltip, useTooltip } from '../context/TooltipContext';
 import { ZoomMethod } from '../types';
@@ -33,7 +34,19 @@ export const ViewportZoomToolbar: React.FC<ViewportZoomToolbarProps> = ({
   onToolChange,
   zoomMethod,
 }) => {
-  const { openPreferencesModal } = useTooltip();
+  const { uiPreferences, updateUIPreferences, openPreferencesModal } = useTooltip();
+
+  const handleCycleRulerMode = () => {
+    const current = uiPreferences?.rulerMode || 'sheet_margins';
+    const modes: Array<'sheet_margins' | 'window_frame' | 'floating' | 'hidden'> = [
+      'sheet_margins',
+      'window_frame',
+      'floating',
+      'hidden',
+    ];
+    const nextIndex = (modes.indexOf(current) + 1) % modes.length;
+    updateUIPreferences({ rulerMode: modes[nextIndex] });
+  };
 
   const presets = [
     { label: '10%', value: 0.1 },
@@ -230,6 +243,35 @@ export const ViewportZoomToolbar: React.FC<ViewportZoomToolbarProps> = ({
       </ContextTooltip>
 
       <div className="h-5 w-px bg-slate-200" />
+
+      {/* Ruler Mode Toggle */}
+      <ContextTooltip
+        title="Mode de Règles Millimétriques"
+        category="Affichage Studio"
+        shortcut="Alt + R"
+        content={`Mode actuel: ${
+          uiPreferences?.rulerMode === 'sheet_margins'
+            ? 'Marges de Feuille'
+            : uiPreferences?.rulerMode === 'window_frame'
+            ? 'Cadre Fenêtre'
+            : uiPreferences?.rulerMode === 'floating'
+            ? 'Règle Flottante'
+            : 'Masqué'
+        }. Cliquez pour basculer les règles.`}
+        placement="top"
+      >
+        <button
+          onClick={handleCycleRulerMode}
+          className={`p-1.5 rounded-lg transition ${
+            uiPreferences?.rulerMode && uiPreferences.rulerMode !== 'hidden'
+              ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold'
+              : 'text-slate-400 hover:text-slate-700'
+          }`}
+          aria-label="Mode de règles millimétriques"
+        >
+          <Ruler className="w-4 h-4" />
+        </button>
+      </ContextTooltip>
 
       {/* Preferences & Accessibility Modal Trigger */}
       <ContextTooltip

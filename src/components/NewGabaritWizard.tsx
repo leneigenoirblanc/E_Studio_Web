@@ -9,11 +9,20 @@ interface NewGabaritWizardProps {
 }
 
 const PRESETS = [
-  { name: "Supermarché Rayon (100 x 50 mm)", w: 100, h: 50, inner: 2, outer: 1 },
-  { name: "Rayon Épicerie / Compact (70 x 35 mm)", w: 70, h: 35, inner: 2, outer: 1 },
-  { name: "Cash & Carry / Paliers A7 (105 x 74 mm)", w: 105, h: 74, inner: 3, outer: 1.5 },
-  { name: "Format Palette / Carton A6 (148 x 105 mm)", w: 148, h: 105, inner: 4, outer: 2 },
-  { name: "Étiquette Prix Mini (50 x 30 mm)", w: 50, h: 30, inner: 1.5, outer: 1 },
+  // ESL E-Ink Screens
+  { name: "ESL 2.13\" E-Paper (48 × 23 mm)", w: 48, h: 23, inner: 1, outer: 0.5, category: "ESL E-Ink", dpi: 203, colorMode: "E-Ink B/W/Red" },
+  { name: "ESL 2.9\" E-Paper (67 × 29 mm)", w: 67, h: 29, inner: 1.5, outer: 0.5, category: "ESL E-Ink", dpi: 203, colorMode: "E-Ink B/W/Red" },
+  { name: "ESL 4.2\" E-Paper (85 × 64 mm)", w: 85, h: 64, inner: 2, outer: 1, category: "ESL E-Ink", dpi: 300, colorMode: "E-Ink 4-Color" },
+  { name: "ESL 7.5\" E-Paper (163 × 98 mm)", w: 163, h: 98, inner: 3, outer: 1, category: "ESL E-Ink", dpi: 300, colorMode: "E-Ink 4-Color" },
+  // Industrial Paper Tags
+  { name: "Étiquette Prix Rayon (50 × 30 mm)", w: 50, h: 30, inner: 1.5, outer: 1, category: "Papier", dpi: 203, colorMode: "RGB" },
+  { name: "Étiquette Standard (70 × 40 mm)", w: 70, h: 40, inner: 2, outer: 1, category: "Papier", dpi: 203, colorMode: "RGB" },
+  { name: "Rayon Supermarché (100 × 50 mm)", w: 100, h: 50, inner: 2, outer: 1, category: "Papier", dpi: 300, colorMode: "RGB" },
+  { name: "Étiquette Logistique (100 × 150 mm)", w: 100, h: 150, inner: 3, outer: 2, category: "Papier", dpi: 300, colorMode: "CMYK" },
+  // Display Sheets
+  { name: "A6 Signalétique (148 × 105 mm)", w: 148, h: 105, inner: 4, outer: 2, category: "PLV", dpi: 300, colorMode: "RGB" },
+  { name: "A5 Affiche Tête de Gondole (210 × 148 mm)", w: 210, h: 148, inner: 5, outer: 3, category: "PLV", dpi: 300, colorMode: "CMYK" },
+  { name: "A4 Grand Format (297 × 210 mm)", w: 297, h: 210, inner: 6, outer: 3, category: "PLV", dpi: 300, colorMode: "CMYK" },
 ];
 
 export const NewGabaritWizard: React.FC<NewGabaritWizardProps> = ({ isOpen, onClose, onCreate }) => {
@@ -27,6 +36,8 @@ export const NewGabaritWizard: React.FC<NewGabaritWizardProps> = ({ isOpen, onCl
   const [bgImage, setBgImage] = useState<string | null>(null);
   const [bgImageOpacity, setBgImageOpacity] = useState(0.35);
   const [bgImageFit, setBgImageFit] = useState<'contain' | 'cover' | 'stretch'>('contain');
+  const [targetDpi, setTargetDpi] = useState<number>(203);
+  const [hardwareColorMode, setHardwareColorMode] = useState<string>('RGB');
 
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -38,6 +49,8 @@ export const NewGabaritWizard: React.FC<NewGabaritWizardProps> = ({ isOpen, onCl
     setInnerMargins({ top: preset.inner, bottom: preset.inner, left: preset.inner, right: preset.inner });
     setOuterMargins({ top: preset.outer, bottom: preset.outer, left: preset.outer, right: preset.outer });
     setName(preset.name.split(' (')[0]);
+    if (preset.dpi) setTargetDpi(preset.dpi);
+    if (preset.colorMode) setHardwareColorMode(preset.colorMode);
   };
 
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -202,6 +215,37 @@ export const NewGabaritWizard: React.FC<NewGabaritWizardProps> = ({ isOpen, onCl
                 onChange={(e) => setHeightMm(parseFloat(e.target.value) || 10)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
               />
+            </div>
+          </div>
+
+          {/* Hardware Parameters: Resolution & Color Mode */}
+          <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Résolution Cible (DPI)</label>
+              <select
+                value={targetDpi}
+                onChange={(e) => setTargetDpi(Number(e.target.value))}
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-mono"
+              >
+                <option value={152}>152 DPI (Écran ESL basse rés.)</option>
+                <option value={203}>203 DPI (Thermique Standard / ESL)</option>
+                <option value={300}>300 DPI (Impression Haute Définition)</option>
+                <option value={600}>600 DPI (Offset / Micro-Impression)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Palette / Mode Matériel</label>
+              <select
+                value={hardwareColorMode}
+                onChange={(e) => setHardwareColorMode(e.target.value)}
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+              >
+                <option value="RGB">Couleurs RGB (Écran / Web)</option>
+                <option value="CMYK">CMYK Quadri (Impression Masse)</option>
+                <option value="E-Ink B/W">E-Ink B&W (Noir & Blanc 2-Couleurs)</option>
+                <option value="E-Ink B/W/Red">E-Ink BWR (Noir/Blanc/Rouge 3-Couleurs)</option>
+                <option value="E-Ink 4-Color">E-Ink Spectra 4-Couleurs (B/W/R/Y)</option>
+              </select>
             </div>
           </div>
 
