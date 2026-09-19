@@ -1,120 +1,180 @@
-# E-Studio
+# E-Studio — Solution Complète de Création & Génération d'Étiquettes de Prix
 
-E-Studio is a PySide6 desktop application for designing and generating printable
-price labels. It provides two routes: a Home screen for gabarit discovery and
-an editor, and a protected Generation workspace for importing data, previewing,
-validating, exporting, and printing labels.
+**E-Studio** est une suite logicielle professionnelle conçue pour la création vectorielle, la mise en page assistée et l'impression industrielle en masse d'étiquettes de prix de vente (facing, gondoles, îlots, étiquettes promotionnelles, démarques et étiquettes grossiste/demi-gros).
 
-## Features
+L'application est disponible sous deux déclinaisons partageant les mêmes concepts et formats de gabarits :
+1. **E-Studio Web** : Application moderne full-web en **React 18 / TypeScript / Vite / Tailwind CSS**, déployée dans le cloud et immédiatement utilisable sans installation.
+2. **E-Studio Desktop** : Application logicielle autonome en **Python / PySide6 / ReportLab**, pour les postes locaux et les environnements fermés.
 
-- Create label templates with millimetre dimensions and inner/outer margins.
-- Add tier-price blocks and rich objects from the **Insérer** menu.
-- Move, resize, select, and edit objects through the property inspector.
-- Render rich text with formatting, alignment, wrapping, and overflow handling.
-- Insert images, QR codes, barcodes, lines, shapes, and ellipses.
-- Bind fields through canonical domain keys or custom dynamic keys.
-- Use non-printing background reference images while designing gabarits.
-- Import Excel data, edit rows, reconstruct tiers, and review diagnostics.
-- Export PNG/PDF, compose imposed sheets, and print through the system printer.
+---
 
-## Requirements
+## Sommaire
 
-- Python 3.10 or newer
-- PySide6 6.6 or newer
-- `qrcode` 7.4 or newer
-- `python-barcode` 0.15 or newer
-- `openpyxl` 3.1 or newer
+- [1. Présentation Générale & Objectifs](#1-présentation-générale--objectifs)
+- [2. Fonctionnalités Détaillées](#2-fonctionnalités-détaillées)
+  - [2.1 Bibliothèque & Gestion des Gabarits](#21-bibliothèque--gestion-des-gabarits)
+  - [2.2 Éditeur Visuel WYSIWYG de Gabarit](#22-éditeur-visuel-wysiwyg-de-gabarit)
+  - [2.3 Objets Graphiques & Composants Métiers](#23-objets-graphiques--composants-métiers)
+  - [2.4 Moteur Métier Retail & Tarification (PricingEngine)](#24-moteur-métier-retail--tarification-pricingengine)
+  - [2.5 Espace de Génération, Import de Données & Mapping](#25-espace-de-génération-import-de-données--mapping)
+  - [2.6 Moteur d'Imposition & Planches d'Impression](#26-moteur-dimposition--planches-dimpression)
+  - [2.7 Formats d'Exportation Multiples (PDF, PPTX, ZPL, JSON)](#27-formats-dexportation-multiples-pdf-pptx-zpl-json)
+- [3. Fonctionnement & Workflow du Programme](#3-fonctionnement--workflow-du-programme)
+- [4. Spécifications Techniques du Format de Gabarit (.json)](#4-spécifications-techniques-du-format-de-gabarit-json)
+- [5. Raccourcis Clavier](#5-raccourcis-clavier)
+- [6. Installation & Démarrage](#6-installation--démarrage)
 
-Install the dependencies from [requirements.txt](requirements.txt):
+---
 
-```bash
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
+## 1. Présentation Générale & Objectifs
+
+Dans la grande distribution et le commerce de détail, la production d'étiquettes de prix nécessite une grande précision millimétrique, le respect des normes d'affichage légales (prix au kilo/litre, mentions obligatoires, codes-barres lisibles) et la capacité d'automatiser des séries de milliers de produits à partir d'extractions ERP / tableurs (Excel, CSV).
+
+**E-Studio** résout cette problématique en unifiant :
+- Un outil de conception visuelle au millimètre près, avec gestion des marges de sécurité d'impression (*inner margins*) et des marges perdues (*bleed / outer margins*).
+- Un puissant moteur de liaison de données capable d'associer automatiquement les colonnes d'un fichier source aux éléments de l'étiquette.
+- Une détection par Regex et alias canoniques pour réconcilier les libellés de prix courants (`PRIX_PROMO`, `PV_PROMO`, `PRIX_SOLDE`, `PRIX_VENTE`, etc.).
+- Une gestion native des paliers tarifaires (dégressivité selon la quantité achetée pour les grossistes).
+- Un calculateur d'imposition sur planches papier (A4, A3, Letter) avec espacement millimétrique personnalisable et repères de coupe.
+
+---
+
+## 2. Fonctionnalités Détaillées
+
+### 2.1 Bibliothèque & Gestion des Gabarits
+- **Catalogue Avery prédéfini** : Gabarits standardisés prêts à l'emploi (formats étagère 100x50 mm, étiquettes promo choc 70x35 mm, balisage XL 140x70 mm, etc.).
+- **Assistant de Création de Gabarit (Wizard)** : Définition intuitive du nom, de la largeur, de la hauteur, des marges intérieures (zone d'impression utile) et des marges extérieures de débord.
+- **Import / Export JSON universel** : Sauvegarde et portabilité complète des modèles créés.
+- **Duplication & Personnalisation** : Cloner un gabarit en un clic pour décliner une charte graphique.
+
+### 2.2 Éditeur Visuel WYSIWYG de Gabarit
+- **Canvas millimétrique à échelle réelle** : Respect strict du ratio millimètre/pixel avec zoom dynamique (50% à 400%) et défilement panoramique.
+- **Règles millimétriques interactives (CanvasRulers)** : Barres de mesures horizontales et verticales graduées en millimètres avec indicateur de position du curseur en temps réel.
+- **Grille Magnétique Configurable** : Alignement automatique avec réglage du pas de la grille (`0.5 mm`, `1 mm`, `2 mm`, `5 mm`, `10 mm`).
+- **Guides Intelligents (Smart Guides)** : Détection dynamique de l'alignement et des espacements entre objets lors du déplacement ou du redimensionnement.
+- **Image de Calibration / Fond de Calque** : Possibilité de charger une photo ou un scan d'une étiquette physique existante avec réglage de l'opacité pour reproduire fidèlement une étiquette au millimètre près.
+- **Historique Annuler / Rétablir (Undo/Redo)** : Pile d'historique avec indicateur visuel de position (badge `#1/1`).
+- **Outil Global "Rechercher et Remplacer" (`Ctrl+F`)** : Modal permettant de chercher et remplacer dans tout le gabarit :
+  - Par contenu textuel (avec option sensible à la casse).
+  - Par nom de police de caractères.
+  - Par couleur hexadécimale (remplacement en masse d'une teinte ou couleur de marque).
+- **Aide Raccourcis Clavier** : Modal d'aide détaillant l'ensemble des commandes rapides.
+- **Outils d'Agencement Avancés** :
+  - Alignements groupés : Gauche, Centre horizontal, Droite, Haut, Milieu vertical, Bas.
+  - Distribution équitable : Espacement horizontal ou vertical uniforme.
+  - Gestion des plans : Premier plan, Arrière-plan, Avancer, Reculer.
+  - Copier et Coller de styles graphiques (polices, couleurs, bordures).
+  - Verrouillage d'éléments pour éviter les déplacements accidentels.
+
+### 2.3 Objets Graphiques & Composants Métiers
+Le ruban **Insérer** offre une gamme complète d'éléments vectoriels et métier :
+- **Texte Standard & Riche** : Choix des polices (standard, monospace, serif), taille en points, graisses, italique, souligné, barré, alignements horizontaux et verticaux, couleur, encadrement et fond.
+- **Formes Géométriques** : Rectangles, carrés, arrondis d'angles (*border-radius*), fonds de couleur, bordures vectorielles.
+- **Ellipses & Cercles** : Formes arrondies pour pastilles de réduction et médaillons promotionnels.
+- **Lignes de Séparation** : Lignes horizontales ou obliques avec épaisseur et couleur personnalisables.
+- **Codes-Barres 1D Vectoriels** : Génération native de formats **EAN-13** et **Code 128** avec validation de clé de contrôle et rendu vectoriel haute netteté.
+- **QR Codes 2D Vectoriels** : Encodage de liens web, fiches produits ou identifiants internes.
+- **Paliers de Prix Dégressifs (`tier_price`)** : Bloc métier affichant automatiquement les prix dégressifs par quantité (ex: *1 carton = 1500 F, 5 cartons = 1350 F*), idéal pour le commerce de gros et demi-gros.
+- **Texte Circulaire / Courbé (`curved_text`)** : Texte suivant une trajectoire circulaire (rayons, angle de départ, sens horaire/anti-horaire) pour les tampons ou sceaux de qualité.
+- **Zones Restreintes Anti-Impression (`restricted_area`)** : Hachurage visuel délimitant une zone interdite (ex: cellule de détection de capteur d'imprimante thermique, perforation de gondole).
+- **Pictogrammes Réglementaires (`pictogram`)** : Symboles normalisés (Origine France, Triman/Recyclage, Bio/AB, Danger, Consigne, etc.).
+- **Images & Logos** : Intégration de visuels de marques ou photos produits avec conservation du ratio d'aspect.
+
+### 2.4 Moteur Métier Retail & Tarification (`PricingEngine`)
+Le moteur calcule automatiquement et dynamiquement les données complexes :
+- **Calcul automatique du Prix Unitaire / Prix au Kilo / au Litre** :
+  - Formule : `Prix / Poids ou Volume` selon les unités déclarées (`kg`, `g`, `l`, `cl`, `pièce`).
+  - Détection automatique du prix de référence (prix promo prioritaire si actif, sinon prix standard).
+- **Calcul automatique du Pourcentage de Remise** :
+  - Calcule automatiquement `-XX%` à partir du `SELLING_PRICE` et du `PROMOPRICE`.
+- **Conversion Multi-Devises** :
+  - Conversion instantanée avec taux de change paramétrable (ex: conversion Francs CFA <-> Euros).
+- **Gestion des Règles d'Affichage Conditionnel** :
+  - Afficher un bandeau promo ou un prix barré uniquement si le produit est en promotion (`has_promo`).
+  - Afficher un code-barres seulement si le code EAN est renseigné (`has_barcode`).
+  - Afficher le tableau de paliers uniquement si le produit possède des tarifs de gros (`has_tiers`).
+  - Filtrer sur un champ non vide ou strictement supérieur à zéro.
+- **Reconnaissance Intelligente par Regex des Prix Promo & Standard** :
+  - Résolution automatique des en-têtes de colonnes telles que : `PRIX_PROMO`, `PROMO_PRIX`, `PV_PROMO`, `NOUVEAU_PRIX`, `PRIX_SOLDE`, `DISCOUNT_PRICE`, `PRIX_VENTE`, `PV`, etc.
+
+### 2.5 Espace de Génération, Import de Données & Mapping
+- **Importation de Fichiers** : Prise en charge des fichiers **Excel (`.xlsx`, `.xlsm`)** et **CSV** (détection automatique des virgules, points-virgules et tabulations).
+- **Assistant de Mise en Correspondance (`DataMappingModal`)** :
+  - Détection automatique intelligente entre les en-têtes du fichier et les champs canoniques du commerce de détail (`ITEMNAME`, `SELLING_PRICE`, `PROMOPRICE`, `PRODUCT_SCAN`, `BRAND`, `ORIGIN`, etc.).
+  - Aperçu instantané des données brutes avec possibilité d'ajuster chaque colonne manuellement.
+- **Éditeur Tabulaire Intégré** :
+  - Modification, ajout ou suppression de lignes de données directement dans l'interface sans réexporter le fichier Excel.
+  - Ajout rapide de nouvelles références d'appoint.
+- **Aperçu Dynamique en Direct** :
+  - Carrousel de prévisualisation permettant de naviguer article par article pour vérifier le rendu exact de l'étiquette avant l'impression.
+
+### 2.6 Moteur d'Imposition & Planches d'Impression
+- **Support des Formats Papier** : **A4**, **A3**, **Letter**, en orientation **Portrait** ou **Paysage**.
+- **Calculateur Mathématique de Poses** : Calcul automatique du nombre maximal d'étiquettes pouvant tenir sur une feuille en tenant compte des dimensions de l'étiquette et des marges de l'imprimante.
+- **Espacements Millimétriques Paramétrables** :
+  - Réglage indépendant de l'**espacement horizontal X (`gap_x_mm`)** et de l'**espacement vertical Y (`gap_y_mm`)**.
+- **Enregistrement de la Disposition dans le Gabarit** :
+  - Bouton *"Enregistrer cette disposition dans le gabarit"* permettant d'associer définitivement la planche d'impression (`default_imposition`) au modèle.
+- **Réutilisation de Planches Entamées (*Start Offset Slot*)** :
+  - Indication de la première case disponible pour réutiliser des planches d'autocollants déjà partiellement imprimées, évitant tout gaspillage.
+- **Repères et Traits de Coupe (*Crop Marks*)** :
+  - Tracé vectoriel précis des traits de coupe pour massicotage manuel ou massicot électrique.
+
+### 2.7 Formats d'Exportation Multiples (PDF, PPTX, ZPL, JSON)
+- **Exportation PDF Haute Définition** : Génération directe de planches d'étiquettes vectorielles ultra-nettes, prêtes pour l'impression jet d'encre, laser ou presse numérique.
+- **Exportation Microsoft PowerPoint (`.pptx`)** : Génération de diapositives éditables avec textes et formes vectorielles natives.
+- **Exportation Zebra ZPL II** : Traduction du gabarit en code natif ZPL pour l'impression thermique industrielle d'étiquettes adhésives en rouleau (Zebra, Citizen, TSC).
+- **Exportation & Sauvegarde JSON** : Stockage léger, versionné et lisible par machine.
+
+---
+
+## 3. Fonctionnement & Workflow du Programme
+
+Le fonctionnement d'E-Studio s'articule autour de 5 étapes clés :
+
+```
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│ 1. Choix ou     │  ───> │ 2. Édition du   │  ───> │ 3. Liaison des  │
+│    Création du  │       │    Gabarit      │       │    Champs       │
+│    Gabarit      │       │    (WYSIWYG)    │       │    (Data Keys)  │
+└─────────────────┘       └─────────────────┘       └─────────────────┘
+                                                             │
+                                                             ▼
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│ 5. Exportation  │  <─── │ 4. Imposition & │  <─── │ 3b. Import      │
+│    & Impression │       │    Espacements  │       │     Excel / CSV │
+│    (PDF, ZPL)   │       │    sur Planche  │       │     + Mapping   │
+└─────────────────┘       └─────────────────┘       └─────────────────┘
 ```
 
-## Starting The Application
+1. **Étape 1 : Sélection ou création du gabarit**
+   - Depuis l'écran d'accueil, choisissez un modèle existant ou cliquez sur **Nouveau Gabarit**.
+   - Spécifiez la taille (ex: 100 x 50 mm) et les marges d'impression.
+2. **Étape 2 : Conception graphique**
+   - Ajoutez des champs texte, des rectangles, des codes-barres ou des logos.
+   - Ajustez la typographie, les alignements et la hiérarchie visuelle.
+3. **Étape 3 : Liaison des champs de données (*Binding Keys*)**
+   - Associez les champs textes aux clés canoniques (`ITEMNAME`, `SELLING_PRICE`, `PROMOPRICE`, etc.).
+   - Configurez les conditions (ex: afficher le prix barré uniquement si `has_promo`).
+4. **Étape 4 : Import des articles et imposition**
+   - Ouvrez l'espace **Générer**, importez votre fichier Excel ou CSV.
+   - Validez les correspondances de colonnes.
+   - Choisissez le format de feuille (ex: A4 Paysage) et réglez les espacements X/Y entre étiquettes.
+5. **Étape 5 : Contrôle et production**
+   - Feuilletez les étiquettes générées pour vous assurer du rendu.
+   - Cliquez sur **Télécharger le PDF** ou exportez en **ZPL** pour votre imprimante thermique.
 
-The supported entry point is [app.py](app.py):
+---
 
-```bash
-.venv/bin/python app.py
-```
+## 4. Spécifications Techniques du Format de Gabarit (.json)
 
-The application opens the Home screen. Choose an existing gabarit to edit or
-generate labels, or create a new gabarit. Generation uses an immutable copy of
-the selected gabarit; editing it happens in a separate window.
-
-### Typical workflow
-
-1. Create or select a gabarit from Home.
-2. Design the gabarit and optionally add a non-printing reference image.
-3. Save the gabarit, then choose **Générer des étiquettes**.
-4. Import Excel, confirm mappings and the article grouping key, and resolve tier conflicts.
-5. Correct source rows manually and review preflight diagnostics.
-6. Preview rows, export PNG/PDF, or print through the system printer.
-
-Excel import supports `.xlsx` and `.xlsm`. Formula cells use cached values, and
-legacy `.xls`/`.xlsb` files must be converted first. Binding profiles and output
-manifests can be saved for repeatable generation.
-
-- Python 3.10 or newer
-- PySide6 6.6 or newer
-- `qrcode` 7.4 or newer
-- `python-barcode` 0.15 or newer
-
-Install the dependencies from [requirements.txt](requirements.txt):
-
-```bash
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
-```
-
-On Linux, the Qt runtime also needs access to its graphical libraries. A
-headless CI or container may require additional system packages such as
-`libGL.so.1` before the desktop application can start.
-
-## Starting The Editor
-
-The supported entry point is [app.py](app.py):
-
-```bash
-.venv/bin/python app.py
-```
-
-The application opens a main window with a graphics view and a property
-inspector dock. Use **Fichier > Nouveau Gabarit** to define a label before
-adding objects.
-
-### Typical workflow
-
-1. Create a template and specify its width, height, inner margins, and outer
-   margins in millimetres.
-2. Add a tier-price block or a rich object from **Insérer**.
-3. Select an object and edit its geometry and appearance in the inspector.
-4. Use **Contrôler Dépassements** to find objects outside the printable area.
-5. Save the JSON template with **Fichier > Sauvegarder JSON**.
-6. Load optional preview data with **Fichier > Charger données d'aperçu**.
-7. Export the label with **Fichier > Exporter PNG**.
-
-## Template Documents
-
-Templates are represented by `LabelTemplate` in
-[template_model.py](template_model.py). A document contains:
-
-- `schema_version`: currently `1`.
-- `name`: a non-empty template name.
-- `width_mm` and `height_mm`: physical label dimensions.
-- `inner_margins_mm`: the printable-area boundary used for validation.
-- `outer_margins_mm`: the bleed or cutting boundary displayed around the label.
-- `bg_color` and `bg_opacity`: label background settings.
-- `items`: serialized canvas objects.
-
-Example:
+Les gabarits E-Studio sont stockés dans un format JSON versionné structuré comme suit :
 
 ```json
 {
   "schema_version": 1,
-  "name": "Shelf label",
+  "id": "template_promo_100x50",
+  "name": "Balisage Promo 100x50",
   "width_mm": 100.0,
   "height_mm": 50.0,
   "inner_margins_mm": {
@@ -130,330 +190,89 @@ Example:
     "right": 1.0
   },
   "bg_color": "#FFFFFF",
-  "bg_opacity": 1.0,
-  "items": []
+  "default_imposition": {
+    "page_size": "A4",
+    "orientation": "landscape",
+    "gap_mm": 2.0,
+    "gap_x_mm": 3.0,
+    "gap_y_mm": 2.0,
+    "show_cut_marks": true,
+    "start_offset_slot": 0
+  },
+  "items": [
+    {
+      "id": "txt_title",
+      "type": "text",
+      "name": "Désignation Produit",
+      "x_mm": 3.0,
+      "y_mm": 4.0,
+      "w_mm": 94.0,
+      "h_mm": 12.0,
+      "text": "Nom de l'article",
+      "binding_key": "ITEMNAME",
+      "font_family": "Arial",
+      "font_size_pt": 14.0,
+      "font_weight": "bold",
+      "text_color": "#111827",
+      "alignment": "left"
+    }
+  ]
 }
 ```
 
-`LabelTemplate.validate()` rejects empty names, non-positive dimensions,
-negative margins, margins that remove the printable area, and invalid opacity.
-JSON loading validates the schema version and reconstructs margin value
-objects. Unsupported item records are skipped by the canvas loader so a
-partially damaged document can still be opened and repaired.
+---
 
-## Canvas Items And Rendering
+## 5. Raccourcis Clavier
 
-[label_items.py](label_items.py) contains the Qt scene-item layer:
+| Raccourci | Action |
+| :--- | :--- |
+| `Ctrl + Z` | Annuler la dernière action (*Undo*) |
+| `Ctrl + Y` ou `Ctrl + Shift + Z` | Rétablir la dernière action (*Redo*) |
+| `Ctrl + C` | Copier l'élément ou le style |
+| `Ctrl + V` | Coller l'élément ou le style |
+| `Ctrl + D` | Dupliquer l'élément sélectionné avec décalage |
+| `Ctrl + A` | Sélectionner tous les éléments du canvas |
+| `Ctrl + F` | Ouvrir la modal "Rechercher et Remplacer" |
+| `Suppr` ou `Retour arrière` | Supprimer les éléments sélectionnés |
+| `Flèches directionnelles` | Déplacer les éléments sélectionnés de 1 mm |
+| `Shift + Flèches` | Déplacer les éléments sélectionnés de 5 mm |
+| `Échap` | Désélectionner / Fermer la fenêtre modale |
 
-- `BaseLabelItem` provides millimetre geometry, selection, movement, resizing,
-  property definitions, and basic serialization.
-- `TierPriceLabelItem` displays a configured price tier and serializes its
-  tier, prefix, unit, and strictness settings.
-- `RichLabelItem` adapts reusable render objects into editable Qt scene items.
-- `HazardWarningOverlay` marks objects outside the printable area.
+---
 
-[render_items.py](render_items.py) contains the reusable rendering layer:
+## 6. Installation & Démarrage
 
-- `BaseItem` defines the render and data-binding contract.
-- `ShapeItem` and `TextItem` render basic shapes and rich text.
-- `ImageItem`, `QRCodeItem`, and `BarcodeItem` render external or generated
-  media.
-- `LineItem` and `EllipseItem` provide additional geometric primitives.
-- `ItemFactory` registers the supported render types.
+### 6.1 Version Web (React / Vite)
 
-The render layer does not manage selection or Qt scene ownership. This keeps
-objects reusable for both the interactive editor and batch rendering.
-
-## Data Binding And Preview
-
-Bindings use a flat JSON object whose keys match an object's **Clé de données**.
-For example:
-
-```json
-{
-  "ITEMNAME": "Café 250 g",
-  "PRODUCT_SCAN": "123456789012",
-  "IMAGE_PATH": "/data/products/coffee.png"
-}
-```
-
-A text object bound to `ITEMNAME` displays the product name during export. A
-barcode bound to `PRODUCT_SCAN` renders the supplied scan code. An image bound
-to `IMAGE_PATH` loads the referenced image.
-
-Preview data is applied to temporary copies during rendering. It does not
-mutate the editor item or the saved template.
-
-## Product And Price Models
-
-[article_models.py](article_models.py) defines typed product and pricing data:
-
-- `ProductIdent` identifies the product and scan code.
-- `HierarchyInfo` stores commercial hierarchy fields.
-- `PackagingInfo` stores selling and case units.
-- `TaxInfo` calculates tax amounts.
-- `PricingInfo` calculates promotional, effective, discount, and display prices.
-- `BaseArticle` produces a flat binding context for label objects.
-
-[article_types.py](article_types.py) provides specialized articles such as
-`WeightedArticle` and `BulkCaseArticle`.
-
-[tier_engine.py](tier_engine.py) resolves a configured tier by priority. It can
-try fallback tiers, fall back to the standard selling price, return an empty
-result for an optional tier, or raise `CancelLabelGenerationException` when a
-strict tier is unavailable.
-
-## Units And Batch Rendering
-
-[units.py](units.py) defines `Unit` and `Length`. `Length` provides explicit
-conversion between pixels, millimetres, and points using a configurable DPI.
-
-[label_renderer.py](label_renderer.py) contains `BatchRenderer`, which renders
-deep copies of reusable items into a `QImage`. Copies are important because
-data binding must not alter the original template objects.
-
-## Project Layout
-
-- [app.py](app.py): supported application entry point.
-- [main.py](main.py): main window, menus, file workflow, and export actions.
-- [gabarit_wizard.py](gabarit_wizard.py): new-template dialog.
-- [template_model.py](template_model.py): validated, versioned template model.
-- [template_canvas.py](template_canvas.py): scene, printable bounds, and PNG export.
-- [label_items.py](label_items.py): all editable Qt scene items.
-- [item_properties.py](item_properties.py): property metadata used by the inspector.
-- [property_inspector.py](property_inspector.py): dynamic property editor dock.
-- [render_items.py](render_items.py): reusable render objects and factory.
-- [rich_text_models.py](rich_text_models.py): rich-text value objects and enums.
-- [rich_layout.py](rich_layout.py): Qt text layout engine.
-- [article_models.py](article_models.py): product and pricing models.
-- [article_types.py](article_types.py): specialized article models.
-- [tier_engine.py](tier_engine.py): price-tier resolution and fallback rules.
-- [imposition.py](imposition.py): multi-label page layout calculations.
-- [label_renderer.py](label_renderer.py): headless image renderer.
-- [units.py](units.py): physical-unit value objects.
-- [test_core.py](test_core.py): pure-Python regression tests.
-
-## Development Checks
-
-Run the pure-Python regression suite:
+L'application web s'exécute dans un environnement Node.js 18+ :
 
 ```bash
-python -m unittest test_core.py
+# Installation des dépendances
+npm install
+
+# Démarrage du serveur de développement (accessible sur le port 3000)
+npm run dev
+
+# Construction de l'application de production
+npm run build
 ```
 
-Compile all root-level Python modules without starting Qt:
+### 6.2 Version Desktop (Python / PySide6)
+
+L'application de bureau fonctionne sous Windows, macOS et Linux avec Python 3.10+ :
 
 ```bash
-find . -maxdepth 1 -name '*.py' -print0 | xargs -0 python -m py_compile
+# Création et activation de l'environnement virtuel
+python -m venv .venv
+source .venv/bin/activate  # Sur Windows: .venv\Scripts\activate
+
+# Installation des bibliothèques nécessaires
+pip install -r requirements.txt
+
+# Lancement de l'application
+python app.py
 ```
 
-The regression tests cover template JSON round trips, article binding values,
-and tier fallback behavior. Qt rendering and interactive workflows require a
-working graphical runtime and are not exercised by the pure-Python test suite.
+---
 
-## Architecture Notes
-
-The root-level modules are the supported architecture. The former duplicated
-editor and renderer stacks have been removed. The current separation is
-intentional: document models, render primitives, and Qt scene adapters have
-different ownership and lifecycle responsibilities.
-
-## Complete Source Reference
-
-This section documents every current root-level Python source file. The files
-are listed by responsibility and the descriptions reflect the public classes
-and entry points currently implemented.
-
-### Application And User Interface
-
-#### `app.py`
-
-Application launcher. The `main()` function creates `QApplication`, constructs
-`EditorMainWindow`, shows it, and returns Qt's event-loop exit code. Run this
-file rather than importing the window directly.
-
-#### `main.py`
-
-Desktop application controller. `EditorMainWindow` owns the central
-`QGraphicsView`, the `TemplateCanvas`, the property inspector, menus, toolbar
-actions, file dialogs, preview-data loading, JSON save/open operations, and PNG
-export. It also creates tier-price and rich items from user actions.
-
-Important workflows implemented here:
-
-- `on_file_new_gabarit()` opens `NewGabaritDialog`, validates the result, and
-  creates a canvas.
-- `on_add_tier_item()` inserts a `TierPriceLabelItem` with a collision-free ID.
-- `on_add_rich_item()` inserts text, shape, image, QR, barcode, line, or ellipse
-  items.
-- `on_file_save()` serializes only valid printable objects.
-- `on_file_open()` reconstructs a versioned `LabelTemplate` from JSON.
-- `on_load_preview_data()` loads a flat JSON binding record.
-- `on_export_png()` exports the label at 300 DPI.
-
-#### `gabarit_wizard.py`
-
-Defines `NewGabaritDialog`, the mandatory template-creation form. It collects
-the name, physical dimensions, inner printable margins, and outer bleed
-margins, then returns a validated `LabelTemplate` through `get_template()`.
-
-#### `property_inspector.py`
-
-Defines `PropertyInspectorWidget`, a dynamic editor for one or more selected
-`BaseLabelItem` objects. It computes properties common to all selected items,
-groups them by category, creates suitable Qt controls for floats, integers,
-booleans, and strings, and applies changes through `PropertySpec` setters.
-
-#### `item_properties.py`
-
-Defines `PropertySpec`, the metadata object used by the inspector. A property
-specification contains a stable key, display label, editor type, category,
-getter, setter, optional numeric limits, and an optional suffix. The module
-also provides the multiple-values display marker used for multi-selection.
-
-### Template And Canvas
-
-#### `template_model.py`
-
-Defines the serializable document model:
-
-- `Margins` stores top, bottom, left, and right millimetre values.
-- `LabelTemplate` stores dimensions, margins, background settings, and item
-  records.
-- `LabelTemplate.validate()` returns all validation messages.
-- `LabelTemplate.to_json()` validates and writes schema version `1`.
-- `LabelTemplate.from_json()` parses JSON, restores margin objects, checks the
-  schema version, and validates the resulting document.
-
-#### `template_canvas.py`
-
-Defines `TemplateCanvas`, a `QGraphicsScene` that maps millimetres to screen
-pixels. It draws the neutral workspace, outer bleed area, label surface, and
-inner printable boundary. It loads item records through `BaseLabelItem`,
-creates stable item IDs, displays out-of-bounds overlays, serializes valid
-items, and exports only the label rectangle to PNG.
-
-#### `label_items.py`
-
-Contains all interactive Qt canvas objects:
-
-- `HazardWarningOverlay` draws a blinking warning over invalid geometry.
-- `BaseLabelItem` provides selection, movement, millimetre geometry, common
-  properties, and base JSON persistence.
-- `TierPriceLabelItem` displays a selected price tier and resolves preview data
-  during export.
-- `RichLabelItem` wraps reusable render objects and adds editor behavior,
-  property inspection, temporary export binding, and rich-item JSON persistence.
-
-`BaseLabelItem.from_dict()` is the item factory for saved canvas records. It
-selects the appropriate base, tier, or rich item implementation and restores
-its serialized settings.
-
-### Rendering And Text
-
-#### `render_items.py`
-
-Contains renderer objects independent of the graphics-scene selection layer:
-
-- `BaseItem` stores a rectangle, rotation, z-index, lock state, and binding key.
-- `ShapeItem` draws a filled, bordered rectangle.
-- `TextItem` lays out and paints rich paragraphs with margins, alignment,
-  overflow mode, background, borders, and placeholder text.
-- `ImageItem` loads file paths or image bytes and caches the resulting image.
-- `QRCodeItem` generates vector QR modules when `qrcode` is available.
-- `BarcodeItem` generates Code 128 or EAN-13 bars when `python-barcode` is
-  available.
-- `LineItem` draws a configurable horizontal line.
-- `EllipseItem` draws a configurable ellipse.
-- `ItemFactory` maps serialized type names to renderer classes.
-
-Every renderer accepts an optional override rectangle and implements
-`apply_data_binding()` where its content can come from preview data.
-
-#### `rich_text_models.py`
-
-Defines the pure rich-text value model:
-
-- `TextAlignment`, `VAlign`, `Overflow`, and `SizingMode` describe layout rules.
-- `Position` stores cursor or text positions.
-- `CharFormat` stores font family, size, weight, style, color, and decoration.
-- `ParagraphFormat` stores paragraph alignment and spacing.
-- `Run` stores a text span with a character format.
-- `Paragraph` stores runs and exposes text and formatting operations.
-
-#### `rich_layout.py`
-
-Bridges the rich-text model to Qt text layout. `_qfont_default()` and
-`_qfont()` convert model formatting to `QFont`. `ParagraphLayout` stores the
-layout result for one paragraph, `LayoutResult` aggregates paragraph layouts,
-and `LayoutEngine.layout()` calculates wrapped, formatted lines for a
-`TextItem` within a target rectangle.
-
-#### `label_renderer.py`
-
-Defines `BatchRenderer.render_label_to_image()`. It sorts render items by
-z-index, deep-copies each item, applies a data record to the copy, renders into
-a `QImage`, and returns the image. The deep-copy step prevents batch data from
-changing the source template.
-
-### Product, Pricing, And Utilities
-
-#### `article_models.py`
-
-Defines the typed article domain:
-
-- `ProductIdent`: product number, scan code, name, description, and brand.
-- `HierarchyInfo`: division, department, category, and subcategory.
-- `PackagingInfo`: pack unit, selling unit, case size, and case unit.
-- `TaxInfo`: tax metadata and VAT calculation.
-- `PricingInfo`: selling price, promotional price, effective price, discount
-  percentage, and discount amount.
-- `BaseArticle`: combines those values and creates the flat binding context
-  consumed by label objects.
-
-#### `article_types.py`
-
-Defines specialized `BaseArticle` subclasses:
-
-- `WeightedArticle` adds tare information and a price-per-kilogram binding.
-- `BulkCaseArticle` calculates the unit price inside a case and adds case
-  display bindings.
-
-#### `tier_engine.py`
-
-Defines the price-tier resolution service:
-
-- `CancelLabelGenerationException` signals that a required tier is missing.
-- `TierTargetSpec` configures the primary tier, fallback indexes, base-price
-  fallback, strictness, prefix, and unit label.
-- `TierResolver.resolve()` searches the configured tier chain, then optionally
-  uses the selling price, returns an empty optional result, or raises.
-
-#### `units.py`
-
-Defines physical measurement helpers:
-
-- `Unit` enumerates pixels, millimetres, and points.
-- `Length` is a float-like value with conversion helpers such as `from_mm()`,
-  `from_pt()`, `to_mm()`, and `to_pt()`. DPI validation is performed for every
-  conversion that requires it.
-
-#### `imposition.py`
-
-Defines `PageImpositionResult` and `ImpositionCalculator`. The calculator
-determines how many copies of a template fit on A4, A3, or Letter paper,
-including outer margins and optional gaps, then returns centered offsets.
-
-### Verification
-
-#### `test_core.py`
-
-Defines the pure-Python regression suite:
-
-- `TemplateModelTests` verifies template JSON round trips.
-- `PricingTests` verifies article binding values and case pricing.
-- `TierResolverTests` verifies fallback to the base selling price.
-
-These tests do not instantiate Qt widgets. Use them for fast checks of the
-document and business layers, then use the full application for interactive Qt
-validation.
+*Développé avec passion pour l'excellence opérationnelle et la précision graphique dans le commerce de détail.*

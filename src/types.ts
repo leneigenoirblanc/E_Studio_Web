@@ -5,8 +5,16 @@ export interface Margins {
   right: number;
 }
 
+export interface SemanticSnapConfig {
+  parent_id: string;
+  anchor_edge: 'bottom' | 'top' | 'left' | 'right';
+  offset_mm: number;
+}
+
 export type ItemType =
   | 'text'
+  | 'rich_text'
+  | 'price_block'
   | 'curved_text'
   | 'pictogram'
   | 'shape'
@@ -63,6 +71,7 @@ export interface BaseItemProperties {
   binding_key?: string;
   conditional_display?: ConditionalDisplayConfig;
   finish_effect?: 'none' | 'die_cut' | 'spot_varnish' | 'hot_foil';
+  semantic_snap?: SemanticSnapConfig;
 }
 
 export interface TextShadowConfig {
@@ -223,6 +232,59 @@ export interface BarcodeItemProperties extends BaseItemProperties {
   bar_color: string;
 }
 
+export interface PriceSubStyle {
+  font_size_pt?: number;
+  font_weight?: 'normal' | '500' | '600' | 'bold' | '800';
+  text_color?: string;
+  baseline_shift?: 'normal' | 'superscript' | 'subscript';
+}
+
+export interface PriceBlockItemProperties extends BaseItemProperties {
+  type: 'price_block';
+  binding_key: string; // e.g. "PROMOPRICE", "SELLING_PRICE"
+  currency_symbol?: string; // e.g. "€", "FCFA", "$"
+  currency_position?: 'after' | 'before' | 'superscript';
+  decimal_separator?: '.' | ',';
+  integer_style: PriceSubStyle;
+  decimal_style: PriceSubStyle;
+  currency_style?: PriceSubStyle;
+  font_family?: string;
+  alignment?: 'left' | 'center' | 'right';
+  valign?: 'top' | 'middle' | 'bottom';
+  fallback_price?: number | string;
+}
+
+export interface TextRun {
+  id?: string;
+  text?: string;
+  binding_key?: string;
+  font_size_pt?: number;
+  font_weight?: 'normal' | '500' | '600' | 'bold' | '800';
+  font_style?: 'normal' | 'italic';
+  text_decoration?: 'none' | 'underline' | 'line-through';
+  text_color?: string;
+  highlight_color?: string;
+  baseline_shift?: 'normal' | 'superscript' | 'subscript';
+}
+
+export interface RichTextItemProperties extends BaseItemProperties {
+  type: 'rich_text';
+  runs: TextRun[];
+  font_family?: string;
+  default_font_size_pt?: number;
+  default_text_color?: string;
+  alignment?: 'left' | 'center' | 'right' | 'justify';
+  valign?: 'top' | 'middle' | 'bottom';
+  line_height_multiplier?: number;
+  wrap?: boolean;
+}
+
+export interface CrossConditionalConfig {
+  enabled: boolean;
+  trigger_column: string; // e.g. "PARENT_BRAND_VOLUME"
+  min_threshold: number; // e.g. 50
+}
+
 export interface TierPriceItemProperties extends BaseItemProperties {
   type: 'tier_price';
   primary_tier: number; // 1, 2, 3...
@@ -230,6 +292,13 @@ export interface TierPriceItemProperties extends BaseItemProperties {
   unit_label: string; // "FCFA", "€", "$"
   strict_required: boolean;
   fallback_to_base_price?: boolean;
+  pricing_strategy?: 'flat' | 'graduated';
+  cross_conditional?: CrossConditionalConfig;
+  styles?: {
+    header_bg_color?: string;
+    text_color?: string;
+    border_color?: string;
+  };
 }
 
 export interface RestrictedAreaItemProperties extends BaseItemProperties {
@@ -243,6 +312,8 @@ export interface RestrictedAreaItemProperties extends BaseItemProperties {
 
 export type TemplateItem =
   | TextItemProperties
+  | RichTextItemProperties
+  | PriceBlockItemProperties
   | CurvedTextItemProperties
   | PictogramItemProperties
   | ShapeItemProperties

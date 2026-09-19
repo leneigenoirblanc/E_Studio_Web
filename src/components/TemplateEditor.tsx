@@ -18,6 +18,7 @@ import {
   computeSmartGuides,
   computeResizeSmartGuides,
 } from '../utils/smartGuides';
+import { applySemanticSnapping } from '../utils/semanticSnapping';
 import {
   Save,
   Download,
@@ -173,18 +174,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   };
 
   const handleUpdateItem = (updated: TemplateItem) => {
+    const rawItems = template.items.map((it) => (it.id === updated.id ? updated : it));
     const next = {
       ...template,
-      items: template.items.map((it) => (it.id === updated.id ? updated : it)),
+      items: applySemanticSnapping(rawItems),
     };
     pushState(next);
   };
 
   const handleUpdateMultipleItems = (updatedItems: TemplateItem[]) => {
     const updateMap = new Map(updatedItems.map((u) => [u.id, u]));
+    const rawItems = template.items.map((it) => (updateMap.has(it.id) ? updateMap.get(it.id)! : it));
     const next = {
       ...template,
-      items: template.items.map((it) => (updateMap.has(it.id) ? updateMap.get(it.id)! : it)),
+      items: applySemanticSnapping(rawItems),
     };
     pushState(next);
   };
@@ -549,6 +552,62 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           style_variant: 'color',
         };
         break;
+      case 'price_block':
+        newItem = {
+          id,
+          type: 'price_block',
+          x_mm: centerX,
+          y_mm: centerY,
+          w_mm: 38.0,
+          h_mm: 14.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          binding_key: 'PROMOPRICE',
+          fallback_price: 29.99,
+          decimal_separator: ',',
+          currency_symbol: '€',
+          currency_position: 'after',
+          integer_style: {
+            font_size_pt: 28,
+            font_weight: 'bold',
+            text_color: '#0f172a',
+          },
+          decimal_style: {
+            font_size_pt: 14,
+            font_weight: 'bold',
+            text_color: '#0f172a',
+            baseline_shift: 'superscript',
+          },
+          currency_style: {
+            font_size_pt: 13,
+            font_weight: 'bold',
+            text_color: '#0f172a',
+          },
+        };
+        break;
+      case 'rich_text':
+        newItem = {
+          id,
+          type: 'rich_text',
+          x_mm: centerX,
+          y_mm: centerY,
+          w_mm: 50.0,
+          h_mm: 16.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          font_family: 'Plus Jakarta Sans',
+          default_font_size_pt: 11,
+          default_text_color: '#0f172a',
+          alignment: 'left',
+          valign: 'top',
+          runs: [
+            { id: `run_1`, text: 'Offre Spéciale : ', font_weight: 'bold', text_color: '#dc2626' },
+            { id: `run_2`, binding_key: 'DESCRIPTION_FR', font_weight: 'normal', text_color: '#0f172a' },
+          ],
+        };
+        break;
     }
 
     const next = { ...template, items: [...template.items, newItem] };
@@ -854,7 +913,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         return it;
       });
 
-      setTemplate((prev) => ({ ...prev, items: updated }));
+      const snappedItems = applySemanticSnapping(updated);
+      setTemplate((prev) => ({ ...prev, items: snappedItems }));
       return;
     }
 
@@ -941,7 +1001,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           };
         });
 
-        setTemplate((prev) => ({ ...prev, items: updatedItems }));
+        const snappedItems = applySemanticSnapping(updatedItems);
+        setTemplate((prev) => ({ ...prev, items: snappedItems }));
         return;
       }
     }
@@ -983,14 +1044,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     if (isResizing) {
       setIsResizing(false);
       setResizeState(null);
-      pushState(template);
+      const snapped = applySemanticSnapping(template.items);
+      const next = { ...template, items: snapped };
+      setTemplate(next);
+      pushState(next);
     }
 
     if (isDragging) {
       setIsDragging(false);
       setDragStartPos(null);
       if (hasMovedDuringDrag) {
-        pushState(template);
+        const snapped = applySemanticSnapping(template.items);
+        const next = { ...template, items: snapped };
+        setTemplate(next);
+        pushState(next);
       }
       setHasMovedDuringDrag(false);
     }
@@ -1142,6 +1209,14 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               <span>Texte</span>
             </button>
             <button
+              onClick={() => addItem('rich_text')}
+              className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+              title="Ajouter un texte riche avec multi-segments"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>Texte Riche</span>
+            </button>
+            <button
               onClick={() => addItem('shape')}
               className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
               title="Ajouter un rectangle"
@@ -1188,6 +1263,14 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             >
               <DollarSign className="w-3.5 h-3.5 text-sky-700 shrink-0" />
               <span>Paliers Prix</span>
+            </button>
+            <button
+              onClick={() => addItem('price_block')}
+              className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-800 flex items-center gap-1 transition whitespace-nowrap shrink-0"
+              title="Ajouter un bloc de prix avec centimes flottants et symbole personnalisable"
+            >
+              <DollarSign className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+              <span>Prix Centimes</span>
             </button>
             <button
               onClick={() => addItem('restricted_area')}
@@ -1559,6 +1642,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         {/* Right Inspector Dock with full Multi-Selection Support */}
         <PropertyInspector
           selectedItems={selectedItems}
+          allItems={template.items}
           onUpdateItem={handleUpdateItem}
           onUpdateMultipleItems={handleUpdateMultipleItems}
           onDeleteItem={handleDeleteItem}

@@ -2,6 +2,9 @@ import React from 'react';
 import {
   TemplateItem,
   TextItemProperties,
+  RichTextItemProperties,
+  PriceBlockItemProperties,
+  TextRun,
   ShapeItemProperties,
   BarcodeItemProperties,
   RestrictedAreaItemProperties,
@@ -9,6 +12,7 @@ import {
   PictogramItemProperties,
   PictogramType,
   ConditionalDisplayConfig,
+  SemanticSnapConfig,
 } from '../types';
 import { DOMAIN_FIELDS } from '../domainFields';
 import {
@@ -59,10 +63,14 @@ import {
   Scissors,
   Stamp,
   CircleDot,
+  Magnet,
+  Plus,
+  Link2,
 } from 'lucide-react';
 
 interface PropertyInspectorProps {
   selectedItems: TemplateItem[];
+  allItems?: TemplateItem[];
   onUpdateItem: (updatedItem: TemplateItem) => void;
   onUpdateMultipleItems?: (updatedItems: TemplateItem[]) => void;
   onDeleteItem: (id: string) => void;
@@ -77,6 +85,7 @@ interface PropertyInspectorProps {
 
 export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
   selectedItems,
+  allItems = [],
   onUpdateItem,
   onUpdateMultipleItems,
   onDeleteItem,
@@ -722,6 +731,133 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <option value="hot_foil">Dorure à Chaud (Marquage or métallisé)</option>
             </select>
           </div>
+        </div>
+
+        {/* SEMANTIC SNAPPING (Aimant Sémantique) */}
+        <div className="pt-2 border-t border-slate-200 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-slate-900 uppercase text-[10px] tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Magnet className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Aimant Sémantique (Snapping Lié)</span>
+            </h4>
+            {selectedItem.semantic_snap && (
+              <button
+                type="button"
+                onClick={() => update({ semantic_snap: undefined })}
+                className="text-[10px] text-rose-600 hover:text-rose-700 underline font-medium"
+              >
+                Détacher
+              </button>
+            )}
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-700 font-medium">
+            <input
+              type="checkbox"
+              checked={Boolean(selectedItem.semantic_snap)}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  const potentialParent = allItems.find((i) => i.id !== selectedItem.id);
+                  update({
+                    semantic_snap: {
+                      parent_id: potentialParent ? potentialParent.id : '',
+                      anchor_edge: 'bottom',
+                      offset_mm: 2.0,
+                    },
+                  });
+                } else {
+                  update({ semantic_snap: undefined });
+                }
+              }}
+              className="rounded text-indigo-600 focus:ring-indigo-500"
+            />
+            <span>Asservir la boîte à un élément parent</span>
+          </label>
+
+          {selectedItem.semantic_snap && (
+            <div className="p-2.5 bg-indigo-50/60 rounded-lg border border-indigo-200 space-y-2">
+              <div>
+                <label className="text-[11px] text-indigo-900 font-medium flex items-center gap-1">
+                  <Link2 className="w-3 h-3 text-indigo-600" />
+                  <span>Élément Parent de Référence</span>
+                </label>
+                <select
+                  value={selectedItem.semantic_snap.parent_id}
+                  onChange={(e) =>
+                    update({
+                      semantic_snap: {
+                        ...selectedItem.semantic_snap!,
+                        parent_id: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full mt-1 px-2 py-1.5 bg-white border border-indigo-300 rounded text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">-- Sélectionner un élément --</option>
+                  {allItems
+                    .filter((it) => it.id !== selectedItem.id)
+                    .map((it) => {
+                      const label =
+                        (it as any).text ||
+                        (it as any).code ||
+                        (it as any).label ||
+                        (it as any).binding_key ||
+                        it.type;
+                      return (
+                        <option key={it.id} value={it.id}>
+                          {it.id} ({it.type} - {String(label).slice(0, 22)})
+                        </option>
+                      );
+                    })}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] text-indigo-900 font-medium">Bord d'ancrage</label>
+                  <select
+                    value={selectedItem.semantic_snap.anchor_edge}
+                    onChange={(e) =>
+                      update({
+                        semantic_snap: {
+                          ...selectedItem.semantic_snap!,
+                          anchor_edge: e.target.value as any,
+                        },
+                      })
+                    }
+                    className="w-full mt-1 px-2 py-1 bg-white border border-indigo-300 rounded text-xs text-slate-800"
+                  >
+                    <option value="bottom">En dessous (bottom)</option>
+                    <option value="top">Au dessus (top)</option>
+                    <option value="right">À droite (right)</option>
+                    <option value="left">À gauche (left)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-indigo-900 font-medium">Distance (mm)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={selectedItem.semantic_snap.offset_mm}
+                    onChange={(e) =>
+                      update({
+                        semantic_snap: {
+                          ...selectedItem.semantic_snap!,
+                          offset_mm: parseFloat(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full mt-1 px-2 py-1 bg-white border border-indigo-300 rounded text-xs font-mono text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-indigo-700 leading-tight">
+                💡 Si le parent bouge ou s'élargit, cet élément se déplace de façon synchrone à {selectedItem.semantic_snap.offset_mm} mm.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* FULL TYPOGRAPHY SECTION FOR TEXT ITEMS */}
@@ -2052,6 +2188,92 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                 className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
               />
             </div>
+
+            {/* Sélecteur d'Algorithme de Palier (Pricing Strategy) */}
+            <div className="p-2.5 bg-sky-50 rounded-lg border border-sky-200 space-y-1.5">
+              <label className="text-[11px] font-bold text-sky-950 flex items-center justify-between">
+                <span>Mode de Tarification (Pricing Strategy)</span>
+                <span className="text-[10px] text-sky-700 uppercase font-mono">
+                  {selectedItem.pricing_strategy === 'graduated' ? 'Progressif' : 'Unitaire'}
+                </span>
+              </label>
+              <select
+                value={selectedItem.pricing_strategy || 'flat'}
+                onChange={(e) => update({ pricing_strategy: e.target.value as any })}
+                className="w-full px-2 py-1.5 bg-white border border-sky-300 rounded text-xs text-sky-950 focus:ring-1 focus:ring-sky-500"
+              >
+                <option value="flat">Volume Standard (Prix unitaire appliqué à tous les articles)</option>
+                <option value="graduated">Tarification Cumulative / Par Tranche (Graduated)</option>
+              </select>
+              <p className="text-[10px] text-sky-700 leading-tight">
+                {selectedItem.pricing_strategy === 'graduated'
+                  ? '⚡ Chaque tranche de quantité est calculée avec son propre barème de prix.'
+                  : '📦 Dès que le palier est atteint, tout le panier bénéficie du prix réduit.'}
+              </p>
+            </div>
+
+            {/* Paliers Conditionnels Croisés (Cross-Tiers) */}
+            <div className="p-2.5 bg-indigo-50/70 rounded-lg border border-indigo-200 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer text-[11px] font-medium text-indigo-950">
+                <input
+                  type="checkbox"
+                  checked={Boolean(selectedItem.cross_conditional?.enabled)}
+                  onChange={(e) =>
+                    update({
+                      cross_conditional: {
+                        enabled: e.target.checked,
+                        trigger_column: selectedItem.cross_conditional?.trigger_column || 'PARENT_BRAND_VOLUME',
+                        min_threshold: selectedItem.cross_conditional?.min_threshold ?? 50,
+                      },
+                    })
+                  }
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>Condition Croisée (Cross-Tiers)</span>
+              </label>
+
+              {selectedItem.cross_conditional?.enabled && (
+                <div className="space-y-2 pt-1">
+                  <div>
+                    <label className="text-[10px] text-indigo-900 font-medium">Colonne Déclencheur</label>
+                    <input
+                      type="text"
+                      placeholder="ex: PARENT_BRAND_VOLUME"
+                      value={selectedItem.cross_conditional.trigger_column || ''}
+                      onChange={(e) =>
+                        update({
+                          cross_conditional: {
+                            ...selectedItem.cross_conditional!,
+                            trigger_column: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full mt-0.5 px-2 py-1 bg-white border border-indigo-300 rounded text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-indigo-900 font-medium">Seuil Minimal</label>
+                    <input
+                      type="number"
+                      value={selectedItem.cross_conditional.min_threshold ?? 50}
+                      onChange={(e) =>
+                        update({
+                          cross_conditional: {
+                            ...selectedItem.cross_conditional!,
+                            min_threshold: parseFloat(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full mt-0.5 px-2 py-1 bg-white border border-indigo-300 rounded text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                  <p className="text-[10px] text-indigo-700 leading-tight">
+                    Le palier promo sera validé uniquement si la colonne atteint ce seuil.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-1.5 pt-1">
               <label className="flex items-center gap-2 cursor-pointer text-[11px]">
                 <input
@@ -2071,6 +2293,313 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                 />
                 <span>Repli sur le prix de base si palier absent</span>
               </label>
+            </div>
+          </div>
+        )}
+
+        {/* PRICE BLOCK (Smart Floating Decimal) */}
+        {selectedItem.type === 'price_block' && (
+          <div className="pt-2 border-t border-slate-200 space-y-3">
+            <h4 className="font-bold text-slate-900 mb-1.5 uppercase text-[10px] tracking-wider text-slate-400 flex items-center gap-1">
+              <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Bloc Prix & Centimes Flottants</span>
+            </h4>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] text-slate-500">Prix Test / Fallback</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={(selectedItem as PriceBlockItemProperties).fallback_price ?? 29.99}
+                  onChange={(e) => update({ fallback_price: parseFloat(e.target.value) || 0 })}
+                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-500">Séparateur Décimal</label>
+                <select
+                  value={(selectedItem as PriceBlockItemProperties).decimal_separator || ','}
+                  onChange={(e) => update({ decimal_separator: e.target.value as any })}
+                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+                >
+                  <option value=",">Virgule (ex: 29,99)</option>
+                  <option value=".">Point (ex: 29.99)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Currency Symbol & Position */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] text-slate-500">Symbole Monnaie</label>
+                <input
+                  type="text"
+                  value={(selectedItem as PriceBlockItemProperties).currency_symbol || '€'}
+                  onChange={(e) => update({ currency_symbol: e.target.value })}
+                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-500">Position Devise</label>
+                <select
+                  value={(selectedItem as PriceBlockItemProperties).currency_position || 'after'}
+                  onChange={(e) => update({ currency_position: e.target.value as any })}
+                  className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs"
+                >
+                  <option value="after">Après les centimes (29,99 €)</option>
+                  <option value="before">Avant le prix (€ 29,99)</option>
+                  <option value="superscript">En exposant haut (29,99 €^)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Integer Part Styling */}
+            <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+              <span className="text-[11px] font-bold text-slate-700 block">Partie Entière (Euros)</span>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-slate-500">Taille (pt)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="8"
+                    max="144"
+                    value={(selectedItem as PriceBlockItemProperties).integer_style?.font_size_pt || 28}
+                    onChange={(e) =>
+                      update({
+                        integer_style: {
+                          ...((selectedItem as PriceBlockItemProperties).integer_style || {}),
+                          font_size_pt: parseFloat(e.target.value) || 28,
+                        },
+                      })
+                    }
+                    className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-500">Graisse</label>
+                  <select
+                    value={(selectedItem as PriceBlockItemProperties).integer_style?.font_weight || 'bold'}
+                    onChange={(e) =>
+                      update({
+                        integer_style: {
+                          ...((selectedItem as PriceBlockItemProperties).integer_style || {}),
+                          font_weight: e.target.value as any,
+                        },
+                      })
+                    }
+                    className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+                  >
+                    <option value="normal">Normal (400)</option>
+                    <option value="600">Demi-Gras (600)</option>
+                    <option value="bold">Gras (700)</option>
+                    <option value="800">Extra-Gras (800)</option>
+                    <option value="900">Black (900)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Decimal Part Styling (Floating Centimes) */}
+            <div className="p-2.5 bg-blue-50/60 rounded-lg border border-blue-200 space-y-2">
+              <span className="text-[11px] font-bold text-blue-900 block">Centimes Flottants (Décimales)</span>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[10px] text-slate-500">Taille (pt)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="6"
+                    max="96"
+                    value={(selectedItem as PriceBlockItemProperties).decimal_style?.font_size_pt || 14}
+                    onChange={(e) =>
+                      update({
+                        decimal_style: {
+                          ...((selectedItem as PriceBlockItemProperties).decimal_style || {}),
+                          font_size_pt: parseFloat(e.target.value) || 14,
+                        },
+                      })
+                    }
+                    className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-500">Positionnement</label>
+                  <select
+                    value={(selectedItem as PriceBlockItemProperties).decimal_style?.baseline_shift || 'superscript'}
+                    onChange={(e) =>
+                      update({
+                        decimal_style: {
+                          ...((selectedItem as PriceBlockItemProperties).decimal_style || {}),
+                          baseline_shift: e.target.value as any,
+                        },
+                      })
+                    }
+                    className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+                  >
+                    <option value="superscript">Exposant (Flottant haut)</option>
+                    <option value="baseline">Ligne de base</option>
+                    <option value="subscript">Indice (bas)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-500">Graisse</label>
+                  <select
+                    value={(selectedItem as PriceBlockItemProperties).decimal_style?.font_weight || 'bold'}
+                    onChange={(e) =>
+                      update({
+                        decimal_style: {
+                          ...((selectedItem as PriceBlockItemProperties).decimal_style || {}),
+                          font_weight: e.target.value as any,
+                        },
+                      })
+                    }
+                    className="w-full mt-0.5 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="bold">Gras</option>
+                    <option value="800">Extra-Gras</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* RICH TEXT INSPECTOR */}
+        {selectedItem.type === 'rich_text' && (
+          <div className="pt-2 border-t border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-slate-900 uppercase text-[10px] tracking-wider text-slate-400 flex items-center gap-1">
+                <Type className="w-3.5 h-3.5 text-blue-600" />
+                <span>Texte Riche & Runs Typographiques</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  const runs = [...((selectedItem as RichTextItemProperties).runs || [])];
+                  runs.push({
+                    id: `run_${Date.now()}`,
+                    text: 'Nouveau segment',
+                    font_weight: 'normal',
+                    font_style: 'normal',
+                  });
+                  update({ runs });
+                }}
+                className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Segment</span>
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {((selectedItem as RichTextItemProperties).runs || []).map((run, rIdx) => (
+                <div key={run.id || rIdx} className="p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500">Segment #{rIdx + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const runs = ((selectedItem as RichTextItemProperties).runs || []).filter((_, i) => i !== rIdx);
+                        update({ runs });
+                      }}
+                      className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-slate-500">Texte</label>
+                      <input
+                        type="text"
+                        value={run.text || ''}
+                        onChange={(e) => {
+                          const runs = [...((selectedItem as RichTextItemProperties).runs || [])];
+                          runs[rIdx] = { ...runs[rIdx], text: e.target.value };
+                          update({ runs });
+                        }}
+                        className="w-full px-1.5 py-1 bg-white border border-slate-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500">Ou Donnée Liée</label>
+                      <select
+                        value={run.binding_key || ''}
+                        onChange={(e) => {
+                          const runs = [...((selectedItem as RichTextItemProperties).runs || [])];
+                          runs[rIdx] = { ...runs[rIdx], binding_key: e.target.value || undefined };
+                          update({ runs });
+                        }}
+                        className="w-full px-1.5 py-1 bg-white border border-slate-300 rounded text-xs"
+                      >
+                        <option value="">-- Aucun --</option>
+                        {DOMAIN_FIELDS.map((f) => (
+                          <option key={f.key} value={f.key}>
+                            {f.key}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] text-slate-500">Taille (pt)</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        placeholder="Défaut"
+                        value={run.font_size_pt || ''}
+                        onChange={(e) => {
+                          const runs = [...((selectedItem as RichTextItemProperties).runs || [])];
+                          runs[rIdx] = {
+                            ...runs[rIdx],
+                            font_size_pt: e.target.value ? parseFloat(e.target.value) : undefined,
+                          };
+                          update({ runs });
+                        }}
+                        className="w-full px-1.5 py-1 bg-white border border-slate-300 rounded text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500">Graisse</label>
+                      <select
+                        value={run.font_weight || 'normal'}
+                        onChange={(e) => {
+                          const runs = [...((selectedItem as RichTextItemProperties).runs || [])];
+                          runs[rIdx] = { ...runs[rIdx], font_weight: e.target.value as any };
+                          update({ runs });
+                        }}
+                        className="w-full px-1 py-1 bg-white border border-slate-300 rounded text-xs"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="600">Demi-Gras</option>
+                        <option value="bold">Gras</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500">Position</label>
+                      <select
+                        value={run.baseline_shift || 'normal'}
+                        onChange={(e) => {
+                          const runs = [...((selectedItem as RichTextItemProperties).runs || [])];
+                          runs[rIdx] = { ...runs[rIdx], baseline_shift: e.target.value as any };
+                          update({ runs });
+                        }}
+                        className="w-full px-1 py-1 bg-white border border-slate-300 rounded text-xs"
+                      >
+                        <option value="normal">Normale</option>
+                        <option value="superscript">Exposant</option>
+                        <option value="subscript">Indice</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

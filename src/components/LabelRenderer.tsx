@@ -127,6 +127,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         let mainText = displayVal || item.placeholder || '';
         if (item.prefix_text) mainText = `${item.prefix_text} ${mainText}`;
         if (item.suffix_text) mainText = `${mainText} ${item.suffix_text}`;
+        mainText = PricingEngine.injectNonBreakingSpaces(mainText);
 
         const letterSpacingPx = item.letter_spacing_pt ? `${item.letter_spacing_pt * 1.333 * zoom}px` : undefined;
         const lineHeightStyle = item.line_height_multiplier ? item.line_height_multiplier : 1.25;
@@ -222,6 +223,198 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                 {mainText}
               </span>
               {hasCurrency && (currPosition === 'after' || currPosition === 'superscript' || currPosition === 'subscript') && renderCurrencySpan()}
+            </div>
+          </div>
+        );
+      }
+
+      case 'rich_text': {
+        const vAlignClass =
+          item.valign === 'bottom'
+            ? 'justify-end'
+            : item.valign === 'middle'
+            ? 'justify-center'
+            : 'justify-start';
+
+        const textAlignClass =
+          item.alignment === 'center'
+            ? 'text-center'
+            : item.alignment === 'right'
+            ? 'text-right'
+            : item.alignment === 'justify'
+            ? 'text-justify'
+            : 'text-left';
+
+        const defaultFontSizePx = Math.max(7, (item.default_font_size_pt || 11) * 1.333 * zoom);
+        const runs = Array.isArray(item.runs) ? item.runs : [];
+
+        return (
+          <div className={`w-full h-full flex flex-col ${vAlignClass} overflow-hidden p-0.5 select-none`}>
+            <div
+              className={`${textAlignClass} w-full leading-tight`}
+              style={{
+                fontFamily: item.font_family || 'Plus Jakarta Sans',
+                lineHeight: item.line_height_multiplier ? `${item.line_height_multiplier}` : '1.25',
+                whiteSpace: item.wrap !== false ? 'normal' : 'nowrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {runs.map((run, idx) => {
+                let runText = run.text || '';
+                if (run.binding_key) {
+                  const resolvedVal = record
+                    ? PricingEngine.getProductFieldValue(record, run.binding_key)
+                    : `[${run.binding_key}]`;
+                  runText = resolvedVal !== undefined && resolvedVal !== null ? String(resolvedVal) : '';
+                }
+                runText = PricingEngine.injectNonBreakingSpaces(runText);
+
+                const runSizePx = run.font_size_pt
+                  ? Math.max(6, run.font_size_pt * 1.333 * zoom)
+                  : defaultFontSizePx;
+
+                const isSuper = run.baseline_shift === 'superscript';
+                const isSub = run.baseline_shift === 'subscript';
+
+                return (
+                  <span
+                    key={run.id || idx}
+                    style={{
+                      fontSize: `${isSuper || isSub ? runSizePx * 0.75 : runSizePx}px`,
+                      fontWeight: run.font_weight || 'normal',
+                      fontStyle: run.font_style || 'normal',
+                      textDecoration: run.text_decoration || 'none',
+                      color: run.text_color || item.default_text_color || '#000000',
+                      backgroundColor: run.highlight_color || undefined,
+                      padding: run.highlight_color ? '0 2px' : undefined,
+                      borderRadius: run.highlight_color ? '2px' : undefined,
+                      verticalAlign: isSuper ? 'super' : isSub ? 'sub' : 'baseline',
+                    }}
+                  >
+                    {runText}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
+
+      case 'price_block': {
+        const vAlignClass =
+          item.valign === 'bottom'
+            ? 'justify-end'
+            : item.valign === 'middle'
+            ? 'justify-center'
+            : 'justify-start';
+
+        const textAlignClass =
+          item.alignment === 'center'
+            ? 'justify-center text-center'
+            : item.alignment === 'right'
+            ? 'justify-end text-right'
+            : 'justify-start text-left';
+
+        // Resolve raw price
+        let rawPrice: any = item.fallback_price ?? 29.99;
+        if (record && item.binding_key) {
+          const val = PricingEngine.getProductFieldValue(record, item.binding_key);
+          if (val !== undefined && val !== null && val !== '') {
+            rawPrice = val;
+          }
+        }
+
+        const separator = item.decimal_separator || ',';
+        const { integerPart, decimalPart } = PricingEngine.splitPrice(rawPrice, separator);
+
+        const intSizePt = item.integer_style?.font_size_pt || 28;
+        const decSizePt = item.decimal_style?.font_size_pt || Math.max(9, Math.round(intSizePt * 0.52));
+        const currSizePt = item.currency_style?.font_size_pt || Math.max(9, Math.round(intSizePt * 0.48));
+
+        const intSizePx = Math.max(10, intSizePt * 1.333 * zoom);
+        const decSizePx = Math.max(7, decSizePt * 1.333 * zoom);
+        const currSizePx = Math.max(7, currSizePt * 1.333 * zoom);
+
+        const currencySym = item.currency_symbol || '€';
+        const currPos = item.currency_position || 'after';
+        const decShift = item.decimal_style?.baseline_shift || 'superscript';
+
+        return (
+          <div className={`w-full h-full flex flex-col ${vAlignClass} overflow-hidden p-0.5 select-none`}>
+            <div
+              className={`w-full flex items-baseline leading-none ${textAlignClass}`}
+              style={{ fontFamily: item.font_family || 'Plus Jakarta Sans' }}
+            >
+              {/* Currency Before */}
+              {currencySym && currPos === 'before' && (
+                <span
+                  className="mr-1 inline-block"
+                  style={{
+                    fontSize: `${currSizePx}px`,
+                    fontWeight: item.currency_style?.font_weight || 'bold',
+                    color: item.currency_style?.text_color || item.integer_style?.text_color || '#000000',
+                  }}
+                >
+                  {currencySym}
+                </span>
+              )}
+
+              {/* Integer Part */}
+              <span
+                className="font-mono tracking-tight"
+                style={{
+                  fontSize: `${intSizePx}px`,
+                  fontWeight: item.integer_style?.font_weight || 'bold',
+                  color: item.integer_style?.text_color || '#000000',
+                  letterSpacing: '-0.03em',
+                }}
+              >
+                {integerPart}
+              </span>
+
+              {/* Centimes / Decimal Part with Floating Shift */}
+              <div
+                className="inline-flex items-baseline font-mono ml-0.5"
+                style={{
+                  alignSelf: decShift === 'superscript' ? 'flex-start' : 'baseline',
+                  transform: decShift === 'superscript' ? 'translateY(12%)' : undefined,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: `${decSizePx}px`,
+                    fontWeight: item.decimal_style?.font_weight || 'bold',
+                    color: item.decimal_style?.text_color || item.integer_style?.text_color || '#000000',
+                  }}
+                >
+                  {separator}
+                </span>
+                <span
+                  style={{
+                    fontSize: `${decSizePx}px`,
+                    fontWeight: item.decimal_style?.font_weight || 'bold',
+                    color: item.decimal_style?.text_color || item.integer_style?.text_color || '#000000',
+                  }}
+                >
+                  {decimalPart}
+                </span>
+              </div>
+
+              {/* Currency After / Superscript */}
+              {currencySym && (currPos === 'after' || currPos === 'superscript') && (
+                <span
+                  className="ml-1 inline-block"
+                  style={{
+                    fontSize: `${currSizePx}px`,
+                    fontWeight: item.currency_style?.font_weight || 'bold',
+                    color: item.currency_style?.text_color || item.integer_style?.text_color || '#000000',
+                    alignSelf: currPos === 'superscript' ? 'flex-start' : 'baseline',
+                    transform: currPos === 'superscript' ? 'translateY(8%)' : undefined,
+                  }}
+                >
+                  {currencySym}
+                </span>
+              )}
             </div>
           </div>
         );
@@ -476,6 +669,8 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         let tierText = `[${item.prefix_text}] Palier #${item.primary_tier} (${item.unit_label})`;
         let isFallback = false;
         let isError = false;
+        let strategy = item.pricing_strategy || 'flat';
+        let crossConditionMet = true;
 
         if (record) {
           const resolved = TierEngine.resolve(
@@ -485,11 +680,17 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
               unit_label: item.unit_label,
               strict_required: item.strict_required,
               fallback_to_base_price: item.fallback_to_base_price ?? true,
+              pricing_strategy: item.pricing_strategy,
+              cross_conditional: item.cross_conditional,
             },
             record
           );
 
           if (resolved) {
+            strategy = resolved.strategy || strategy;
+            if (resolved.cross_conditional_met !== undefined) {
+              crossConditionMet = resolved.cross_conditional_met;
+            }
             if (resolved.error) {
               tierText = resolved.text_qty;
               isError = true;
@@ -503,19 +704,30 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
         return (
           <div
             className={`w-full h-full flex items-center justify-between px-2 py-1 rounded border transition-colors ${
-              isError
+              isError || !crossConditionMet
                 ? 'bg-rose-50 border-rose-300 text-rose-800'
                 : isFallback
                 ? 'bg-amber-50 border-amber-300 text-amber-900'
                 : 'bg-sky-50 border-sky-300 text-sky-950'
             }`}
           >
-            <span
-              className="font-bold truncate tracking-tight"
-              style={{ fontSize: `${Math.max(7.5, 8.5 * zoom)}px` }}
-            >
-              {tierText}
-            </span>
+            <div className="flex items-center gap-1.5 truncate">
+              <span
+                className="font-bold truncate tracking-tight"
+                style={{ fontSize: `${Math.max(7.5, 8.5 * zoom)}px` }}
+              >
+                {tierText}
+              </span>
+              <span
+                className={`text-[9px] px-1 py-0.2 rounded font-semibold uppercase tracking-wider shrink-0 ${
+                  strategy === 'graduated'
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'bg-sky-100 text-sky-700'
+                }`}
+              >
+                {strategy === 'graduated' ? 'Cumulatif' : 'Volume'}
+              </span>
+            </div>
             {item.strict_required && !record && (
               <span className="text-rose-500 font-bold ml-1 text-xs">*</span>
             )}

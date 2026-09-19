@@ -149,9 +149,60 @@ export class PricingEngine {
   }
 
   /**
+   * Injects non-breaking spaces (\u00A0) between numbers and units or currencies
+   * to guarantee professional typography and prevent line-wrapping detachment.
+   */
+  static injectNonBreakingSpaces(input: string): string {
+    if (!input) return input;
+    return input
+      .replace(/(\d[\d\s.,]*)\s+([€$£¥]|FCFA|CFA|F|USD|EUR)\b/gi, '$1\u00A0$2')
+      .replace(/(\d[\d.,]*)\s+(%|‰)/g, '$1\u00A0$2')
+      .replace(/(\d[\d.,]*)\s+(kg|g|mg|L|l|cl|ml|pièce|pièces|pcs|carton|cartons|ctn|cm|mm|m)\b/gi, '$1\u00A0$2');
+  }
+
+  /**
+   * Splits a raw price into integer part and decimal part for smart floating decimal styling
+   */
+  static splitPrice(
+    val: number | string | undefined | null,
+    separator: '.' | ',' = ','
+  ): { integerPart: string; decimalPart: string; hasDecimals: boolean } {
+    if (val === undefined || val === null || val === '') {
+      return { integerPart: '0', decimalPart: '00', hasDecimals: false };
+    }
+
+    let numVal: number;
+    if (typeof val === 'number') {
+      numVal = val;
+    } else {
+      const parsed = parseFloat(String(val).replace(',', '.').replace(/[^0-9.-]+/g, ''));
+      numVal = isNaN(parsed) ? 0 : parsed;
+    }
+
+    // Format with 2 decimals if has decimal part or if fixed
+    const formatted = numVal.toFixed(2);
+    const [intPart, decPart] = formatted.split('.');
+    
+    // Group integer with spaces
+    const integerGrouped = parseInt(intPart, 10).toLocaleString('fr-FR');
+    const hasDecimals = decPart !== undefined && decPart !== '00';
+
+    return {
+      integerPart: integerGrouped,
+      decimalPart: decPart || '00',
+      hasDecimals,
+    };
+  }
+
+  /**
    * Resolves dynamic calculated text values for text items (Unit price / Discount % / Secondary currency / Dynamic dates)
    */
   static resolveCalculatedText(item: TextItemProperties, record?: ProductRecord | null): string {
+    const rawResult = PricingEngine._computeCalculatedText(item, record);
+    return PricingEngine.injectNonBreakingSpaces(rawResult);
+  }
+
+  private static _computeCalculatedText(item: TextItemProperties, record?: ProductRecord | null): string {
     // If no record is provided, return preview placeholders
     if (!record) {
       if (item.calculation_mode === 'unit_price') return '7,80 € / kg';
