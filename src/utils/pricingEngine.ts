@@ -1,5 +1,5 @@
 import { ProductRecord, TextItemProperties, TemplateItem } from '../types';
-import { resolveCanonicalKey } from '../domainFields';
+import { resolveCanonicalKey } from './mappingDictionary';
 
 /**
  * Advanced Retail & Pricing Engine for E-Studio
@@ -129,7 +129,7 @@ export class PricingEngine {
       }
 
       case 'has_barcode': {
-        const scan = PricingEngine.getProductFieldValue(record, 'PRODUCT_SCAN');
+        const scan = PricingEngine.resolveBarcodeValue(item, record);
         return Boolean(scan && String(scan).trim().length > 0);
       }
 
@@ -155,6 +155,84 @@ export class PricingEngine {
       default:
         return true;
     }
+  }
+
+  /**
+   * Dynamically resolves the barcode data from the ProductRecord with intelligent
+   * alias matching, case-insensitivity, and fallback cascade (binding_key -> PRODUCT_SCAN -> PARTNO/SKU -> id).
+   */
+  static resolveBarcodeValue(
+    item: { binding_key?: string; code?: string; barcode_type?: string } | TemplateItem,
+    record?: ProductRecord | null
+  ): string {
+    if (record) {
+      // 1. Explicit binding key defined on element
+      if (item.binding_key) {
+        const val = PricingEngine.getProductFieldValue(record, item.binding_key);
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          return String(val).trim();
+        }
+      }
+
+      // 2. Automatic canonical barcode domain resolution
+      const scan = PricingEngine.getProductFieldValue(record, 'PRODUCT_SCAN');
+      if (scan !== undefined && scan !== null && String(scan).trim() !== '') {
+        return String(scan).trim();
+      }
+
+      // 3. Fallback to SKU / Reference / PARTNO
+      const partNo = PricingEngine.getProductFieldValue(record, 'PARTNO');
+      if (partNo !== undefined && partNo !== null && String(partNo).trim() !== '') {
+        return String(partNo).trim();
+      }
+
+      // 4. Fallback to product record ID
+      if (record.id) {
+        return String(record.id).trim();
+      }
+    }
+
+    // Static fallback
+    return (item as any).code || '3250390123456';
+  }
+
+  /**
+   * Dynamically resolves QR Code payload/URL from the ProductRecord,
+   * supporting template tags (e.g. {{PARTNO}}), explicit binding keys, or product scan fallbacks.
+   */
+  static resolveQrContent(
+    item: { binding_key?: string; content?: string } | TemplateItem,
+    record?: ProductRecord | null
+  ): string {
+    if (record) {
+      // 1. Explicit binding key
+      if (item.binding_key) {
+        const val = PricingEngine.getProductFieldValue(record, item.binding_key);
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          return String(val).trim();
+        }
+      }
+
+      // 2. Interpolate template variables in content (e.g. "https://store.com/item/{{PARTNO}}")
+      const rawContent = (item as any).content;
+      if (rawContent && typeof rawContent === 'string' && rawContent.includes('{{')) {
+        return rawContent.replace(/\{\{([^}]+)\}\}/g, (_: string, key: string) => {
+          const val = PricingEngine.getProductFieldValue(record, key.trim());
+          return val !== undefined && val !== null ? String(val) : '';
+        });
+      }
+
+      // 3. If content is default placeholder, try falling back to product link or barcode or partno
+      const defaultContents = ['https://example.com', 'https://monmagasin.fr', ''];
+      if (!rawContent || defaultContents.includes(rawContent)) {
+        const scan = PricingEngine.getProductFieldValue(record, 'PRODUCT_SCAN');
+        if (scan) return String(scan);
+        const partNo = PricingEngine.getProductFieldValue(record, 'PARTNO');
+        if (partNo) return String(partNo);
+      }
+    }
+
+    return (item as any).content || 'https://example.com';
   }
 
   /**

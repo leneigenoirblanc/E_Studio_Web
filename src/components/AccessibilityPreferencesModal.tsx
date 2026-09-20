@@ -18,8 +18,14 @@ import {
   CircleDot,
   CheckCircle2,
   Sparkles,
+  LayoutGrid,
+  ArrowDownRight,
+  Crosshair,
+  Maximize2,
+  Box,
+  Layers2,
 } from 'lucide-react';
-import { RotationHandleType } from '../types';
+import { RotationHandleType, ElementPlacementStrategy } from '../types';
 
 interface AccessibilityPreferencesModalProps {
   isOpen: boolean;
@@ -50,6 +56,8 @@ export const AccessibilityPreferencesModal: React.FC<AccessibilityPreferencesMod
   const currentHandleType: RotationHandleType = uiPreferences?.rotationHandleType || 'top_stem';
   const rotationSnapEnabled = uiPreferences?.rotationSnapEnabled !== false;
   const rotationSnapAngle = uiPreferences?.rotationSnapAngle || 15;
+  const currentPlacementStrategy: ElementPlacementStrategy =
+    uiPreferences?.elementPlacementStrategy || 'ergonomic_smart';
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -852,6 +860,263 @@ export const AccessibilityPreferencesModal: React.FC<AccessibilityPreferencesMod
                       </div>
                     </>
                   )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 7. Dynamic Element Instantiation Positioning */}
+          <div className="space-y-3">
+            <div className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center justify-between border-b border-slate-100 pb-1">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span>7. Positionnement Dynamique à l'Instanciation des Éléments</span>
+              </div>
+              <span className="text-[10px] font-normal text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                Ergonomie Gabarit
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              Définissez la méthode de positionnement automatique appliquée lors de l'ajout d'un nouvel élément sur le gabarit (boutons d'ajout, raccourcis ou données importées) :
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* 1. Placement Intelligent & Ergonomique */}
+              <div
+                onClick={() => updateUIPreferences({ elementPlacementStrategy: 'ergonomic_smart' })}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  currentPlacementStrategy === 'ergonomic_smart'
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Placement Intelligent & Ergonomique</span>
+                      </div>
+                      <span className="text-[9px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded">
+                        Recommandé / Pro
+                      </span>
+                    </div>
+                  </div>
+                  {currentPlacementStrategy === 'ergonomic_smart' && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  Analyse l'espace libre disponible, les marges de découpe, les objets déjà posés et le type métier (textes en haut, codes-barres en bas, prix en zone dédiée) pour éviter tout chevauchement.
+                </p>
+              </div>
+
+              {/* 2. Cascade Dynamique Décalée */}
+              <div
+                onClick={() => updateUIPreferences({ elementPlacementStrategy: 'smart_cascade' })}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  currentPlacementStrategy === 'smart_cascade'
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                      <ArrowDownRight className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Cascade Décalée Échelonnée</span>
+                      </div>
+                      <span className="text-[9px] font-semibold text-sky-600 bg-sky-50 px-1.5 py-0.2 rounded">
+                        Décalage (+4mm)
+                      </span>
+                    </div>
+                  </div>
+                  {currentPlacementStrategy === 'smart_cascade' && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  Positionne chaque nouvel élément avec un décalage progressif par rapport au précédent, avec renvoi automatique en haut si la limite du gabarit est atteinte.
+                </p>
+              </div>
+
+              {/* 3. Zonage Standard Métier */}
+              <div
+                onClick={() => updateUIPreferences({ elementPlacementStrategy: 'zone_semantic' })}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  currentPlacementStrategy === 'zone_semantic'
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Zonage Standard Métier</span>
+                      </div>
+                      <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded">
+                        Quadrants Normés
+                      </span>
+                    </div>
+                  </div>
+                  {currentPlacementStrategy === 'zone_semantic' && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  Route immédiatement les nouveaux éléments dans leur zone canonique de balisage : En-tête haut-gauche, Code-barres bas-centre, Bloc prix bas-droit.
+                </p>
+              </div>
+
+              {/* 4. Centre du Gabarit */}
+              <div
+                onClick={() => updateUIPreferences({ elementPlacementStrategy: 'canvas_center' })}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  currentPlacementStrategy === 'canvas_center'
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                      <Crosshair className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Centre du Gabarit</span>
+                      </div>
+                      <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.2 rounded">
+                        Centrage
+                      </span>
+                    </div>
+                  </div>
+                  {currentPlacementStrategy === 'canvas_center' && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  Place systématiquement l'élément créé au centre exact du gabarit pour un réajustement manuel direct depuis le centre visuel.
+                </p>
+              </div>
+
+              {/* 5. Position Fixe Classique */}
+              <div
+                onClick={() => updateUIPreferences({ elementPlacementStrategy: 'fixed_classic' })}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between sm:col-span-2 ${
+                  currentPlacementStrategy === 'fixed_classic'
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center shrink-0">
+                      <Box className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Position Fixe Classique (Haut-Gauche)</span>
+                      </div>
+                      <span className="text-[9px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
+                        Origine Fixe
+                      </span>
+                    </div>
+                  </div>
+                  {currentPlacementStrategy === 'fixed_classic' && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                  Place tous les éléments à la coordonnée statique d'origine (marge supérieure gauche).
+                </p>
+              </div>
+            </div>
+
+            {/* Simulation Preview of Strategy Layout */}
+            <div className="p-3 bg-slate-900 rounded-xl text-white space-y-2 border border-slate-800">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400 font-medium">Aperçu visuel de disposition simulée :</span>
+                <span className="text-indigo-300 font-mono text-[10px]">
+                  {currentPlacementStrategy === 'ergonomic_smart' && 'Mode : Ergonomique & Non-Chevauchant'}
+                  {currentPlacementStrategy === 'smart_cascade' && 'Mode : Échelonné (+4mm)'}
+                  {currentPlacementStrategy === 'zone_semantic' && 'Mode : Zones Métier'}
+                  {currentPlacementStrategy === 'canvas_center' && 'Mode : Centré'}
+                  {currentPlacementStrategy === 'fixed_classic' && 'Mode : Fixe Haut-Gauche'}
+                </span>
+              </div>
+
+              <div className="h-32 bg-slate-950/80 rounded-lg border border-slate-800 relative overflow-hidden flex items-center justify-center p-2">
+                <div
+                  className="absolute inset-0 opacity-15"
+                  style={{
+                    backgroundImage: 'radial-gradient(circle, #94a3b8 1px, transparent 1px)',
+                    backgroundSize: '10px 10px',
+                  }}
+                />
+
+                {/* Simulated Gabarit Bounds */}
+                <div className="w-64 h-24 bg-white rounded border border-indigo-400/40 relative shadow-inner p-1.5 flex flex-col justify-between">
+                  {/* Item 1: Designation / Title */}
+                  <div
+                    className={`absolute transition-all duration-300 rounded border px-1 py-0.5 text-[8px] font-bold ${
+                      currentPlacementStrategy === 'ergonomic_smart'
+                        ? 'top-1.5 left-1.5 bg-blue-50 border-blue-400 text-blue-900 w-32'
+                        : currentPlacementStrategy === 'smart_cascade'
+                        ? 'top-1.5 left-1.5 bg-blue-50 border-blue-400 text-blue-900 w-28'
+                        : currentPlacementStrategy === 'zone_semantic'
+                        ? 'top-1.5 left-1.5 bg-blue-50 border-blue-400 text-blue-900 w-32'
+                        : currentPlacementStrategy === 'canvas_center'
+                        ? 'top-4 left-16 bg-blue-50 border-blue-400 text-blue-900 w-28'
+                        : 'top-1.5 left-1.5 bg-blue-50 border-blue-400 text-blue-900 w-28'
+                    }`}
+                  >
+                    1. Désignation Produit
+                  </div>
+
+                  {/* Item 2: Prix */}
+                  <div
+                    className={`absolute transition-all duration-300 rounded border px-1 py-0.5 text-[8px] font-bold ${
+                      currentPlacementStrategy === 'ergonomic_smart'
+                        ? 'top-1.5 right-1.5 bg-rose-50 border-rose-400 text-rose-900 w-16 text-right'
+                        : currentPlacementStrategy === 'smart_cascade'
+                        ? 'top-7 left-6 bg-rose-50 border-rose-400 text-rose-900 w-16 text-center'
+                        : currentPlacementStrategy === 'zone_semantic'
+                        ? 'bottom-1.5 right-1.5 bg-rose-50 border-rose-400 text-rose-900 w-16 text-right'
+                        : currentPlacementStrategy === 'canvas_center'
+                        ? 'top-8 left-18 bg-rose-50 border-rose-400 text-rose-900 w-16 text-center'
+                        : 'top-1.5 left-1.5 bg-rose-50 border-rose-400 text-rose-900 w-16 text-center opacity-80'
+                    }`}
+                  >
+                    2. 12,99 €
+                  </div>
+
+                  {/* Item 3: Code-Barres */}
+                  <div
+                    className={`absolute transition-all duration-300 rounded border px-1 py-0.5 text-[8px] font-mono flex items-center justify-center ${
+                      currentPlacementStrategy === 'ergonomic_smart'
+                        ? 'bottom-1.5 left-6 bg-slate-100 border-slate-400 text-slate-800 w-32'
+                        : currentPlacementStrategy === 'smart_cascade'
+                        ? 'top-12 left-12 bg-slate-100 border-slate-400 text-slate-800 w-28'
+                        : currentPlacementStrategy === 'zone_semantic'
+                        ? 'bottom-1.5 left-8 bg-slate-100 border-slate-400 text-slate-800 w-28'
+                        : currentPlacementStrategy === 'canvas_center'
+                        ? 'top-12 left-20 bg-slate-100 border-slate-400 text-slate-800 w-24'
+                        : 'top-1.5 left-1.5 bg-slate-100 border-slate-400 text-slate-800 w-24 opacity-60'
+                    }`}
+                  >
+                    3. |||||| 3250390 |||
+                  </div>
                 </div>
               </div>
             </div>

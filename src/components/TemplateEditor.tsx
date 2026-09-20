@@ -24,6 +24,7 @@ import {
   computeResizeSmartGuides,
 } from '../utils/smartGuides';
 import { applySemanticSnapping } from '../utils/semanticSnapping';
+import { calculateDynamicInstantiationPosition } from '../utils/dynamicPlacement';
 import {
   Save,
   Download,
@@ -500,16 +501,101 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     const id = `item_${Date.now()}`;
     let newItem: TemplateItem;
 
-    const centerX = Math.max(2, (template.width_mm - 40) / 2);
-    const centerY = Math.max(2, (template.height_mm - 15) / 2);
+    // Determine default dimensions for the element type
+    let defaultW = 45.0;
+    let defaultH = 12.0;
+
+    if (customField) {
+      if (type === 'barcode') {
+        defaultW = 48.0;
+        defaultH = 16.0;
+      } else if (type === 'qrcode') {
+        defaultW = 20.0;
+        defaultH = 20.0;
+      } else if (type === 'price' || type === 'price_block') {
+        defaultW = 36.0;
+        defaultH = 14.0;
+      } else {
+        defaultW = 45.0;
+        defaultH = 12.0;
+      }
+    } else {
+      switch (type) {
+        case 'text':
+          defaultW = 45.0;
+          defaultH = 12.0;
+          break;
+        case 'rich_text':
+          defaultW = 50.0;
+          defaultH = 16.0;
+          break;
+        case 'shape':
+          defaultW = 35.0;
+          defaultH = 20.0;
+          break;
+        case 'ellipse':
+          defaultW = 25.0;
+          defaultH = 25.0;
+          break;
+        case 'line':
+          defaultW = Math.max(10, template.width_mm - (template.inner_margins_mm?.left || 2) - (template.inner_margins_mm?.right || 2));
+          defaultH = 1.0;
+          break;
+        case 'barcode':
+          defaultW = 48.0;
+          defaultH = 16.0;
+          break;
+        case 'qrcode':
+          defaultW = 20.0;
+          defaultH = 20.0;
+          break;
+        case 'image':
+          defaultW = 30.0;
+          defaultH = 25.0;
+          break;
+        case 'tier_price':
+          defaultW = 45.0;
+          defaultH = 8.0;
+          break;
+        case 'restricted_area':
+          defaultW = 30.0;
+          defaultH = 20.0;
+          break;
+        case 'curved_text':
+          defaultW = 35.0;
+          defaultH = 35.0;
+          break;
+        case 'pictogram':
+          defaultW = 22.0;
+          defaultH = 12.0;
+          break;
+        case 'price_block':
+          defaultW = 38.0;
+          defaultH = 14.0;
+          break;
+      }
+    }
+
+    // Dynamic ergonomic placement calculation based on gabarit geometry and existing items
+    const pos = calculateDynamicInstantiationPosition({
+      itemType: type,
+      w_mm: defaultW,
+      h_mm: defaultH,
+      template,
+      strategy: uiPreferences?.elementPlacementStrategy || 'ergonomic_smart',
+      customField,
+    });
+
+    const posX = pos.x_mm;
+    const posY = pos.y_mm;
 
     if (customField) {
       if (type === 'barcode') {
         newItem = {
           id,
           type: 'barcode',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 48.0,
           h_mm: 16.0,
           rotation: 0,
@@ -525,8 +611,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'qrcode',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 20.0,
           h_mm: 20.0,
           rotation: 0,
@@ -541,8 +627,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'price_block',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 36.0,
           h_mm: 14.0,
           rotation: 0,
@@ -573,8 +659,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'text',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 45.0,
           h_mm: 12.0,
           rotation: 0,
@@ -609,8 +695,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'text',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 45.0,
           h_mm: 12.0,
           rotation: 0,
@@ -636,8 +722,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'shape',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 35.0,
           h_mm: 20.0,
           rotation: 0,
@@ -653,8 +739,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'ellipse',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 25.0,
           h_mm: 25.0,
           rotation: 0,
@@ -669,9 +755,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'line',
-          x_mm: template.inner_margins_mm.left,
-          y_mm: centerY,
-          w_mm: template.width_mm - template.inner_margins_mm.left - template.inner_margins_mm.right,
+          x_mm: template.inner_margins_mm?.left || 2,
+          y_mm: posY,
+          w_mm: template.width_mm - (template.inner_margins_mm?.left || 2) - (template.inner_margins_mm?.right || 2),
           h_mm: 1.0,
           rotation: 0,
           z_index: template.items.length + 1,
@@ -685,8 +771,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'barcode',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 48.0,
           h_mm: 16.0,
           rotation: 0,
@@ -703,8 +789,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'qrcode',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 20.0,
           h_mm: 20.0,
           rotation: 0,
@@ -719,8 +805,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'image',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 30.0,
           h_mm: 25.0,
           rotation: 0,
@@ -735,8 +821,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'tier_price',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 45.0,
           h_mm: 8.0,
           rotation: 0,
@@ -753,8 +839,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'restricted_area',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 30.0,
           h_mm: 20.0,
           rotation: 0,
@@ -771,8 +857,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'curved_text',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 35.0,
           h_mm: 35.0,
           rotation: 0,
@@ -795,8 +881,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'pictogram',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 22.0,
           h_mm: 12.0,
           rotation: 0,
@@ -810,8 +896,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'price_block',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 38.0,
           h_mm: 14.0,
           rotation: 0,
@@ -844,8 +930,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         newItem = {
           id,
           type: 'rich_text',
-          x_mm: centerX,
-          y_mm: centerY,
+          x_mm: posX,
+          y_mm: posY,
           w_mm: 50.0,
           h_mm: 16.0,
           rotation: 0,
@@ -1169,6 +1255,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // only left click
 
+    // If clicking on an interactive control or item, don't hijack
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, select, textarea, [role="button"], [data-item-id], [data-no-deselect]')) {
+      return;
+    }
+
     // 1. Hand Pan Tool
     if (activeTool === 'pan' && canvasContainerRef.current) {
       setIsPanning(true);
@@ -1179,6 +1271,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         scrollTop: canvasContainerRef.current.scrollTop,
       });
       return;
+    }
+
+    // Always clear selection immediately when clicking in empty viewport/canvas without shift key
+    if (!e.shiftKey) {
+      setSelectedItemIds([]);
     }
 
     if (!labelCanvasRef.current) return;
@@ -1200,10 +1297,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     setIsMarqueeSelecting(true);
     setMarqueeStart({ x_mm: clickX_mm, y_mm: clickY_mm });
     setMarqueeRect({ x_mm: clickX_mm, y_mm: clickY_mm, w_mm: 0, h_mm: 0 });
-
-    if (!e.shiftKey && !uiPreferences?.lockPropertyInspector) {
-      setSelectedItemIds([]);
-    }
   };
 
   // Global Pointer / Mouse Move
@@ -1443,20 +1536,22 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
       setMarqueeRect({ x_mm, y_mm, w_mm, h_mm });
 
-      // Hit-test elements intersecting or enclosed in marquee rectangle
-      const enclosedIds = template.items
-        .filter((it) => {
-          const itX2 = it.x_mm + it.w_mm;
-          const itY2 = it.y_mm + it.h_mm;
-          const mX2 = x_mm + w_mm;
-          const mY2 = y_mm + h_mm;
+      // Hit-test elements intersecting or enclosed in marquee rectangle only if dragged >= 2mm
+      if (w_mm >= 2 || h_mm >= 2) {
+        const enclosedIds = template.items
+          .filter((it) => {
+            const itX2 = it.x_mm + it.w_mm;
+            const itY2 = it.y_mm + it.h_mm;
+            const mX2 = x_mm + w_mm;
+            const mY2 = y_mm + h_mm;
 
-          // Check AABB rectangle overlap
-          return !(it.x_mm > mX2 || itX2 < x_mm || it.y_mm > mY2 || itY2 < y_mm);
-        })
-        .map((it) => it.id);
+            // Check AABB rectangle overlap
+            return !(it.x_mm > mX2 || itX2 < x_mm || it.y_mm > mY2 || itY2 < y_mm);
+          })
+          .map((it) => it.id);
 
-      setSelectedItemIds(enclosedIds);
+        setSelectedItemIds(enclosedIds);
+      }
     }
   }, [isRotating, rotateState, uiPreferences, isResizing, resizeState, isDragging, dragStartPos, isMarqueeSelecting, marqueeStart, isPanning, panStart, isZoomMarquee, zoomMarqueeStart, zoom, template, smartGuidesEnabled, snapToGrid, showInnerMargins, selectedItemIds]);
 
@@ -2199,6 +2294,14 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         <div
           ref={canvasContainerRef}
           onMouseDown={handleCanvasMouseDown}
+          onClick={(e) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('[data-item-id], button, input, select, textarea, [role="button"], [data-no-deselect]')) {
+              if (!e.shiftKey) {
+                setSelectedItemIds([]);
+              }
+            }
+          }}
           className="flex-1 overflow-auto p-12 flex items-center justify-center relative cursor-default"
           style={{
             backgroundColor: isHeatmapActive ? '#090d16' : '#e2e8f0',

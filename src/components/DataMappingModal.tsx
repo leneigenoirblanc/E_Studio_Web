@@ -1,7 +1,19 @@
-import React, { useState } from 'react';
-import { DOMAIN_FIELDS, DOMAIN_FIELD_MAP, resolveCanonicalKey } from '../domainFields';
+import React, { useState, useMemo } from 'react';
+import { useMappingDictionary } from '../context/MappingDictionaryContext';
 import { ProductRecord } from '../types';
-import { Check, ArrowRight, Table, AlertCircle, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import {
+  Check,
+  ArrowRight,
+  Table,
+  AlertCircle,
+  FileSpreadsheet,
+  RefreshCw,
+  Zap,
+  BookmarkPlus,
+  BookOpen,
+  CheckCircle2,
+} from 'lucide-react';
+import { MappingDictionaryModal } from './MappingDictionaryModal';
 
 export interface DataMappingModalProps {
   rawHeaders: string[];
@@ -16,12 +28,35 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
   onApplyMapping,
   onCancel,
 }) => {
-  // Mapping: rawHeader -> canonical DomainField key (or '__ignore__')
+  const { dictionary, detectField, addAlias } = useMappingDictionary();
+  const [isDictionaryModalOpen, setIsDictionaryModalOpen] = useState(false);
+  const [savedAliasesFeedback, setSavedAliasesFeedback] = useState<Record<string, string>>({});
+
+  // Compute sample values for each column (up to 5 non-empty values for heuristic detection)
+  const sampleValuesByHeader = useMemo(() => {
+    const res: Record<string, any[]> = {};
+    rawHeaders.forEach((h) => {
+      res[h] = rawRows.slice(0, 5).map((r) => r[h]).filter((v) => v !== undefined && v !== null && v !== '');
+    });
+    return res;
+  }, [rawHeaders, rawRows]);
+
+  // Initial detection results per header
+  const initialDetection = useMemo(() => {
+    const det: Record<string, any> = {};
+    rawHeaders.forEach((h) => {
+      const match = detectField(h, sampleValuesByHeader[h]);
+      det[h] = match;
+    });
+    return det;
+  }, [rawHeaders, sampleValuesByHeader, detectField]);
+
+  // Mapping: rawHeader -> canonical DomainField key (or '__ignore__' or '__custom__')
   const [mapping, setMapping] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     rawHeaders.forEach((h) => {
-      const canonical = resolveCanonicalKey(h);
-      init[h] = canonical || '__custom__';
+      const match = detectField(h, sampleValuesByHeader[h]);
+      init[h] = match ? match.canonical_key : '__custom__';
     });
     return init;
   });
@@ -35,13 +70,32 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
   const autoMap = () => {
     const auto: Record<string, string> = {};
     rawHeaders.forEach((h) => {
-      const canonical = resolveCanonicalKey(h);
-      auto[h] = canonical || '__custom__';
+      const match = detectField(h, sampleValuesByHeader[h]);
+      auto[h] = match ? match.canonical_key : '__custom__';
     });
     setMapping(auto);
   };
 
+  const handleSaveAsAlias = (header: string, targetKey: string) => {
+    if (!targetKey || targetKey === '__ignore__' || targetKey === '__custom__') return;
+    const res = addAlias(targetKey, header);
+    if (res.success) {
+      setSavedAliasesFeedback((prev) => ({ ...prev, [header]: `Alias mémorisé pour [${targetKey}]` }));
+      setTimeout(() => {
+        setSavedAliasesFeedback((prev) => {
+          const copy = { ...prev };
+          delete copy[header];
+          return copy;
+        });
+      }, 3500);
+    } else {
+      alert(res.message || "Impossible d'enregistrer l'alias.");
+    }
+  };
+
   const handleConfirm = () => {
+    const fieldMap = new Map(dictionary.map((f) => [f.key, f]));
+
     const converted: ProductRecord[] = rawRows.map((rawRow, idx) => {
       const prod: ProductRecord = {
         id: `ROW-${idx + 1}`,
@@ -57,12 +111,11 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
         if (val === undefined || val === null) return;
 
         if (target === '__custom__') {
-          // store as clean uppercase custom key
           const cleanKey = header.trim().toUpperCase().replace(/[\s\.\-]+/g, '_');
           prod[cleanKey] = val;
         } else {
-          const fieldDef = DOMAIN_FIELD_MAP.get(target);
-          if (fieldDef?.numeric) {
+          const fieldDef = fieldMap.get(target);
+          if (fieldDef?.numeric || fieldDef?.value_type === 'currency' || fieldDef?.value_type === 'number') {
             const num = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.-]+/g, '')) || 0;
             (prod as any)[target] = num;
           } else {
@@ -71,7 +124,7 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
         }
       });
 
-      // Provide sensible defaults if critical fields are empty
+      // Sensible defaults
       if (!prod.ITEMNAME || prod.ITEMNAME === `Article #${idx + 1}`) {
         prod.ITEMNAME = prod.PARTNO ? `Article ${prod.PARTNO}` : `Article #${idx + 1}`;
       }
@@ -85,36 +138,49 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
         {/* Header */}
         <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shadow-2xs">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Assistant de Correspondance des Données (Mapping)</h2>
+              <h2 className="text-sm font-bold text-slate-900">
+                Assistant de Correspondance & Détection Automatique (Mapping)
+              </h2>
               <p className="text-xs text-slate-500">
-                Faites correspondre les colonnes de votre fichier Excel/CSV avec les variables d'étiquettes.
+                Détection par mots-clés, alias persistants et alignement avec le dictionnaire de gabarits.
               </p>
             </div>
           </div>
-          <button
-            onClick={autoMap}
-            className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
-            <span>Auto-détection</span>
-          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsDictionaryModalOpen(true)}
+              className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+              <span>Dictionnaire d'Alias</span>
+            </button>
+
+            <button
+              onClick={autoMap}
+              className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
+              <span>Auto-détection</span>
+            </button>
+          </div>
         </div>
 
         {/* Content: Mapping List & Live Sample Preview */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-start gap-2">
+          <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
             <div>
-              <strong>Compatibilité Universelle :</strong> Chaque colonne peut être liée à un champ canonique
-              (Prix, Code-barres, Nom, etc.), conservée comme attribut personnalisé accessible dans l'éditeur, ou ignorée.
+              <strong>Détection Intelligente Active :</strong> Les colonnes sont associées automatiquement grâce aux
+              alias standards et personnalisés. Vous pouvez enregistrer tout nouvel en-tête comme alias permanent en 1 clic.
             </div>
           </div>
 
@@ -123,15 +189,19 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
               <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="py-2.5 px-3">Colonne Fichier Excel</th>
-                  <th className="py-2.5 px-3">Exemple de donnée (Ligne 1)</th>
-                  <th className="py-2.5 px-3 w-8 text-center"></th>
+                  <th className="py-2.5 px-3">Exemple de donnée</th>
+                  <th className="py-2.5 px-3">Détection & Score</th>
+                  <th className="py-2.5 px-3 w-6 text-center"></th>
                   <th className="py-2.5 px-3">Champ Cible Gabarit</th>
+                  <th className="py-2.5 px-3 text-right">Action Alias</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {rawHeaders.map((header) => {
                   const sampleVal = rawRows[0] ? String(rawRows[0][header] ?? '') : '';
                   const targetVal = mapping[header] || '__custom__';
+                  const match = initialDetection[header];
+                  const feedback = savedAliasesFeedback[header];
 
                   return (
                     <tr key={header} className="hover:bg-slate-50/70 transition">
@@ -140,10 +210,33 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
                           {header}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px] max-w-xs truncate">
+                      <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px] max-w-[150px] truncate">
                         {sampleVal ? `"${sampleVal}"` : <span className="italic text-slate-400">&lt;vide&gt;</span>}
                       </td>
-                      <td className="py-2.5 px-3 text-center text-slate-300">
+                      <td className="py-2.5 px-3">
+                        {match ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span
+                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.2 rounded-full w-max ${
+                                match.confidence >= 95
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : match.confidence >= 80
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              <Zap className="w-2.5 h-2.5" />
+                              {match.confidence}% • {match.match_type === 'user_alias' ? 'Alias Perso' : match.match_type === 'exact' ? 'Exact' : 'Mot-clé'}
+                            </span>
+                            <span className="text-[10px] text-slate-400 truncate max-w-[180px]">
+                              {match.explanation}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Clé personnalisée</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-1 text-center text-slate-300">
                         <ArrowRight className="w-3.5 h-3.5 inline" />
                       </td>
                       <td className="py-2.5 px-3">
@@ -158,8 +251,8 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
                               : 'bg-blue-50/50 border-blue-300 text-blue-900 font-semibold'
                           }`}
                         >
-                          <optgroup label="Champs Standard du Commerce">
-                            {DOMAIN_FIELDS.map((df) => (
+                          <optgroup label="Champs du Schéma d'Étiquetage">
+                            {dictionary.map((df) => (
                               <option key={df.key} value={df.key}>
                                 {df.label} [{df.key}]
                               </option>
@@ -172,6 +265,26 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
                             <option value="__ignore__">✕ Ignorer cette colonne</option>
                           </optgroup>
                         </select>
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        {feedback ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" />
+                            {feedback}
+                          </span>
+                        ) : (
+                          targetVal !== '__ignore__' &&
+                          targetVal !== '__custom__' && (
+                            <button
+                              onClick={() => handleSaveAsAlias(header, targetVal)}
+                              title={`Enregistrer "${header}" comme alias permanent pour ${targetVal}`}
+                              className="px-2 py-1 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 hover:border-blue-200 text-slate-600 text-[11px] font-medium rounded-md flex items-center gap-1 ml-auto transition"
+                            >
+                              <BookmarkPlus className="w-3 h-3 text-blue-600" />
+                              <span>Mémoriser alias</span>
+                            </button>
+                          )
+                        )}
                       </td>
                     </tr>
                   );
@@ -237,6 +350,13 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Mapping Dictionary Modal */}
+      <MappingDictionaryModal
+        isOpen={isDictionaryModalOpen}
+        onClose={() => setIsDictionaryModalOpen(false)}
+      />
     </div>
   );
 };
+

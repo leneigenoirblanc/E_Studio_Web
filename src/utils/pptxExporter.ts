@@ -1,6 +1,9 @@
 import pptxgen from 'pptxgenjs';
 import { LabelTemplate, ProductRecord, ImpositionConfig, ImpositionCalculation } from '../types';
 import { TierEngine } from './tierEngine';
+import { PricingEngine } from './pricingEngine';
+import { renderBarcodeToDataUrl } from './barcodeGenerator';
+import { renderQrToDataUrl } from './qrGenerator';
 
 /**
  * Converts mm to inches for pptxgenjs layout
@@ -163,56 +166,80 @@ export class PptxExporter {
             }
 
             case 'barcode': {
-              let code = item.code || '123456789012';
-              if (item.binding_key && prod[item.binding_key]) {
-                code = String(prod[item.binding_key]);
+              const code = PricingEngine.resolveBarcodeValue(item, prod);
+              const imgData = renderBarcodeToDataUrl(
+                code,
+                item.barcode_type || 'ean13',
+                Boolean(item.show_text),
+                item.bar_color || '#000000'
+              );
+
+              if (imgData) {
+                slide.addImage({
+                  data: imgData,
+                  x: itemX_in,
+                  y: itemY_in,
+                  w: itemW_in,
+                  h: itemH_in,
+                });
+              } else {
+                slide.addShape(pptx.ShapeType.rect, {
+                  x: itemX_in,
+                  y: itemY_in,
+                  w: itemW_in,
+                  h: itemH_in,
+                  fill: { color: 'F8FAFC' },
+                  line: { color: 'CBD5E1', width: 0.5 },
+                });
+                slide.addText(code, {
+                  x: itemX_in,
+                  y: itemY_in,
+                  w: itemW_in,
+                  h: itemH_in,
+                  fontSize: 8,
+                  fontFace: 'Consolas',
+                  align: 'center',
+                  valign: 'middle',
+                });
               }
-              // Add barcode container text and representation
-              slide.addShape(pptx.ShapeType.rect, {
-                x: itemX_in,
-                y: itemY_in,
-                w: itemW_in,
-                h: itemH_in,
-                fill: { color: 'F8FAFC' },
-                line: { color: 'CBD5E1', width: 0.5 },
-              });
-              slide.addText(`||| |||| || ||||\n${code}`, {
-                x: itemX_in,
-                y: itemY_in,
-                w: itemW_in,
-                h: itemH_in,
-                fontSize: 8,
-                fontFace: 'Consolas',
-                align: 'center',
-                valign: 'middle',
-                color: (item.bar_color || '#000000').replace('#', ''),
-              });
               break;
             }
 
             case 'qrcode': {
-              let qrContent = item.content || 'https://example.com';
-              if (item.binding_key && prod[item.binding_key]) {
-                qrContent = String(prod[item.binding_key]);
+              const qrContent = PricingEngine.resolveQrContent(item, prod);
+              const imgData = renderQrToDataUrl(
+                qrContent,
+                item.module_color || '#000000',
+                item.background_color || '#FFFFFF'
+              );
+
+              if (imgData) {
+                slide.addImage({
+                  data: imgData,
+                  x: itemX_in,
+                  y: itemY_in,
+                  w: itemW_in,
+                  h: itemH_in,
+                });
+              } else {
+                slide.addShape(pptx.ShapeType.rect, {
+                  x: itemX_in,
+                  y: itemY_in,
+                  w: itemW_in,
+                  h: itemH_in,
+                  fill: { color: (item.background_color || '#FFFFFF').replace('#', '') },
+                  line: { color: '000000', width: 0.5 },
+                });
+                slide.addText(qrContent, {
+                  x: itemX_in,
+                  y: itemY_in,
+                  w: itemW_in,
+                  h: itemH_in,
+                  fontSize: 7,
+                  align: 'center',
+                  valign: 'middle',
+                });
               }
-              slide.addShape(pptx.ShapeType.rect, {
-                x: itemX_in,
-                y: itemY_in,
-                w: itemW_in,
-                h: itemH_in,
-                fill: { color: (item.background_color || '#FFFFFF').replace('#', '') },
-                line: { color: '000000', width: 0.5 },
-              });
-              slide.addText('[QR]', {
-                x: itemX_in,
-                y: itemY_in,
-                w: itemW_in,
-                h: itemH_in,
-                fontSize: 9,
-                bold: true,
-                align: 'center',
-                valign: 'middle',
-              });
               break;
             }
 

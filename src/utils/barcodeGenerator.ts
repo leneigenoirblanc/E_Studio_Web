@@ -119,3 +119,65 @@ export function generateEAN13Bars(code: string): { bars: boolean[]; formattedCod
 
   return { bars, formattedCode: full13 };
 }
+
+/**
+ * Renders a crisp rasterized barcode dataURL (PNG) for office document embeds (PPTX, HTML)
+ */
+export function renderBarcodeToDataUrl(
+  code: string,
+  barcodeType: 'ean13' | 'code128' = 'ean13',
+  showText: boolean = true,
+  barColor: string = '#000000'
+): string {
+  if (typeof document === 'undefined') return '';
+
+  const canvas = document.createElement('canvas');
+  const scale = 4; // High-resolution scale factor for sharp rendering
+  
+  let bars: boolean[] = [];
+  let textToShow = code;
+  if (barcodeType === 'ean13') {
+    try {
+      const res = generateEAN13Bars(code);
+      bars = res.bars;
+      textToShow = res.formattedCode;
+    } catch {
+      bars = generateCode128Bars(code);
+    }
+  } else {
+    bars = generateCode128Bars(code);
+  }
+
+  const barCount = Math.max(1, bars.length);
+  const widthPx = Math.max(240, barCount * 3) * scale;
+  const heightPx = (showText ? 90 : 65) * scale;
+  
+  canvas.width = widthPx;
+  canvas.height = heightPx;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  // White background
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, widthPx, heightPx);
+
+  const barUnitW = widthPx / barCount;
+  const barH = showText ? heightPx * 0.72 : heightPx;
+
+  ctx.fillStyle = barColor || '#000000';
+  for (let i = 0; i < barCount; i++) {
+    if (bars[i]) {
+      ctx.fillRect(i * barUnitW, 0, barUnitW + 0.5, barH);
+    }
+  }
+
+  if (showText && textToShow) {
+    ctx.fillStyle = barColor || '#000000';
+    ctx.font = `bold ${Math.round(13 * scale)}px "Courier New", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(textToShow, widthPx / 2, heightPx * 0.86);
+  }
+
+  return canvas.toDataURL('image/png');
+}

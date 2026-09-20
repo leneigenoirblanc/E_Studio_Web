@@ -80,7 +80,7 @@ export class ZplExporter {
         }
 
         case 'barcode': {
-          const rawCode = (item.binding_key && record[item.binding_key]) ? String(record[item.binding_key]) : item.code;
+          const rawCode = PricingEngine.resolveBarcodeValue(item, record);
           const cleanCode = (rawCode || '1234567890128').replace(/\D/g, '');
           const barcodeH = Math.max(20, h - (item.show_text ? 20 : 0));
 
@@ -88,13 +88,13 @@ export class ZplExporter {
             lines.push(`^FO${x},${y}^BEN,${barcodeH},${item.show_text ? 'Y' : 'N'},N^FD${cleanCode.slice(0, 13)}^FS`);
           } else {
             // Code 128
-            lines.push(`^FO${x},${y}^BY2,3,${barcodeH}^BCN,${barcodeH},${item.show_text ? 'Y' : 'N'},N,N^FD>:${cleanCode}^FS`);
+            lines.push(`^FO${x},${y}^BY2,3,${barcodeH}^BCN,${barcodeH},${item.show_text ? 'Y' : 'N'},N,N^FD>:${rawCode}^FS`);
           }
           break;
         }
 
         case 'qrcode': {
-          const qrData = (item.binding_key && record[item.binding_key]) ? String(record[item.binding_key]) : item.content;
+          const qrData = PricingEngine.resolveQrContent(item, record);
           const mag = Math.max(2, Math.min(10, Math.round(w / 35)));
           lines.push(`^FO${x},${y}^BQN,2,${mag}^FDLA,${qrData}^FS`);
           break;

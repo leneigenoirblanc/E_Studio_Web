@@ -641,8 +641,16 @@ export interface TooltipSettings {
 
 export type ZoomMethod = 'pointer' | 'keyboard' | 'slider' | 'marquee';
 
+export type ElementPlacementStrategy =
+  | 'ergonomic_smart'
+  | 'smart_cascade'
+  | 'zone_semantic'
+  | 'canvas_center'
+  | 'fixed_classic';
+
 export interface UiPreferences {
   tooltipSettings: TooltipSettings;
   zoomMethod: ZoomMethod;
   defaultZoom: number;
+  elementPlacementStrategy?: ElementPlacementStrategy;
 }

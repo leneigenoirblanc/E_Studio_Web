@@ -78,3 +78,42 @@ export function generateQrMatrix(text: string): boolean[][] {
 
   return matrix;
 }
+
+/**
+ * Renders a crisp rasterized QR Code dataURL (PNG) for office document embeds (PPTX, HTML)
+ */
+export function renderQrToDataUrl(
+  content: string,
+  moduleColor: string = '#000000',
+  backgroundColor: string = '#FFFFFF'
+): string {
+  if (typeof document === 'undefined') return '';
+
+  const matrix = generateQrMatrix(content || 'https://example.com');
+  const size = matrix.length;
+  const scale = 8;
+  const quietZone = 2; // 2 module quiet zone border
+  const fullSize = (size + quietZone * 2) * scale;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = fullSize;
+  canvas.height = fullSize;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  // Background
+  ctx.fillStyle = backgroundColor || '#FFFFFF';
+  ctx.fillRect(0, 0, fullSize, fullSize);
+
+  // Modules
+  ctx.fillStyle = moduleColor || '#000000';
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (matrix[r][c]) {
+        ctx.fillRect((c + quietZone) * scale, (r + quietZone) * scale, scale, scale);
+      }
+    }
+  }
+
+  return canvas.toDataURL('image/png');
+}

@@ -8,12 +8,15 @@ import { PricingEngine } from '../utils/pricingEngine';
 import { DataMappingModal } from './DataMappingModal';
 import { PptxExporter } from '../utils/pptxExporter';
 import { ZplExporter } from '../utils/zplExporter';
+import { generateCode128Bars, generateEAN13Bars } from '../utils/barcodeGenerator';
+import { generateQrMatrix } from '../utils/qrGenerator';
 import { AVERY_STANDARD_CATALOG } from '../utils/averyCatalog';
 import { DEFAULT_TEMPLATES } from '../defaultTemplates';
 import { TierPricingStudio } from './TierPricingStudio';
 import { ProductClusteringStudio } from './ProductClusteringStudio';
 import { MultiSlotSignageStudio } from './MultiSlotSignageStudio';
 import { ImpositionCalibrationBoard } from './ImpositionCalibrationBoard';
+import { MappingDictionaryModal } from './MappingDictionaryModal';
 import { ContextTooltip, useTooltip } from '../context/TooltipContext';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -44,6 +47,7 @@ import {
   Compass,
   ChevronDown,
   Settings,
+  BookOpen,
 } from 'lucide-react';
 
 interface GenerationWorkspaceProps {
@@ -59,6 +63,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
     'preview' | 'data' | 'imposition' | 'tiers' | 'clustering' | 'multislot' | 'blueprint'
   >('preview');
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [isDictionaryModalOpen, setIsDictionaryModalOpen] = useState(false);
 
   const handleUpdateSingleProduct = (updated: ProductRecord) => {
     setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
@@ -411,16 +416,105 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
             } else {
               doc.rect(itemX, itemY, item.w_mm, item.h_mm, style);
             }
-          } else if (item.type === 'barcode' || item.type === 'qrcode') {
-            const rawCode = PricingEngine.getProductFieldValue(prod, item.binding_key || 'PRODUCT_SCAN') || '3250390123456';
-            doc.setFillColor(15, 23, 42);
-            doc.setDrawColor(15, 23, 42);
-            // Draw clean barcode background bar frame
-            doc.rect(itemX, itemY, item.w_mm, Math.max(2, item.h_mm - 3), 'F');
-            doc.setFont('courier', 'normal');
-            doc.setFontSize(6.5);
-            doc.setTextColor(30, 41, 59);
-            doc.text(String(rawCode), itemX + item.w_mm / 2, itemY + item.h_mm - 0.5, { align: 'center' });
+          } else if (item.type === 'barcode') {
+            const rawCode = PricingEngine.resolveBarcodeValue(item as any, prod);
+            const isEan13 = (item as any).barcode_type === 'ean13';
+            const barColorHex = ((item as any).bar_color || '#000000').replace('#', '');
+            const barR = parseInt(barColorHex.substring(0, 2), 16) || 0;
+            const barG = parseInt(barColorHex.substring(2, 4), 16) || 0;
+            const barB = parseInt(barColorHex.substring(4, 6), 16) || 0;
+
+            let bars: boolean[] = [];
+            let textToShow = rawCode;
+
+            if (isEan13) {
+              try {
+                const res = generateEAN13Bars(rawCode);
+                bars = res.bars;
+                textToShow = res.formattedCode;
+              } catch {
+                bars = generateCode128Bars(rawCode);
+              }
+            } else {
+              bars = generateCode128Bars(rawCode);
+            }
+
+            const showText = Boolean((item as any).show_text);
+            const textMarginMm = showText ? 3.0 : 0;
+            const barHeightMm = Math.max(2, item.h_mm - textMarginMm);
+            const totalBars = Math.max(1, bars.length);
+            const unitWidthMm = item.w_mm / totalBars;
+
+            // Draw clean white background for high barcode contrast
+            doc.setFillColor(255, 255, 255);
+            doc.rect(itemX, itemY, item.w_mm, item.h_mm, 'F');
+
+            // Draw crisp barcode bars by grouping contiguous true bits
+            doc.setFillColor(barR, barG, barB);
+            let startIdx: number | null = null;
+            for (let bIdx = 0; bIdx < totalBars; bIdx++) {
+              if (bars[bIdx]) {
+                if (startIdx === null) startIdx = bIdx;
+              } else {
+                if (startIdx !== null) {
+                  const bX = itemX + startIdx * unitWidthMm;
+                  const bW = (bIdx - startIdx) * unitWidthMm;
+                  doc.rect(bX, itemY, bW, barHeightMm, 'F');
+                  startIdx = null;
+                }
+              }
+            }
+            if (startIdx !== null) {
+              const bX = itemX + startIdx * unitWidthMm;
+              const bW = (totalBars - startIdx) * unitWidthMm;
+              doc.rect(bX, itemY, bW, barHeightMm, 'F');
+            }
+
+            // Draw text under barcode if requested
+            if (showText && textToShow) {
+              doc.setFont('courier', 'normal');
+              doc.setFontSize(Math.max(5, Math.min(8.5, item.h_mm * 1.5)));
+              doc.setTextColor(barR, barG, barB);
+              doc.text(textToShow, itemX + item.w_mm / 2, itemY + item.h_mm - 0.4, { align: 'center' });
+            }
+          } else if (item.type === 'qrcode') {
+            const qrContent = PricingEngine.resolveQrContent(item as any, prod);
+            const modColorHex = ((item as any).module_color || '#000000').replace('#', '');
+            const modR = parseInt(modColorHex.substring(0, 2), 16) || 0;
+            const modG = parseInt(modColorHex.substring(2, 4), 16) || 0;
+            const modB = parseInt(modColorHex.substring(4, 6), 16) || 0;
+
+            const bgColorHex = ((item as any).background_color || '#FFFFFF').replace('#', '');
+            const bgR = parseInt(bgColorHex.substring(0, 2), 16) || 255;
+            const bgG = parseInt(bgColorHex.substring(2, 4), 16) || 255;
+            const bgB = parseInt(bgColorHex.substring(4, 6), 16) || 255;
+
+            // Draw QR Code background
+            doc.setFillColor(bgR, bgG, bgB);
+            doc.rect(itemX, itemY, item.w_mm, item.h_mm, 'F');
+
+            const matrix = generateQrMatrix(qrContent);
+            const matrixSize = matrix.length;
+            const cellW = item.w_mm / matrixSize;
+            const cellH = item.h_mm / matrixSize;
+
+            doc.setFillColor(modR, modG, modB);
+            for (let row = 0; row < matrixSize; row++) {
+              let startCol: number | null = null;
+              for (let col = 0; col < matrixSize; col++) {
+                if (matrix[row][col]) {
+                  if (startCol === null) startCol = col;
+                } else {
+                  if (startCol !== null) {
+                    doc.rect(itemX + startCol * cellW, itemY + row * cellH, (col - startCol) * cellW, cellH, 'F');
+                    startCol = null;
+                  }
+                }
+              }
+              if (startCol !== null) {
+                doc.rect(itemX + startCol * cellW, itemY + row * cellH, (matrixSize - startCol) * cellW, cellH, 'F');
+              }
+            }
           } else if (item.type === 'tier_price') {
             doc.setDrawColor(203, 213, 225);
             doc.setFillColor(248, 250, 252);
@@ -518,6 +612,20 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
 
           {/* Master Actions */}
           <div className="flex items-center gap-2 shrink-0">
+            <ContextTooltip
+              title="Dictionnaire de Mapping & Alias"
+              content="Gérer les alias de colonnes, mots-clés de détection automatique et champs personnalisés"
+              category="Données"
+            >
+              <button
+                onClick={() => setIsDictionaryModalOpen(true)}
+                className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                <span>Mapping & Alias</span>
+              </button>
+            </ContextTooltip>
+
             <ContextTooltip
               title="Importer Données (Excel/CSV)"
               content="Charger un catalogue d'articles, codes EAN, désignations et grilles tarifaires dégressives"
@@ -1496,6 +1604,12 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ templa
           onCancel={() => setMappingModalOpen(false)}
         />
       )}
+
+      {/* Mapping Dictionary Modal */}
+      <MappingDictionaryModal
+        isOpen={isDictionaryModalOpen}
+        onClose={() => setIsDictionaryModalOpen(false)}
+      />
 
       {/* ZPL Thermal Printer Modal */}
       {showZplModal && (

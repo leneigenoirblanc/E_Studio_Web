@@ -544,17 +544,19 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
       }
 
       case 'barcode': {
-        let code = item.code || '123456789012';
-        if (record && item.binding_key && record[item.binding_key]) {
-          code = String(record[item.binding_key]);
-        }
-
+        const code = PricingEngine.resolveBarcodeValue(item, record);
         const isEan13 = item.barcode_type === 'ean13';
         let barElements: React.ReactNode = null;
 
         try {
           if (isEan13) {
-            const { bars, formattedCode } = generateEAN13Bars(code);
+            let res;
+            try {
+              res = generateEAN13Bars(code);
+            } catch {
+              res = { bars: generateCode128Bars(code), formattedCode: code };
+            }
+            const { bars, formattedCode } = res;
             const totalBars = bars.length;
             const barW = itemW / totalBars;
             const barH = item.show_text ? Math.max(10, itemH - 12 * zoom) : itemH;
@@ -641,10 +643,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
       }
 
       case 'qrcode': {
-        let content = item.content || 'https://example.com';
-        if (record && item.binding_key && record[item.binding_key]) {
-          content = String(record[item.binding_key]);
-        }
+        const content = PricingEngine.resolveQrContent(item, record);
         const matrix = generateQrMatrix(content);
         const matrixSize = matrix.length;
         const cellSize = 100 / matrixSize;

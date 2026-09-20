@@ -15,6 +15,7 @@ import {
   SemanticSnapConfig,
 } from '../types';
 import { DOMAIN_FIELDS } from '../domainFields';
+import { useMappingDictionary } from '../context/MappingDictionaryContext';
 import {
   AVAILABLE_FONTS,
   FONT_WEIGHTS,
@@ -100,6 +101,16 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
   onPasteStyle,
   onClose,
 }) => {
+  const { dictionary } = useMappingDictionary();
+  const availableFields = React.useMemo(() => {
+    if (!dictionary || !Array.isArray(dictionary) || dictionary.length === 0) return DOMAIN_FIELDS;
+    return dictionary.map((f) => ({
+      key: f.key,
+      label: f.label,
+      description: f.description,
+    }));
+  }, [dictionary]);
+
   const count = selectedItems.length;
 
   if (count === 0) {
@@ -686,7 +697,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                   className="w-full mt-0.5 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white"
                 >
                   <option value="">-- Aucun (Texte statique) --</option>
-                  {DOMAIN_FIELDS.map((f) => (
+                  {availableFields.map((f) => (
                     <option key={f.key} value={f.key}>
                       {f.key} ({f.label})
                     </option>
@@ -2572,7 +2583,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                         className="w-full px-1.5 py-1 bg-white border border-slate-300 rounded text-xs"
                       >
                         <option value="">-- Aucun --</option>
-                        {DOMAIN_FIELDS.map((f) => (
+                        {availableFields.map((f) => (
                           <option key={f.key} value={f.key}>
                             {f.key}
                           </option>

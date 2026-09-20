@@ -10,6 +10,8 @@ import { TooltipProvider, useTooltip } from './context/TooltipContext';
 import { AccessibilityPreferencesModal } from './components/AccessibilityPreferencesModal';
 import { FontManagerModal } from './components/FontManagerModal';
 import { AuditTrailModal } from './components/AuditTrailModal';
+import { MappingDictionaryModal } from './components/MappingDictionaryModal';
+import { MappingDictionaryProvider } from './context/MappingDictionaryContext';
 
 const STORAGE_KEY = 'estudio_templates_v1';
 
@@ -36,6 +38,7 @@ function AppContent() {
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [isFontManagerOpen, setIsFontManagerOpen] = useState(false);
   const [isAuditTrailOpen, setIsAuditTrailOpen] = useState(false);
+  const [isMappingDictionaryOpen, setIsMappingDictionaryOpen] = useState(false);
 
   // Persist templates to localStorage
   useEffect(() => {
@@ -122,6 +125,7 @@ function AppContent() {
           onOpenRulesModal={() => setIsRulesModalOpen(true)}
           onOpenAuditLogs={() => setIsAuditTrailOpen(true)}
           onOpenFontManager={() => setIsFontManagerOpen(true)}
+          onOpenMappingDictionary={() => setIsMappingDictionaryOpen(true)}
         />
       )}
 
@@ -144,6 +148,12 @@ function AppContent() {
           onBack={() => setCurrentView('home')}
         />
       )}
+
+      {/* Mapping Dictionary Modal */}
+      <MappingDictionaryModal
+        isOpen={isMappingDictionaryOpen}
+        onClose={() => setIsMappingDictionaryOpen(false)}
+      />
 
       {/* Omni-Channel Rules Engine & Simulator Modal */}
       <OmniChannelStudioModal
@@ -183,7 +193,9 @@ function AppContent() {
 export function App() {
   return (
     <TooltipProvider>
-      <AppContent />
+      <MappingDictionaryProvider>
+        <AppContent />
+      </MappingDictionaryProvider>
     </TooltipProvider>
   );
 }

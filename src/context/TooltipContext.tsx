@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { TooltipSettings, ZoomMethod, RotationHandleType } from '../types';
+import { TooltipSettings, ZoomMethod, RotationHandleType, ElementPlacementStrategy } from '../types';
 
 export interface RulerSettings {
   showHorizontal: boolean;
@@ -24,6 +24,7 @@ export interface UIPreferences {
   rotationHandleType?: RotationHandleType;
   rotationSnapEnabled?: boolean;
   rotationSnapAngle?: number;
+  elementPlacementStrategy?: ElementPlacementStrategy;
 }
 
 interface TooltipContextType {
@@ -72,6 +73,7 @@ const DEFAULT_UI_PREFERENCES: UIPreferences = {
   rotationHandleType: 'top_stem',
   rotationSnapEnabled: true,
   rotationSnapAngle: 15,
+  elementPlacementStrategy: 'ergonomic_smart',
 };
 
 const TooltipContext = createContext<TooltipContextType | undefined>(undefined);

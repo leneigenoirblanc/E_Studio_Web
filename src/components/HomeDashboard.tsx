@@ -20,6 +20,7 @@ import {
   Settings,
   History,
   Type,
+  BookOpen,
 } from 'lucide-react';
 
 interface HomeDashboardProps {
@@ -33,6 +34,7 @@ interface HomeDashboardProps {
   onOpenRulesModal: () => void;
   onOpenAuditLogs?: () => void;
   onOpenFontManager?: () => void;
+  onOpenMappingDictionary?: () => void;
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
@@ -46,6 +48,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onOpenRulesModal,
   onOpenAuditLogs,
   onOpenFontManager,
+  onOpenMappingDictionary,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { openPreferencesModal } = useTooltip();
@@ -92,6 +95,20 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5">
+            <ContextTooltip
+              title="Dictionnaire de Mapping & Alias"
+              content="Gérer les alias de colonnes Excel, mots-clés de détection automatique et champs personnalisés"
+              category="Données"
+            >
+              <button
+                onClick={onOpenMappingDictionary}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                <span>Mapping & Alias</span>
+              </button>
+            </ContextTooltip>
+
             <ContextTooltip
               title="Polices & Typographies"
               content="Gérer les polices web et typographies installées pour les étiquettes"
