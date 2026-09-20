@@ -1,6 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTooltip } from '../context/TooltipContext';
-import { Sliders, Eye, Sun, Moon, ShieldAlert, X, MousePointer, Layers, Ruler, Lock, Unlock } from 'lucide-react';
+import {
+  Sliders,
+  Eye,
+  Sun,
+  Moon,
+  ShieldAlert,
+  X,
+  MousePointer,
+  Layers,
+  Ruler,
+  Lock,
+  Unlock,
+  RotateCw,
+  Compass,
+  Disc,
+  CircleDot,
+  CheckCircle2,
+  Sparkles,
+} from 'lucide-react';
+import { RotationHandleType } from '../types';
 
 interface AccessibilityPreferencesModalProps {
   isOpen: boolean;
@@ -24,7 +43,13 @@ export const AccessibilityPreferencesModal: React.FC<AccessibilityPreferencesMod
     updateRulerSettings,
   } = useTooltip();
 
+  const [previewAngle, setPreviewAngle] = useState(0);
+
   if (!isOpen) return null;
+
+  const currentHandleType: RotationHandleType = uiPreferences?.rotationHandleType || 'top_stem';
+  const rotationSnapEnabled = uiPreferences?.rotationSnapEnabled !== false;
+  const rotationSnapAngle = uiPreferences?.rotationSnapAngle || 15;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -37,7 +62,7 @@ export const AccessibilityPreferencesModal: React.FC<AccessibilityPreferencesMod
             </div>
             <div>
               <h2 className="font-bold text-slate-900 text-sm">Accessibilité & Préférences Studio</h2>
-              <p className="text-[11px] text-slate-500">Personnalisez l'ergonomie, les bulles d'aide et la sensibilité de grille</p>
+              <p className="text-[11px] text-slate-500">Personnalisez l'ergonomie, les poignées de rotation, les bulles d'aide et la sensibilité</p>
             </div>
           </div>
           <button
@@ -480,6 +505,354 @@ export const AccessibilityPreferencesModal: React.FC<AccessibilityPreferencesMod
                 >
                   {uiPreferences?.lockLeftSidebar ? 'Verrouillé' : 'Libre'}
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 6. Rotation Handles & Bounding Box Controls */}
+          <div className="space-y-3">
+            <div className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center justify-between border-b border-slate-100 pb-1">
+              <div className="flex items-center gap-2">
+                <RotateCw className="w-3.5 h-3.5 text-indigo-600" />
+                <span>6. Poignées de Rotation & Boîte d'Éléments (Rotation Handles)</span>
+              </div>
+              <span className="text-[10px] font-normal text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                Choix ergonomique
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              Choisissez le style d'interaction de rotation qui correspond à vos préférences et habitudes de travail :
+            </p>
+
+            {/* Handle Type Radio Options */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* 1. Top Stem */}
+              <div
+                onClick={() => updateUIPreferences({ rotationHandleType: 'top_stem' })}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  currentHandleType === 'top_stem'
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                      <RotateCw className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Tige Supérieure ("Lollipop")</span>
+                      </div>
+                      <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded">
+                        Figma / Illustrator
+                      </span>
+                    </div>
+                  </div>
+                  {currentHandleType === 'top_stem' && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  Tige verticale centrée au-dessus de l'élément avec poignée ronde. S'inverse automatiquement vers le bas si l'élément touche le bord supérieur. Double-clic : +90°.
+                </p>
+              </div>
+
+              {/* 2. Corner Hover Orbit */}
+              <div
+                onClick={() => updateUIPreferences({ rotationHandleType: 'corner_hover_orbit' })}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  currentHandleType === 'corner_hover_orbit'
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                      <Compass className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Orbite aux 4 Coins (Invisible Radius)</span>
+                      </div>
+                      <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded">
+                        Photoshop / InDesign
+                      </span>
+                    </div>
+                  </div>
+                  {currentHandleType === 'corner_hover_orbit' && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  Survolez quelques pixels au-delà des coins extérieurs pour faire pivoter librement. Laisse la boîte de sélection visuellement épurée.
+                </p>
+              </div>
+
+              {/* 3. Dual Stems */}
+              <div
+                onClick={() => updateUIPreferences({ rotationHandleType: 'dual_stems' })}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  currentHandleType === 'dual_stems'
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                      <Layers className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Double Tige (Haut & Bas)</span>
+                      </div>
+                      <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded">
+                        Bi-directionnel
+                      </span>
+                    </div>
+                  </div>
+                  {currentHandleType === 'dual_stems' && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  Deux tiges opposées (haute et basse). Permet d'attraper la poignée la plus accessible quel que soit le positionnement de l'élément sur l'étiquette.
+                </p>
+              </div>
+
+              {/* 4. Corner Satellites */}
+              <div
+                onClick={() => updateUIPreferences({ rotationHandleType: 'corner_satellites' })}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  currentHandleType === 'corner_satellites'
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                      <Disc className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Satellites & Rapporteur (4 Coins)</span>
+                      </div>
+                      <span className="text-[9px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded">
+                        Haute Précision CAD
+                      </span>
+                    </div>
+                  </div>
+                  {currentHandleType === 'corner_satellites' && (
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  4 boutons satellites décalés en diagonale avec anneau rapporteur circulaire et indicateur d'angle en direct pendant la manipulation.
+                </p>
+              </div>
+            </div>
+
+            {/* 5. Disabled Option */}
+            <div
+              onClick={() => updateUIPreferences({ rotationHandleType: 'disabled' })}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                currentHandleType === 'disabled'
+                  ? 'border-indigo-600 bg-indigo-50/50 shadow-xs ring-1 ring-indigo-500/30'
+                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <CircleDot className="w-4 h-4 text-slate-400" />
+                <span className="font-semibold text-slate-700 text-xs">Désactiver les poignées de rotation sur le canevas</span>
+                <span className="text-[10px] text-slate-400">(la rotation reste modifiable dans l'Inspecteur latéral)</span>
+              </div>
+              {currentHandleType === 'disabled' && (
+                <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+              )}
+            </div>
+
+            {/* Angle Snapping & Precision Settings */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-800 block text-xs">Magnétisme angulaire automatique (Angle Snap)</span>
+                  <span className="text-[10px] text-slate-500">
+                    Aimante automatiquement la rotation sur des angles réguliers. (Astuce : maintenez <kbd className="px-1 py-0.5 bg-slate-200 rounded font-mono text-[9px]">Shift</kbd> pour forcer l'aimant).
+                  </span>
+                </div>
+                <button
+                  onClick={() =>
+                    updateUIPreferences({ rotationSnapEnabled: !rotationSnapEnabled })
+                  }
+                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 shrink-0 ${
+                    rotationSnapEnabled ? 'bg-indigo-600' : 'bg-slate-300'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
+                      rotationSnapEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {rotationSnapEnabled && (
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60">
+                  <span className="text-[11px] font-semibold text-slate-600 shrink-0">Pas d'aimantation :</span>
+                  <div className="flex items-center gap-1.5">
+                    {[15, 30, 45, 90].map((deg) => (
+                      <button
+                        key={deg}
+                        onClick={() => updateUIPreferences({ rotationSnapAngle: deg })}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold font-mono transition ${
+                          rotationSnapAngle === deg
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {deg}°
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Interactive Live Preview Box */}
+            <div className="p-3.5 bg-gradient-to-br from-slate-900 to-slate-950 rounded-xl text-white space-y-3 shadow-inner">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="font-bold text-xs text-slate-200">Aperçu interactif en direct</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-xs bg-slate-800 text-indigo-300 px-2 py-0.5 rounded border border-slate-700">
+                    Angle: {previewAngle}°
+                  </span>
+                  <button
+                    onClick={() => setPreviewAngle((prev) => (prev + 90) % 360)}
+                    className="px-2 py-0.5 bg-indigo-600/80 hover:bg-indigo-600 text-[10px] font-bold rounded transition"
+                    title="Tourner de +90°"
+                  >
+                    +90°
+                  </button>
+                  <button
+                    onClick={() => setPreviewAngle(0)}
+                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[10px] rounded transition text-slate-300"
+                    title="Réinitialiser"
+                  >
+                    0°
+                  </button>
+                </div>
+              </div>
+
+              {/* Mini Interactive Canvas */}
+              <div className="h-36 bg-slate-800/60 rounded-lg border border-slate-700/60 flex items-center justify-center relative overflow-hidden select-none">
+                {/* Background Grid Pattern */}
+                <div
+                  className="absolute inset-0 opacity-10"
+                  style={{
+                    backgroundImage: 'radial-gradient(circle, #94a3b8 1px, transparent 1px)',
+                    backgroundSize: '12px 12px',
+                  }}
+                />
+
+                {/* Simulated Selected Label Element with the Selected Handle Mode */}
+                <div
+                  style={{
+                    transform: `rotate(${previewAngle}deg)`,
+                    transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  }}
+                  className="w-32 h-14 bg-white text-slate-900 rounded border-2 border-blue-500 shadow-xl relative flex flex-col justify-center items-center px-2 cursor-pointer"
+                  onClick={() => setPreviewAngle((a) => (a + 15) % 360)}
+                  title="Cliquez pour faire pivoter par pas de 15°"
+                >
+                  <span className="text-[10px] font-bold tracking-tight text-slate-800 truncate max-w-full">
+                    GABARIT EXEMPLE
+                  </span>
+                  <span className="text-[8px] font-mono text-slate-500">12.50 € / kg</span>
+
+                  {/* Top Stem Handle Preview */}
+                  {currentHandleType === 'top_stem' && (
+                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center group">
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewAngle((a) => (a + 90) % 360);
+                        }}
+                        className="w-4.5 h-4.5 rounded-full bg-white border-2 border-blue-500 shadow flex items-center justify-center text-blue-600 hover:scale-125 transition-transform"
+                        title="Double-clic: +90°"
+                      >
+                        <RotateCw className="w-2.5 h-2.5" />
+                      </div>
+                      <div className="w-0.5 h-2.5 bg-blue-500" />
+                    </div>
+                  )}
+
+                  {/* Corner Hover Orbit Preview */}
+                  {currentHandleType === 'corner_hover_orbit' && (
+                    <>
+                      <div className="absolute -top-3.5 -left-3.5 w-6 h-6 border-t-2 border-l-2 border-emerald-400 rounded-tl-full flex items-center justify-center opacity-80 animate-pulse">
+                        <RotateCw className="w-2 h-2 text-emerald-300" />
+                      </div>
+                      <div className="absolute -top-3.5 -right-3.5 w-6 h-6 border-t-2 border-r-2 border-emerald-400 rounded-tr-full flex items-center justify-center opacity-80 animate-pulse">
+                        <RotateCw className="w-2 h-2 text-emerald-300" />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Dual Stems Preview */}
+                  {currentHandleType === 'dual_stems' && (
+                    <>
+                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex flex-col items-center">
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewAngle((a) => (a + 90) % 360);
+                          }}
+                          className="w-4 h-4 rounded-full bg-white border-2 border-indigo-500 shadow flex items-center justify-center text-indigo-600 hover:scale-125 transition-transform"
+                        >
+                          <RotateCw className="w-2 h-2" />
+                        </div>
+                        <div className="w-0.5 h-2 bg-indigo-500" />
+                      </div>
+                      <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center">
+                        <div className="w-0.5 h-2 bg-indigo-500" />
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewAngle((a) => (a + 90) % 360);
+                          }}
+                          className="w-4 h-4 rounded-full bg-white border-2 border-indigo-500 shadow flex items-center justify-center text-indigo-600 hover:scale-125 transition-transform"
+                        >
+                          <RotateCw className="w-2 h-2" />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Corner Satellites Preview */}
+                  {currentHandleType === 'corner_satellites' && (
+                    <>
+                      <div className="absolute -top-3 -left-3 w-3.5 h-3.5 rounded-full bg-white border-2 border-violet-500 shadow flex items-center justify-center">
+                        <div className="w-1 h-1 rounded-full bg-violet-600" />
+                      </div>
+                      <div className="absolute -top-3 -right-3 w-3.5 h-3.5 rounded-full bg-white border-2 border-violet-500 shadow flex items-center justify-center">
+                        <div className="w-1 h-1 rounded-full bg-violet-600" />
+                      </div>
+                      <div className="absolute -bottom-3 -left-3 w-3.5 h-3.5 rounded-full bg-white border-2 border-violet-500 shadow flex items-center justify-center">
+                        <div className="w-1 h-1 rounded-full bg-violet-600" />
+                      </div>
+                      <div className="absolute -bottom-3 -right-3 w-3.5 h-3.5 rounded-full bg-white border-2 border-violet-500 shadow flex items-center justify-center">
+                        <div className="w-1 h-1 rounded-full bg-violet-600" />
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>

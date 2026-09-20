@@ -280,6 +280,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     origBox: { x: number; y: number; w: number; h: number };
   } | null>(null);
 
+  // Rotation state
+  const [isRotating, setIsRotating] = useState(false);
+  const [rotateState, setRotateState] = useState<{
+    itemId: string;
+    centerScreenX: number;
+    centerScreenY: number;
+    initialMouseAngleRad: number;
+    origRotation: number;
+  } | null>(null);
+  const [activeRotationAngle, setActiveRotationAngle] = useState<number | null>(null);
+
   // Marquee Selection Box State (for bulk / rectangle free selection)
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [marqueeStart, setMarqueeStart] = useState<{ x_mm: number; y_mm: number } | null>(null);
@@ -1119,6 +1130,41 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     });
   };
 
+  const handleRotateStart = (itemId: string, e: React.MouseEvent, _handlePos?: string) => {
+    const it = template.items.find((i) => i.id === itemId);
+    if (!it || it.locked || !labelCanvasRef.current) return;
+
+    const canvasRect = labelCanvasRef.current.getBoundingClientRect();
+    const scalePxPerMm = 3.78 * zoom;
+    const centerMmX = it.x_mm + it.w_mm / 2;
+    const centerMmY = it.y_mm + it.h_mm / 2;
+    const centerScreenX = canvasRect.left + centerMmX * scalePxPerMm;
+    const centerScreenY = canvasRect.top + centerMmY * scalePxPerMm;
+
+    const initialMouseAngleRad = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX);
+    setIsRotating(true);
+    setRotateState({
+      itemId,
+      centerScreenX,
+      centerScreenY,
+      initialMouseAngleRad,
+      origRotation: it.rotation || 0,
+    });
+    setActiveRotationAngle(it.rotation || 0);
+  };
+
+  const handleRotateStep90 = (itemId: string, _e: React.MouseEvent) => {
+    const it = template.items.find((i) => i.id === itemId);
+    if (!it || it.locked) return;
+    const nextRot = Math.round(((it.rotation || 0) + 90) % 360);
+    const updated = template.items.map((item) =>
+      item.id === itemId ? { ...item, rotation: nextRot } : item
+    );
+    const nextTemplate = { ...template, items: updated };
+    setTemplate(nextTemplate);
+    pushState(nextTemplate);
+  };
+
   // Canvas background mouse down -> Start bulk selection, marquee zoom or hand pan
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // only left click
@@ -1172,6 +1218,40 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     }
 
     const scalePxPerMm = 3.78 * zoom;
+
+    // 0.05 Rotation in Progress
+    if (isRotating && rotateState) {
+      const currentMouseAngleRad = Math.atan2(
+        e.clientY - rotateState.centerScreenY,
+        e.clientX - rotateState.centerScreenX
+      );
+      const deltaRad = currentMouseAngleRad - rotateState.initialMouseAngleRad;
+      const deltaDeg = deltaRad * (180 / Math.PI);
+      let rawRot = (rotateState.origRotation + deltaDeg) % 360;
+      if (rawRot < 0) rawRot += 360;
+
+      const snapEnabled = uiPreferences?.rotationSnapEnabled !== false;
+      const snapAngle = uiPreferences?.rotationSnapAngle || 15;
+      const shouldSnap = e.shiftKey || snapEnabled;
+
+      let finalRot = rawRot;
+      if (shouldSnap) {
+        const nearestSnap = Math.round(rawRot / snapAngle) * snapAngle;
+        if (e.shiftKey || Math.abs(rawRot - nearestSnap) <= 4.5) {
+          finalRot = (nearestSnap % 360 + 360) % 360;
+        }
+      }
+      finalRot = Math.round(finalRot * 10) / 10;
+      setActiveRotationAngle(finalRot);
+
+      setTemplate((prev) => ({
+        ...prev,
+        items: prev.items.map((it) =>
+          it.id === rotateState.itemId ? { ...it, rotation: finalRot } : it
+        ),
+      }));
+      return;
+    }
 
     // 0.1 Marquee Drag-to-Zoom
     if (isZoomMarquee && zoomMarqueeStart && labelCanvasRef.current) {
@@ -1378,11 +1458,18 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
       setSelectedItemIds(enclosedIds);
     }
-  }, [isResizing, resizeState, isDragging, dragStartPos, isMarqueeSelecting, marqueeStart, isPanning, panStart, isZoomMarquee, zoomMarqueeStart, zoom, template, smartGuidesEnabled, snapToGrid, showInnerMargins, selectedItemIds]);
+  }, [isRotating, rotateState, uiPreferences, isResizing, resizeState, isDragging, dragStartPos, isMarqueeSelecting, marqueeStart, isPanning, panStart, isZoomMarquee, zoomMarqueeStart, zoom, template, smartGuidesEnabled, snapToGrid, showInnerMargins, selectedItemIds]);
 
-  // Global Mouse Up -> Clean release of all dragging / resizing / marquee / pan
+  // Global Mouse Up -> Clean release of all dragging / resizing / marquee / pan / rotation
   const handleMouseUp = useCallback(() => {
     setActiveSmartGuides([]);
+
+    if (isRotating) {
+      setIsRotating(false);
+      setRotateState(null);
+      setActiveRotationAngle(null);
+      pushState(template);
+    }
 
     if (isPanning) {
       setIsPanning(false);
@@ -1452,12 +1539,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   // Attach global window listeners to guarantee that releasing the mouse anywhere ends dragging cleanly
   useEffect(() => {
     const onWinMouseMove = (e: MouseEvent) => {
-      if (isDragging || isResizing || isMarqueeSelecting || isPanning || isZoomMarquee) {
+      if (isRotating || isDragging || isResizing || isMarqueeSelecting || isPanning || isZoomMarquee) {
         handleMouseMove(e);
       }
     };
     const onWinMouseUp = () => {
-      if (isDragging || isResizing || isMarqueeSelecting || isPanning || isZoomMarquee) {
+      if (isRotating || isDragging || isResizing || isMarqueeSelecting || isPanning || isZoomMarquee) {
         handleMouseUp();
       }
     };
@@ -2199,6 +2286,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               selectedItemIds={selectedItemIds}
               onSelectItem={(id, e) => handleItemMouseDown(id, e)}
               onResizeStart={handleResizeStart}
+              onRotateStart={handleRotateStart}
+              onRotateStep90={handleRotateStep90}
+              rotationHandleType={uiPreferences?.rotationHandleType || 'top_stem'}
+              isRotating={isRotating}
+              activeRotatingItemId={rotateState?.itemId}
+              activeRotationAngle={activeRotationAngle}
               smartGuides={activeSmartGuides}
               interactive={true}
               className="ring-1 ring-slate-300"

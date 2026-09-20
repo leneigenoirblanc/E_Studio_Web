@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { LabelTemplate, ProductRecord, TemplateItem } from '../types';
+import { LabelTemplate, ProductRecord, TemplateItem, RotationHandleType } from '../types';
 import { TierEngine } from '../utils/tierEngine';
 import { PricingEngine } from '../utils/pricingEngine';
 import { generateCode128Bars, generateEAN13Bars } from '../utils/barcodeGenerator';
@@ -7,6 +7,7 @@ import { generateQrMatrix } from '../utils/qrGenerator';
 import { SmartGuideLine } from '../utils/smartGuides';
 import { PictogramRenderer } from './PictogramRenderer';
 import { CurvedTextRenderer } from './CurvedTextRenderer';
+import { RotateCw } from 'lucide-react';
 
 import { applyBrandDeduplication } from '../utils/dataDrivenTemplateEngine';
 
@@ -22,6 +23,12 @@ interface LabelRendererProps {
   selectedItemIds?: string[];
   onSelectItem?: (id: string, e: React.MouseEvent) => void;
   onResizeStart?: (id: string, handle: string, e: React.MouseEvent) => void;
+  onRotateStart?: (id: string, e: React.MouseEvent, handlePos?: string) => void;
+  onRotateStep90?: (id: string, e: React.MouseEvent) => void;
+  rotationHandleType?: RotationHandleType;
+  isRotating?: boolean;
+  activeRotatingItemId?: string | null;
+  activeRotationAngle?: number | null;
   smartGuides?: SmartGuideLine[];
   interactive?: boolean;
   className?: string;
@@ -40,6 +47,12 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
   selectedItemIds,
   onSelectItem,
   onResizeStart,
+  onRotateStart,
+  onRotateStep90,
+  rotationHandleType = 'top_stem',
+  isRotating = false,
+  activeRotatingItemId = null,
+  activeRotationAngle = null,
   smartGuides = [],
   interactive = false,
   className = '',
@@ -1156,6 +1169,257 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                       <circle cx="10" cy="10" r="1" fill="#2563eb" />
                     </svg>
                   </div>
+
+                  {/* ========================================================================= */}
+                  {/* ROTATION HANDLES: 4 USER PREFERENCE OPTIONS                             */}
+                  {/* ========================================================================= */}
+                  {rotationHandleType !== 'disabled' && (
+                    <>
+                      {/* OPTION 1: Top-Center Stem Handle ("Lollipop" Figma/Illustrator style) */}
+                      {rotationHandleType === 'top_stem' && (() => {
+                        const isCloseToTop = (item.y_mm * pxPerMm) < 28;
+                        const isItemRotating = isRotating && activeRotatingItemId === item.id;
+                        const currentDeg = Math.round(isItemRotating && activeRotationAngle !== null ? activeRotationAngle : (item.rotation || 0));
+
+                        return (
+                          <div
+                            className={`absolute left-1/2 -translate-x-1/2 z-50 flex flex-col items-center select-none pointer-events-auto group ${
+                              isCloseToTop ? 'top-full' : 'bottom-full'
+                            }`}
+                          >
+                            {!isCloseToTop && (
+                              <>
+                                {/* Angle HUD pill */}
+                                <div className="px-1.5 py-0.5 mb-1 bg-slate-900/90 backdrop-blur-xs text-white text-[9px] font-mono font-bold rounded shadow-md pointer-events-none whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                  {currentDeg}°
+                                </div>
+                                <div
+                                  onMouseDown={(e) => {
+                                    if (onRotateStart) {
+                                      e.stopPropagation();
+                                      onRotateStart(item.id, e, 'top_stem');
+                                    }
+                                  }}
+                                  onDoubleClick={(e) => {
+                                    if (onRotateStep90) {
+                                      e.stopPropagation();
+                                      onRotateStep90(item.id, e);
+                                    }
+                                  }}
+                                  className="w-5 h-5 rounded-full bg-white border-2 border-blue-600 shadow-md flex items-center justify-center text-blue-600 hover:bg-blue-600 hover:text-white hover:scale-115 active:scale-95 transition-all cursor-grab active:cursor-grabbing"
+                                  title="Pivoter l'élément (Glisser: rotation libre / Double-clic: +90°)"
+                                >
+                                  <RotateCw className="w-2.5 h-2.5 pointer-events-none" />
+                                </div>
+                                <div className="w-0.5 h-3.5 bg-blue-600" />
+                              </>
+                            )}
+
+                            {isCloseToTop && (
+                              <>
+                                <div className="w-0.5 h-3.5 bg-blue-600" />
+                                <div
+                                  onMouseDown={(e) => {
+                                    if (onRotateStart) {
+                                      e.stopPropagation();
+                                      onRotateStart(item.id, e, 'bottom_stem');
+                                    }
+                                  }}
+                                  onDoubleClick={(e) => {
+                                    if (onRotateStep90) {
+                                      e.stopPropagation();
+                                      onRotateStep90(item.id, e);
+                                    }
+                                  }}
+                                  className="w-5 h-5 rounded-full bg-white border-2 border-blue-600 shadow-md flex items-center justify-center text-blue-600 hover:bg-blue-600 hover:text-white hover:scale-115 active:scale-95 transition-all cursor-grab active:cursor-grabbing"
+                                  title="Pivoter l'élément (Glisser: rotation libre / Double-clic: +90°)"
+                                >
+                                  <RotateCw className="w-2.5 h-2.5 pointer-events-none" />
+                                </div>
+                                <div className="px-1.5 py-0.5 mt-1 bg-slate-900/90 backdrop-blur-xs text-white text-[9px] font-mono font-bold rounded shadow-md pointer-events-none whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                  {currentDeg}°
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* OPTION 2: Corner Hover Orbit (Photoshop/InDesign outer-corner perimeter) */}
+                      {rotationHandleType === 'corner_hover_orbit' && (() => {
+                        const cornerOrbits = [
+                          { pos: 'nw', class: '-top-6 -left-6', arcClass: 'border-t-2 border-l-2 rounded-tl-full' },
+                          { pos: 'ne', class: '-top-6 -right-6', arcClass: 'border-t-2 border-r-2 rounded-tr-full' },
+                          { pos: 'sw', class: '-bottom-6 -left-6', arcClass: 'border-b-2 border-l-2 rounded-bl-full' },
+                          { pos: 'se', class: '-bottom-6 -right-6', arcClass: 'border-b-2 border-r-2 rounded-br-full' },
+                        ];
+
+                        return (
+                          <>
+                            {cornerOrbits.map((co) => (
+                              <div
+                                key={co.pos}
+                                onMouseDown={(e) => {
+                                  if (onRotateStart) {
+                                    e.stopPropagation();
+                                    onRotateStart(item.id, e, `orbit_${co.pos}`);
+                                  }
+                                }}
+                                onDoubleClick={(e) => {
+                                  if (onRotateStep90) {
+                                    e.stopPropagation();
+                                    onRotateStep90(item.id, e);
+                                  }
+                                }}
+                                className={`absolute ${co.class} w-8 h-8 z-40 flex items-center justify-center group pointer-events-auto cursor-grab active:cursor-grabbing select-none`}
+                                title="Orbite de rotation (Glisser pour faire tourner, Double-clic: +90°)"
+                              >
+                                {/* Subtle curved arc indicator on hover */}
+                                <div
+                                  className={`w-6 h-6 ${co.arcClass} border-blue-500/80 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center justify-center bg-blue-50/20`}
+                                >
+                                  <RotateCw className="w-2.5 h-2.5 text-blue-600 opacity-80" />
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
+
+                      {/* OPTION 3: Dual-End Floating Stems (Top & Bottom Bi-Directional) */}
+                      {rotationHandleType === 'dual_stems' && (() => {
+                        const isItemRotating = isRotating && activeRotatingItemId === item.id;
+                        const currentDeg = Math.round(isItemRotating && activeRotationAngle !== null ? activeRotationAngle : (item.rotation || 0));
+
+                        return (
+                          <>
+                            {/* Top Stem */}
+                            <div className="absolute -top-6.5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center select-none pointer-events-auto group">
+                              <div
+                                onMouseDown={(e) => {
+                                  if (onRotateStart) {
+                                    e.stopPropagation();
+                                    onRotateStart(item.id, e, 'dual_top');
+                                  }
+                                }}
+                                onDoubleClick={(e) => {
+                                  if (onRotateStep90) {
+                                    e.stopPropagation();
+                                    onRotateStep90(item.id, e);
+                                  }
+                                }}
+                                className="w-5 h-5 rounded-full bg-white border-2 border-indigo-600 shadow-md flex items-center justify-center text-indigo-600 hover:bg-indigo-600 hover:text-white hover:scale-115 active:scale-95 transition-all cursor-grab active:cursor-grabbing"
+                                title="Pivoter depuis le haut (Glisser: rotation, Double-clic: +90°)"
+                              >
+                                <RotateCw className="w-2.5 h-2.5 pointer-events-none" />
+                              </div>
+                              <div className="w-0.5 h-2.5 bg-indigo-600" />
+                            </div>
+
+                            {/* Bottom Stem */}
+                            <div className="absolute -bottom-6.5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center select-none pointer-events-auto group">
+                              <div className="w-0.5 h-2.5 bg-indigo-600" />
+                              <div
+                                onMouseDown={(e) => {
+                                  if (onRotateStart) {
+                                    e.stopPropagation();
+                                    onRotateStart(item.id, e, 'dual_bottom');
+                                  }
+                                }}
+                                onDoubleClick={(e) => {
+                                  if (onRotateStep90) {
+                                    e.stopPropagation();
+                                    onRotateStep90(item.id, e);
+                                  }
+                                }}
+                                className="w-5 h-5 rounded-full bg-white border-2 border-indigo-600 shadow-md flex items-center justify-center text-indigo-600 hover:bg-indigo-600 hover:text-white hover:scale-115 active:scale-95 transition-all cursor-grab active:cursor-grabbing"
+                                title="Pivoter depuis le bas (Glisser: rotation, Double-clic: +90°)"
+                              >
+                                <RotateCw className="w-2.5 h-2.5 pointer-events-none" />
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+
+                      {/* OPTION 4: Floating Corner Ring / Satellite Arc Dots (4 satellite handles with protractor overlay) */}
+                      {rotationHandleType === 'corner_satellites' && (() => {
+                        const satellites = [
+                          { pos: 'nw', class: '-top-5 -left-5' },
+                          { pos: 'ne', class: '-top-5 -right-5' },
+                          { pos: 'sw', class: '-bottom-5 -left-5' },
+                          { pos: 'se', class: '-bottom-5 -right-5' },
+                        ];
+
+                        return (
+                          <>
+                            {satellites.map((sat) => (
+                              <div
+                                key={sat.pos}
+                                onMouseDown={(e) => {
+                                  if (onRotateStart) {
+                                    e.stopPropagation();
+                                    onRotateStart(item.id, e, `sat_${sat.pos}`);
+                                  }
+                                }}
+                                onDoubleClick={(e) => {
+                                  if (onRotateStep90) {
+                                    e.stopPropagation();
+                                    onRotateStep90(item.id, e);
+                                  }
+                                }}
+                                className={`absolute ${sat.class} w-4.5 h-4.5 rounded-full bg-white border-2 border-violet-600 shadow-md flex items-center justify-center text-violet-600 hover:bg-violet-600 hover:text-white hover:scale-125 active:scale-95 transition-all cursor-grab active:cursor-grabbing z-50 group pointer-events-auto select-none`}
+                                title="Satellite de rotation (Glisser: orienter, Double-clic: +90°)"
+                              >
+                                <div className="w-1.5 h-1.5 rounded-full bg-violet-600 group-hover:bg-white transition-colors" />
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </>
+                  )}
+
+                  {/* ACTIVE ROTATION PROTRACTOR & ANGLE BADGE OVERLAY */}
+                  {isRotating && activeRotatingItemId === item.id && (() => {
+                    const currentDeg = Math.round(activeRotationAngle !== null ? activeRotationAngle : (item.rotation || 0));
+                    const diagRadius = Math.hypot(item.w_mm * pxPerMm, item.h_mm * pxPerMm) / 2 + 18;
+
+                    return (
+                      <div className="absolute inset-0 pointer-events-none z-50 flex items-center justify-center">
+                        {/* Protractor Circular Ring */}
+                        <div
+                          style={{
+                            width: `${diagRadius * 2}px`,
+                            height: `${diagRadius * 2}px`,
+                          }}
+                          className="absolute rounded-full border border-dashed border-blue-500/70 bg-blue-500/5 animate-in fade-in duration-100 flex items-center justify-center"
+                        >
+                          {/* Crosshair Cardinal Guides */}
+                          <div className="absolute inset-x-0 top-1/2 h-px bg-blue-400/50" />
+                          <div className="absolute inset-y-0 left-1/2 w-px bg-blue-400/50" />
+                          
+                          {/* 0° / 90° / 180° / 270° Labels */}
+                          <span className="absolute top-1 text-[8px] font-mono text-blue-700 font-bold bg-white/90 px-1 rounded">0°</span>
+                          <span className="absolute right-1 text-[8px] font-mono text-blue-700 font-bold bg-white/90 px-1 rounded">90°</span>
+                          <span className="absolute bottom-1 text-[8px] font-mono text-blue-700 font-bold bg-white/90 px-1 rounded">180°</span>
+                          <span className="absolute left-1 text-[8px] font-mono text-blue-700 font-bold bg-white/90 px-1 rounded">270°</span>
+
+                          {/* Center Pivot Point */}
+                          <div className="w-2.5 h-2.5 rounded-full bg-blue-600 border border-white shadow-sm z-10" />
+                        </div>
+
+                        {/* High-visibility Floating Angle Pill */}
+                        <div className="absolute -top-10 px-2.5 py-1 bg-slate-950 text-white text-xs font-mono font-bold rounded-lg shadow-xl border border-blue-500/40 flex items-center gap-1.5 z-50 animate-in zoom-in-90">
+                          <RotateCw className="w-3 h-3 text-blue-400" />
+                          <span>{currentDeg}°</span>
+                          {(currentDeg % 15 === 0) && (
+                            <span className="text-[9px] text-emerald-400 bg-emerald-950/80 px-1 rounded">Aimant</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </div>

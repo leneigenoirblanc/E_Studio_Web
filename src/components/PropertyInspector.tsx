@@ -868,7 +868,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                   <input
                     type="number"
                     step="0.5"
-                    value={selectedItem.semantic_snap.offset_mm}
+                    value={selectedItem.semantic_snap.offset_mm ?? 0}
                     onChange={(e) =>
                       update({
                         semantic_snap: {
@@ -1410,13 +1410,13 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
                 <label className="flex items-center gap-1 text-[11px] text-slate-600 cursor-pointer font-medium">
                   <input
                     type="checkbox"
-                    checked={
+                    checked={Boolean(
                       selectedItem.is_price ||
-                      Boolean(selectedItem.currency_symbol) ||
+                      selectedItem.currency_symbol ||
                       selectedItem.binding_key === 'SELLING_PRICE' ||
                       selectedItem.binding_key === 'PROMOPRICE' ||
                       (selectedItem.binding_key && selectedItem.binding_key.toLowerCase().includes('price'))
-                    }
+                    )}
                     onChange={(e) => {
                       const checked = e.target.checked;
                       update({
@@ -2040,7 +2040,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-700 font-medium">
                 <input
                   type="checkbox"
-                  checked={(selectedItem as RestrictedAreaItemProperties).warn_on_overlap ?? true}
+                  checked={Boolean((selectedItem as RestrictedAreaItemProperties).warn_on_overlap ?? true)}
                   onChange={(e) => update({ warn_on_overlap: e.target.checked })}
                   className="rounded text-rose-600 focus:ring-rose-500"
                 />
@@ -2322,7 +2322,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
               <label className="flex items-center gap-2 cursor-pointer text-[11px]">
                 <input
                   type="checkbox"
-                  checked={selectedItem.fallback_to_base_price ?? true}
+                  checked={Boolean(selectedItem.fallback_to_base_price ?? true)}
                   onChange={(e) => update({ fallback_to_base_price: e.target.checked })}
                   className="rounded text-blue-600"
                 />

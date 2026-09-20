@@ -26,6 +26,13 @@ export type ItemType =
   | 'tier_price'
   | 'restricted_area';
 
+export type RotationHandleType =
+  | 'top_stem'
+  | 'corner_hover_orbit'
+  | 'dual_stems'
+  | 'corner_satellites'
+  | 'disabled';
+
 export interface ConditionalDisplayConfig {
   enabled: boolean;
   rule: 'always' | 'has_promo' | 'has_barcode' | 'has_tiers' | 'field_gt_zero' | 'field_not_empty';
