@@ -53,10 +53,17 @@ import {
 interface GenerationWorkspaceProps {
   template: LabelTemplate;
   onBack: () => void;
+  initialProducts?: ProductRecord[];
+  initialBatchName?: string;
 }
 
-export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({ template, onBack }) => {
-  const [products, setProducts] = useState<ProductRecord[]>(SAMPLE_PRODUCTS);
+export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
+  template,
+  onBack,
+  initialProducts,
+  initialBatchName,
+}) => {
+  const [products, setProducts] = useState<ProductRecord[]>(initialProducts || SAMPLE_PRODUCTS);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<

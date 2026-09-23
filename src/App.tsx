@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LabelTemplate } from './types';
+import { LabelTemplate, ProductRecord } from './types';
 import { DEFAULT_TEMPLATES } from './defaultTemplates';
 import { HomeDashboard } from './components/HomeDashboard';
 import { TemplateEditor } from './components/TemplateEditor';
@@ -12,6 +12,13 @@ import { FontManagerModal } from './components/FontManagerModal';
 import { AuditTrailModal } from './components/AuditTrailModal';
 import { MappingDictionaryModal } from './components/MappingDictionaryModal';
 import { MappingDictionaryProvider } from './context/MappingDictionaryContext';
+import {
+  MobileTerminalView,
+  MobileSyncHubModal,
+  mobileSyncService,
+  MobileScanLot,
+  OfflineIndicator,
+} from './pwa';
 
 const STORAGE_KEY = 'estudio_templates_v1';
 
@@ -32,13 +39,36 @@ function AppContent() {
     return DEFAULT_TEMPLATES;
   });
 
-  const [currentView, setCurrentView] = useState<'home' | 'editor' | 'generation'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'editor' | 'generation' | 'mobile'>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const mode = params.get('mode');
+      if (mode === 'mobile' || mode === 'pwa') {
+        return 'mobile';
+      }
+    }
+    return 'home';
+  });
+
   const [activeTemplate, setActiveTemplate] = useState<LabelTemplate | null>(null);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [isFontManagerOpen, setIsFontManagerOpen] = useState(false);
   const [isAuditTrailOpen, setIsAuditTrailOpen] = useState(false);
   const [isMappingDictionaryOpen, setIsMappingDictionaryOpen] = useState(false);
+  const [isMobileSyncOpen, setIsMobileSyncOpen] = useState(false);
+
+  // Incoming mobile lots state
+  const [mobileLots, setMobileLots] = useState<MobileScanLot[]>(() => mobileSyncService.getLots());
+  const [mobileInitialProducts, setMobileInitialProducts] = useState<ProductRecord[] | undefined>(undefined);
+  const [mobileInitialBatchName, setMobileInitialBatchName] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const unsub = mobileSyncService.subscribe((lots) => {
+      setMobileLots(lots);
+    });
+    return () => unsub();
+  }, []);
 
   // Persist templates to localStorage
   useEffect(() => {
@@ -58,6 +88,22 @@ function AppContent() {
     // Snapshots template for production session safety
     const snapshot: LabelTemplate = JSON.parse(JSON.stringify(tpl));
     setActiveTemplate(snapshot);
+    setMobileInitialProducts(undefined);
+    setMobileInitialBatchName(undefined);
+    setCurrentView('generation');
+  };
+
+  const handleGenerateFromMobileLot = (lot: MobileScanLot) => {
+    const matchedTemplate =
+      templates.find((t) => t.name === lot.targetTemplateId) ||
+      templates[0] ||
+      DEFAULT_TEMPLATES[0];
+
+    const records = mobileSyncService.convertLotToProductRecords(lot);
+    const snapshot: LabelTemplate = JSON.parse(JSON.stringify(matchedTemplate));
+    setActiveTemplate(snapshot);
+    setMobileInitialProducts(records);
+    setMobileInitialBatchName(lot.name);
     setCurrentView('generation');
   };
 
@@ -111,6 +157,10 @@ function AppContent() {
     setCurrentView('editor');
   };
 
+  const pendingLotsCount = mobileLots.filter(
+    (l) => l.status === 'ready' || l.status === 'received'
+  ).length;
+
   return (
     <div className="h-full flex flex-col font-sans select-none overflow-hidden bg-slate-100 text-slate-900">
       {currentView === 'home' && (
@@ -126,6 +176,8 @@ function AppContent() {
           onOpenAuditLogs={() => setIsAuditTrailOpen(true)}
           onOpenFontManager={() => setIsFontManagerOpen(true)}
           onOpenMappingDictionary={() => setIsMappingDictionaryOpen(true)}
+          onOpenMobileSync={() => setIsMobileSyncOpen(true)}
+          pendingLotsCount={pendingLotsCount}
         />
       )}
 
@@ -136,6 +188,8 @@ function AppContent() {
           onBackToHome={() => setCurrentView('home')}
           onOpenGeneration={(tpl) => {
             setActiveTemplate(tpl);
+            setMobileInitialProducts(undefined);
+            setMobileInitialBatchName(undefined);
             setCurrentView('generation');
           }}
           onOpenRulesModal={() => setIsRulesModalOpen(true)}
@@ -145,9 +199,37 @@ function AppContent() {
       {currentView === 'generation' && activeTemplate && (
         <GenerationWorkspace
           template={activeTemplate}
+          initialProducts={mobileInitialProducts}
+          initialBatchName={mobileInitialBatchName}
           onBack={() => setCurrentView('home')}
         />
       )}
+
+      {currentView === 'mobile' && (
+        <MobileTerminalView
+          templates={templates}
+          onBackToDesktop={() => setCurrentView('home')}
+        />
+      )}
+
+      {/* Mobile Gateway & Lots Ingestion Modal */}
+      <MobileSyncHubModal
+        isOpen={isMobileSyncOpen}
+        onClose={() => setIsMobileSyncOpen(false)}
+        templates={templates}
+        onGenerateLot={handleGenerateFromMobileLot}
+        onOpenInEditor={(tplName) => {
+          const tpl = templates.find((t) => t.name === tplName);
+          if (tpl) {
+            handleSelectToEdit(tpl);
+            setIsMobileSyncOpen(false);
+          }
+        }}
+        onOpenMobileSimulator={() => {
+          setIsMobileSyncOpen(false);
+          setCurrentView('mobile');
+        }}
+      />
 
       {/* Mapping Dictionary Modal */}
       <MappingDictionaryModal
@@ -186,6 +268,9 @@ function AppContent() {
         isOpen={isPreferencesModalOpen}
         onClose={closePreferencesModal}
       />
+
+      {/* Global PWA Offline Connectivity Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }
@@ -201,3 +286,4 @@ export function App() {
 }
 
 export default App;
+

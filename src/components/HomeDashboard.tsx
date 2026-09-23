@@ -21,7 +21,9 @@ import {
   History,
   Type,
   BookOpen,
+  Smartphone,
 } from 'lucide-react';
+import { PWAInstallButton } from '../pwa';
 
 interface HomeDashboardProps {
   templates: LabelTemplate[];
@@ -35,6 +37,8 @@ interface HomeDashboardProps {
   onOpenAuditLogs?: () => void;
   onOpenFontManager?: () => void;
   onOpenMappingDictionary?: () => void;
+  onOpenMobileSync?: () => void;
+  pendingLotsCount?: number;
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
@@ -49,6 +53,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onOpenAuditLogs,
   onOpenFontManager,
   onOpenMappingDictionary,
+  onOpenMobileSync,
+  pendingLotsCount = 0,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { openPreferencesModal } = useTooltip();
@@ -134,6 +140,27 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               >
                 <History className="w-3.5 h-3.5 text-slate-600" />
                 <span>Audit</span>
+              </button>
+            </ContextTooltip>
+
+            <PWAInstallButton compact />
+
+            <ContextTooltip
+              title="Passerelle Mobiles & Lots Scannés"
+              content="Réceptionner les scans de rayons depuis iPhones (PWA) et terminaux Android (Zebra), appairer par QR Code et lancer l'impression des lots"
+              category="Mobile"
+            >
+              <button
+                onClick={onOpenMobileSync}
+                className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition relative"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Mobiles & Lots</span>
+                {pendingLotsCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-600 text-white animate-pulse">
+                    {pendingLotsCount}
+                  </span>
+                )}
               </button>
             </ContextTooltip>
 
