@@ -22,6 +22,9 @@ import {
   Type,
   BookOpen,
   Smartphone,
+  Database,
+  FileSpreadsheet,
+  Sparkles,
 } from 'lucide-react';
 import { PWAInstallButton } from '../pwa';
 
@@ -38,6 +41,7 @@ interface HomeDashboardProps {
   onOpenFontManager?: () => void;
   onOpenMappingDictionary?: () => void;
   onOpenMobileSync?: () => void;
+  onOpenMasterDatabase?: () => void;
   pendingLotsCount?: number;
 }
 
@@ -54,6 +58,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onOpenFontManager,
   onOpenMappingDictionary,
   onOpenMobileSync,
+  onOpenMasterDatabase,
   pendingLotsCount = 0,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -100,7 +105,21 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <ContextTooltip
+              title="Base de Données Master & Import Excel"
+              content="Explorer le catalogue central, importer/nettoyer vos fichiers Excel/CSV et gérer tous les champs produits"
+              category="Base de Données"
+            >
+              <button
+                onClick={onOpenMasterDatabase}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-sm transition hover:scale-[1.01]"
+              >
+                <Database className="w-4 h-4" />
+                <span>Base de Données & Import</span>
+              </button>
+            </ContextTooltip>
+
             <ContextTooltip
               title="Dictionnaire de Mapping & Alias"
               content="Gérer les alias de colonnes Excel, mots-clés de détection automatique et champs personnalisés"
@@ -111,39 +130,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
               >
                 <BookOpen className="w-3.5 h-3.5 text-blue-600" />
-                <span>Mapping & Alias</span>
+                <span>Mapping</span>
               </button>
             </ContextTooltip>
-
-            <ContextTooltip
-              title="Polices & Typographies"
-              content="Gérer les polices web et typographies installées pour les étiquettes"
-              category="Typographie"
-            >
-              <button
-                onClick={onOpenFontManager}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
-              >
-                <Type className="w-3.5 h-3.5 text-slate-600" />
-                <span>Polices</span>
-              </button>
-            </ContextTooltip>
-
-            <ContextTooltip
-              title="Journal d'Audit & Traçabilité"
-              content="Consulter les logs et l'historique complet des actions effectuées"
-              category="Traçabilité"
-            >
-              <button
-                onClick={onOpenAuditLogs}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
-              >
-                <History className="w-3.5 h-3.5 text-slate-600" />
-                <span>Audit</span>
-              </button>
-            </ContextTooltip>
-
-            <PWAInstallButton compact />
 
             <ContextTooltip
               title="Passerelle Mobiles & Lots Scannés"
@@ -164,19 +153,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               </button>
             </ContextTooltip>
 
-            <ContextTooltip
-              title="Préférences & Accessibilité"
-              content="Configurer le système d'info-bulles contextuelles (délai, opacité) et le mode de zoom par défaut"
-              category="Système"
-              shortcut="Alt+A"
-            >
-              <button
-                onClick={openPreferencesModal}
-                className="p-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-lg transition flex items-center justify-center"
-              >
-                <Settings className="w-4 h-4 text-slate-700" />
-              </button>
-            </ContextTooltip>
+            <PWAInstallButton compact />
 
             <ContextTooltip
               title="Moteur de Règles Omni-Canal"
@@ -188,33 +165,21 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-sm transition"
               >
                 <Cpu className="w-4 h-4 text-blue-200" />
-                <span>Règles Omni-Canal (ESL / Print / LCD)</span>
+                <span>Omni-Canal</span>
               </button>
             </ContextTooltip>
 
             <ContextTooltip
-              title="Importer Gabarit JSON"
-              content="Importer un fichier de gabarit .json créé précédemment pour le modifier ou l'imprimer"
-              category="Fichier"
-            >
-              <label className="cursor-pointer px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition">
-                <Upload className="w-4 h-4 text-slate-500" />
-                <span>Importer Gabarit JSON</span>
-                <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
-              </label>
-            </ContextTooltip>
-
-            <ContextTooltip
-              title="Créer un Nouveau Gabarit"
-              content="Assistant pas à pas pour définir un nouveau format d'étiquette, papier ou banderole de rayon"
+              title="Nouveau Gabarit d'Étiquette"
+              content="Lancer l'assistant pas-à-pas pour créer un nouveau gabarit sur-mesure"
               category="Création"
             >
               <button
                 onClick={onOpenNewWizard}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-2 shadow-sm transition"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition"
               >
-                <Plus className="w-4 h-4" />
-                <span>Nouveau Gabarit</span>
+                <Plus className="w-4 h-4 text-blue-400" />
+                <span>Créer Gabarit</span>
               </button>
             </ContextTooltip>
           </div>
@@ -222,162 +187,133 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       </div>
 
       {/* Main Content Area */}
-      <div className="max-w-7xl mx-auto w-full px-8 py-8 space-y-6">
-        {/* Search and Filters Bar */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="relative w-72">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+      <div className="max-w-7xl mx-auto w-full p-8 flex-1 flex flex-col space-y-6">
+        {/* Search & Grid Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold text-slate-800">
+              Gabarits d'Étiquettes Disponibles
+            </h2>
+            <span className="bg-slate-200 text-slate-700 font-bold text-xs px-2.5 py-0.5 rounded-full">
+              {filteredTemplates.length}
+            </span>
+          </div>
+
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Rechercher un gabarit..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+              className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-          </div>
-
-          <div className="text-xs text-slate-500 font-medium flex items-center gap-3">
-            <span>
-              <strong className="text-slate-900 font-bold">{templates.length}</strong> gabarits disponibles
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1">
-              <Grid className="w-3.5 h-3.5 text-slate-400" />
-              Imposition A4/A3 automatique
-            </span>
           </div>
         </div>
 
         {/* Templates Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredTemplates.map((tpl) => (
-            <div
-              key={tpl.name}
-              className="bg-white rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow flex flex-col overflow-hidden group"
+        {filteredTemplates.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white border border-dashed border-slate-300 rounded-2xl text-center">
+            <Tag className="w-12 h-12 text-slate-300 mb-3" />
+            <h3 className="text-base font-bold text-slate-700">Aucun gabarit trouvé</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-sm">
+              Aucun gabarit ne correspond à votre recherche "{searchTerm}".
+            </p>
+            <button
+              onClick={() => setSearchTerm('')}
+              className="mt-4 text-xs text-blue-600 hover:text-blue-800 font-semibold"
             >
-              {/* Header Title */}
-              <div className="p-4 border-b border-slate-100 flex items-start justify-between">
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900 leading-snug group-hover:text-blue-600 transition-colors">
-                    {tpl.name}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                    {tpl.width_mm} × {tpl.height_mm} mm • {tpl.items.length} objets
-                  </p>
-                </div>
-                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-semibold">
-                  v{tpl.schema_version}
-                </span>
-              </div>
-
-              {/* Vector Render Preview Thumbnail */}
+              Réinitialiser la recherche
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredTemplates.map((template) => (
               <div
-                onClick={() => onSelectTemplateToEdit(tpl)}
-                className="p-6 bg-slate-100/60 flex items-center justify-center cursor-pointer min-h-[170px] overflow-hidden"
-                title="Cliquez pour éditer ce gabarit"
+                key={template.name}
+                className="bg-white border border-slate-200 hover:border-blue-300 rounded-2xl p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group"
               >
-                <div className="shadow-md transition-transform group-hover:scale-[1.02] duration-150">
-                  <LabelRenderer
-                    template={tpl}
-                    zoom={0.7}
-                    showBleed={false}
-                    showInnerMargins={true}
-                    interactive={false}
-                  />
-                </div>
-              </div>
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <h3 className="font-bold text-sm text-slate-900 group-hover:text-blue-600 transition-colors truncate">
+                      {template.name}
+                    </h3>
+                    <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      {template.width_mm}x{template.height_mm} mm
+                    </span>
+                  </div>
 
-              {/* Action Buttons Footer */}
-              <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1">
+                  {/* Visual Label Preview */}
+                  <div className="aspect-[4/3] bg-slate-100 rounded-xl border border-slate-200 p-2 flex items-center justify-center overflow-hidden relative mb-4">
+                    <div className="transform scale-[0.6] origin-center shadow-xs bg-white">
+                      <LabelRenderer template={template} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Action Buttons */}
+                <div className="flex items-center gap-1.5 pt-3 border-t border-slate-100">
                   <ContextTooltip
-                    title="Dupliquer le Gabarit"
-                    content="Créer une copie clone de ce format d'étiquette pour vos déclinaisons"
-                    category="Gabarit"
+                    title="Générer & Imprimer"
+                    content="Ouvrir l'espace d'imposition pour sélectionner ou importer des données et lancer l'impression"
+                    category="Impression"
                   >
                     <button
-                      onClick={() => onDuplicateTemplate(tpl)}
-                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded transition"
+                      onClick={() => onSelectTemplateToGenerate(template)}
+                      className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs transition-all hover:scale-[1.02]"
                     >
-                      <Copy className="w-3.5 h-3.5" />
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Imprimer</span>
                     </button>
                   </ContextTooltip>
 
                   <ContextTooltip
-                    title="Télécharger Fichier JSON"
-                    content="Exporter la définition vectorielle complète de l'étiquette au format JSON"
-                    category="Export"
+                    title="Modifier Gabarit"
+                    content="Éditer la disposition, les dimensions et les champs de ce gabarit"
+                    category="Édition"
+                  >
+                    <button
+                      onClick={() => onSelectTemplateToEdit(template)}
+                      className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  </ContextTooltip>
+
+                  <ContextTooltip
+                    title="Dupliquer Gabarit"
+                    content="Créer une copie exacte de ce gabarit"
+                    category="Édition"
+                  >
+                    <button
+                      onClick={() => onDuplicateTemplate(template)}
+                      className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </ContextTooltip>
+
+                  <ContextTooltip
+                    title="Supprimer Gabarit"
+                    content="Supprimer définitivement ce gabarit de la bibliothèque"
+                    category="Édition"
                   >
                     <button
                       onClick={() => {
-                        const dataStr = JSON.stringify(tpl, null, 2);
-                        const blob = new Blob([dataStr], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${tpl.name.toLowerCase().replace(/\s+/g, '_')}.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
+                        if (confirm(`Supprimer le gabarit "${template.name}" ?`)) {
+                          onDeleteTemplate(template.name);
+                        }
                       }}
-                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded transition"
+                      className="p-2 bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 rounded-xl transition"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                    </button>
-                  </ContextTooltip>
-
-                  {templates.length > 1 && (
-                    <ContextTooltip
-                      title="Supprimer le Gabarit"
-                      content="Retirer définitivement ce gabarit de la liste"
-                      category="Gabarit"
-                    >
-                      <button
-                        onClick={() => {
-                          if (confirm(`Voulez-vous supprimer le gabarit "${tpl.name}" ?`)) {
-                            onDeleteTemplate(tpl.name);
-                          }
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </ContextTooltip>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <ContextTooltip
-                    title="Éditer le Gabarit"
-                    content="Ouvrir le studio de création vectorielle pour modifier les dimensions et calques"
-                    category="Éditeur"
-                  >
-                    <button
-                      onClick={() => onSelectTemplateToEdit(tpl)}
-                      className="px-2.5 py-1 text-slate-700 hover:bg-slate-200 font-semibold rounded transition flex items-center gap-1"
-                    >
-                      <Edit3 className="w-3 h-3 text-slate-500" />
-                      <span>Éditer</span>
-                    </button>
-                  </ContextTooltip>
-
-                  <ContextTooltip
-                    title="Générer Planches"
-                    content="Passer à l'espace de génération par lots, liaison de données Excel et impression"
-                    category="Production"
-                  >
-                    <button
-                      onClick={() => onSelectTemplateToGenerate(tpl)}
-                      className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded shadow-xs transition flex items-center gap-1"
-                    >
-                      <Printer className="w-3 h-3" />
-                      <span>Générer</span>
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </ContextTooltip>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

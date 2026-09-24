@@ -1,4 +1,4 @@
-import { PWACredentials } from './types';
+import { PWACredentials, EstudioPairV2Payload } from './types';
 
 /**
  * Computes a standard SHA-256 hex digest using the native Web Crypto API
@@ -53,7 +53,49 @@ export async function generateSecureCredentials(
 }
 
 /**
- * Generates an encrypted URL payload containing the token signature
+ * Generates official V2.0 Interop Pairing JSON Payload (for Android & Desktop pairing)
+ */
+export async function createEstudioPairV2Payload(
+  stationId: string,
+  stationName: string,
+  host: string,
+  port: number,
+  token: string,
+  pin: string
+): Promise<EstudioPairV2Payload> {
+  // signature = sha256(stationId + token + pin)
+  const signature = await sha256(`${stationId}${token}${pin}`);
+
+  return {
+    protocol: 'estudio-pair-v2',
+    host,
+    port,
+    stationId,
+    stationName,
+    token,
+    pin,
+    signature,
+  };
+}
+
+/**
+ * Generates custom URI scheme pairing link (estudio://pair?...)
+ */
+export function createEstudioPairV2Uri(payload: EstudioPairV2Payload): string {
+  const params = new URLSearchParams({
+    host: payload.host,
+    port: payload.port.toString(),
+    id: payload.stationId,
+    name: payload.stationName,
+    token: payload.token,
+    pin: payload.pin,
+    sig: payload.signature,
+  });
+  return `estudio://pair?${params.toString()}`;
+}
+
+/**
+ * Generates an encrypted URL payload containing the token signature for web/PWA browser fallback
  */
 export async function createEncryptedPairingPayload(
   credentials: PWACredentials,

@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { MobileScanLot, SyncConnectionConfig, NetworkConnectionMode } from '../types';
+import {
+  MobileScanLot,
+  SyncConnectionConfig,
+  NetworkConnectionMode,
+  EstudioPairV2Payload,
+} from '../types';
 import { LabelTemplate } from '../../types';
 import { mobileSyncService } from '../services/mobileSyncService';
 import { QRCodeDisplay } from './QRCodeDisplay';
@@ -33,6 +38,11 @@ import {
   Lock,
   KeyRound,
   Camera,
+  Server,
+  Zap,
+  Activity,
+  Check,
+  Terminal,
 } from 'lucide-react';
 
 interface MobileSyncHubModalProps {
@@ -55,12 +65,26 @@ export const MobileSyncHubModal: React.FC<MobileSyncHubModalProps> = ({
   const [lots, setLots] = useState<MobileScanLot[]>([]);
   const [selectedLot, setSelectedLot] = useState<MobileScanLot | null>(null);
   const [config, setConfig] = useState<SyncConnectionConfig>(mobileSyncService.getConfig());
-  const [activeTab, setActiveTab] = useState<'lots' | 'pairing' | 'instances'>('pairing');
-  const [pairingUrl, setPairingUrl] = useState<string>('');
-  const [pairingSignature, setPairingSignature] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'pairing' | 'lots' | 'network' | 'endpoints'>('pairing');
+  const [qrFormat, setQrFormat] = useState<'json_v2' | 'uri_scheme' | 'web_pwa'>('json_v2');
+
+  const [pairingPayloadV2, setPairingPayloadV2] = useState<EstudioPairV2Payload | null>(null);
+  const [pairingUriV2, setPairingUriV2] = useState<string>('');
+  const [pairingWebUrl, setPairingWebUrl] = useState<string>('');
+  const [pairingWebSignature, setPairingWebSignature] = useState<string>('');
+
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [importedCount, setImportedCount] = useState<number | null>(null);
-  const [customHostInput, setCustomHostInput] = useState(config.publicHostUrl || '');
+  const [testSimulating, setTestSimulating] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  // Editable station parameters
+  const [editableStationId, setEditableStationId] = useState(config.instanceId || 'PC-CAISSE-01');
+  const [editableStationName, setEditableStationName] = useState(config.instanceName || 'Poste Caisse Centrale');
+  const [editableHostIp, setEditableHostIp] = useState(config.hostAddress || '192.168.1.45');
+  const [editablePort, setEditablePort] = useState(config.port || 8080);
+  const [editablePin, setEditablePin] = useState(config.credentials?.authPin || '1234');
 
   // Subscribe to lots updates
   useEffect(() => {
@@ -74,36 +98,86 @@ export const MobileSyncHubModal: React.FC<MobileSyncHubModalProps> = ({
     return () => unsubscribe();
   }, [selectedLot]);
 
-  // Compute pairing URL and SHA-256 signature when config or tab changes
+  // Compute pairing payloads whenever configuration changes
   useEffect(() => {
     let isMounted = true;
+
+    // 1. JSON V2 Payload
+    mobileSyncService.getPairingV2Payload().then((payload) => {
+      if (isMounted) setPairingPayloadV2(payload);
+    });
+
+    // 2. URI Scheme
+    mobileSyncService.getPairingV2Uri().then((uri) => {
+      if (isMounted) setPairingUriV2(uri);
+    });
+
+    // 3. Web URL
     mobileSyncService.getCryptedPairingUrl(config.connectionMode).then(({ url, signature }) => {
       if (isMounted) {
-        setPairingUrl(url);
-        setPairingSignature(signature);
+        setPairingWebUrl(url);
+        setPairingWebSignature(signature);
       }
     });
+
     return () => {
       isMounted = false;
     };
-  }, [config.connectionMode, config.credentials, config.publicHostUrl, config.hostAddress]);
+  }, [config.connectionMode, config.credentials, config.publicHostUrl, config.hostAddress, config.port, config.instanceId]);
 
   if (!isOpen) return null;
 
-  const handleConnectionModeChange = (mode: NetworkConnectionMode) => {
-    const updated = { ...config, connectionMode: mode };
-    setConfig(updated);
+  const handleCopy = (text: string, key: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2500);
+    }
+  };
+
+  const handleSaveStationSettings = () => {
+    const updatedCreds = {
+      ...config.credentials,
+      instanceId: editableStationId,
+      instanceName: editableStationName,
+      authPin: editablePin,
+    };
+    const updated: Partial<SyncConnectionConfig> = {
+      instanceId: editableStationId,
+      instanceName: editableStationName,
+      hostAddress: editableHostIp,
+      port: Number(editablePort) || 8080,
+      credentials: updatedCreds,
+    };
+    setConfig((prev) => ({ ...prev, ...updated }));
     mobileSyncService.saveConfig(updated);
   };
 
   const handleRegenerateCredentials = async () => {
     setIsRegenerating(true);
     try {
-      const newCreds = await mobileSyncService.regenerateCredentials();
+      await mobileSyncService.regenerateCredentials();
       const freshConfig = mobileSyncService.getConfig();
       setConfig(freshConfig);
+      setEditablePin(freshConfig.credentials.authPin);
     } finally {
       setTimeout(() => setIsRegenerating(false), 400);
+    }
+  };
+
+  const handleTestSimulateImport = async () => {
+    setTestSimulating(true);
+    setTestResult(null);
+    try {
+      const res = await mobileSyncService.simulateMobileTableImport();
+      if (res.success) {
+        setTestResult(`✓ Table TB-849201 reçue et intégrée avec succès (17 étiquettes)`);
+        setActiveTab('lots');
+      } else {
+        setTestResult(`Erreur : ${res.error || 'Échec de transmission'}`);
+      }
+    } finally {
+      setTestSimulating(false);
     }
   };
 
@@ -113,638 +187,583 @@ export const MobileSyncHubModal: React.FC<MobileSyncHubModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lots_mobiles_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `tables_scans_estudio_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleImportLotsFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const count = mobileSyncService.importLotsBundle(text);
-      setImportedCount(count);
-      setTimeout(() => setImportedCount(null), 3500);
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const count = mobileSyncService.importLotsBundle(text);
+        setImportedCount(count);
+        setTimeout(() => setImportedCount(null), 4000);
+      } catch (err) {
+        alert("Erreur lors de l'import : " + String(err));
+      }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
+  // Determine current active QR text to encode
+  let currentQrCodeValue = '';
+  if (qrFormat === 'json_v2' && pairingPayloadV2) {
+    currentQrCodeValue = JSON.stringify(pairingPayloadV2, null, 2);
+  } else if (qrFormat === 'uri_scheme') {
+    currentQrCodeValue = pairingUriV2;
+  } else {
+    currentQrCodeValue = pairingWebUrl;
+  }
+
+  const pendingLots = lots.filter((l) => l.status === 'ready' || l.status === 'received' || l.status === 'draft');
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden animate-in zoom-in-95">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl flex flex-col overflow-hidden my-auto max-h-[92vh]">
+        {/* Modal Header */}
+        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-900 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md">
               <Smartphone className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
-                  Passerelle Mobiles & Synchronisation Multi-Réseaux
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Chiffrement SHA-256 Actif</span>
+                <h2 className="text-lg font-bold">Interopérabilité Desktop ⇄ Mobile</h2>
+                <span className="bg-blue-500/30 text-blue-200 border border-blue-400/40 text-[10px] font-mono px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Protocole v2.0
+                </span>
+                <span className="flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] px-2 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Serveur Actif :8080
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
-                Connectez n'importe quel smartphone avec appareil photo via QR Code crypté (Wi-Fi LAN ou Internet 4G/5G).
+              <p className="text-xs text-blue-200/80">
+                Appairage QR Code, Découverte mDNS, Serveur REST (/handshake, /tables/import) et Live Sync
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onOpenMobileSimulator}
-              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Tester l'application mobile directement dans le navigateur"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Simulateur Smartphone PWA</span>
-            </button>
-            <button
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Tab Selector Navigation */}
-        <div className="px-6 border-b border-slate-200 bg-white flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <button
-              onClick={() => setActiveTab('pairing')}
-              className={`py-3 text-xs font-bold border-b-2 flex items-center gap-2 transition ${
-                activeTab === 'pairing'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <QrCode className="w-4 h-4" />
-              <span>QR Code Crypté & Appairage</span>
-            </button>
+        {/* Tab Navigation */}
+        <div className="flex border-b border-slate-200 bg-slate-50 px-6 gap-2 pt-2">
+          <button
+            onClick={() => setActiveTab('pairing')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-t border-x ${
+              activeTab === 'pairing'
+                ? 'bg-white text-blue-600 border-slate-200 shadow-sm -mb-px'
+                : 'text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <QrCode className="w-4 h-4" />
+            <span>1. Appairage QR Code (v2.0)</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('lots')}
-              className={`py-3 text-xs font-bold border-b-2 flex items-center gap-2 transition ${
-                activeTab === 'lots'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Layers className="w-4 h-4" />
-              <span>Lots d'Étiquettes Reçus ({lots.length})</span>
-              {lots.filter((l) => l.status === 'ready' || l.status === 'received').length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-600 text-white font-mono">
-                  {lots.filter((l) => l.status === 'ready' || l.status === 'received').length}
-                </span>
-              )}
-            </button>
+          <button
+            onClick={() => setActiveTab('lots')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-t border-x relative ${
+              activeTab === 'lots'
+                ? 'bg-white text-blue-600 border-slate-200 shadow-sm -mb-px'
+                : 'text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>2. Tables & Lots Scannés</span>
+            {pendingLots.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-blue-600 text-white font-bold">
+                {pendingLots.length}
+              </span>
+            )}
+          </button>
 
-            <button
-              onClick={() => setActiveTab('instances')}
-              className={`py-3 text-xs font-bold border-b-2 flex items-center gap-2 transition ${
-                activeTab === 'instances'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Radio className="w-4 h-4" />
-              <span>Postes & Sécurité Réseau</span>
-            </button>
-          </div>
+          <button
+            onClick={() => setActiveTab('endpoints')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-t border-x ${
+              activeTab === 'endpoints'
+                ? 'bg-white text-blue-600 border-slate-200 shadow-sm -mb-px'
+                : 'text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Server className="w-4 h-4" />
+            <span>3. Endpoints REST & Tests</span>
+          </button>
 
-          <div className="flex items-center gap-2 py-2">
-            <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition">
-              <Upload className="w-3.5 h-3.5 text-slate-500" />
-              <span>Importer Lot JSON</span>
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportLotsFile}
-                className="hidden"
-              />
-            </label>
-
-            <button
-              onClick={handleExportLots}
-              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition"
-              title="Exporter tous les lots au format JSON pour sauvegarde ou partage"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span>Exporter Tout</span>
-            </button>
-          </div>
+          <button
+            onClick={() => setActiveTab('network')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-t border-x ${
+              activeTab === 'network'
+                ? 'bg-white text-blue-600 border-slate-200 shadow-sm -mb-px'
+                : 'text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Radio className="w-4 h-4" />
+            <span>4. Découverte mDNS & Réseau</span>
+          </button>
         </div>
 
-        {importedCount !== null && (
-          <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-2 text-xs font-semibold text-emerald-800 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>{importedCount} lot(s) importé(s) avec succès dans la file d'attente !</span>
-          </div>
-        )}
-
-        {/* Content Body */}
-        <div className="flex-1 overflow-hidden flex">
-          {/* TAB 1: QR CODE APPAIRAGE & ADVANCED SHA-256 CREDENTIALS */}
+        {/* Modal Body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* TAB 1: QR CODE PAIRING */}
           {activeTab === 'pairing' && (
-            <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto space-y-6">
-              {/* Network access mode selector */}
-              <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-bold text-xs text-slate-800 uppercase tracking-wider">
-                    <Globe className="w-4 h-4 text-indigo-600" />
-                    <span>Mode de Connexion au Serveur (N'importe où)</span>
-                  </div>
-                  <span className="text-[11px] text-slate-500">
-                    Sélectionnez le canal réseau de votre établissement
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+              {/* Left QR Code Visual Card */}
+              <div className="md:col-span-5 flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 rounded-2xl text-center">
+                <div className="flex items-center justify-center gap-1 bg-slate-200/70 p-1 rounded-xl mb-4 w-full text-xs">
                   <button
-                    onClick={() => handleConnectionModeChange('internet_public')}
-                    className={`p-3 rounded-xl border text-left transition ${
-                      config.connectionMode === 'internet_public'
-                        ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20 text-indigo-950'
-                        : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                    onClick={() => setQrFormat('json_v2')}
+                    className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition-all ${
+                      qrFormat === 'json_v2' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-extrabold text-xs">Internet / Cloud</span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 text-indigo-700">
-                        Recommandé
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-snug">
-                      Accessible de n'importe où en 4G, 5G, Wi-Fi public ou privé sans configuration routeur.
-                    </p>
+                    JSON v2.0
                   </button>
-
                   <button
-                    onClick={() => handleConnectionModeChange('wifi_lan')}
-                    className={`p-3 rounded-xl border text-left transition ${
-                      config.connectionMode === 'wifi_lan'
-                        ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20 text-indigo-950'
-                        : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                    onClick={() => setQrFormat('uri_scheme')}
+                    className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition-all ${
+                      qrFormat === 'uri_scheme' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-extrabold text-xs">Wi-Fi LAN Local</span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700">
-                        Intranet
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-snug">
-                      Adresse IP directe ({config.hostAddress}). Idéal pour réseau local fermé sans accès web.
-                    </p>
+                    URI Scheme
                   </button>
-
                   <button
-                    onClick={() => handleConnectionModeChange('custom_tunnel')}
-                    className={`p-3 rounded-xl border text-left transition ${
-                      config.connectionMode === 'custom_tunnel'
-                        ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20 text-indigo-950'
-                        : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                    onClick={() => setQrFormat('web_pwa')}
+                    className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition-all ${
+                      qrFormat === 'web_pwa' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-extrabold text-xs">Tunnel / Nom de Domaine</span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700">
-                        VPN / WAN
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-snug">
-                      URL sur mesure ou reverse proxy sécurisé pour multi-sites distants.
-                    </p>
+                    PWA Web
                   </button>
                 </div>
 
-                {config.connectionMode === 'custom_tunnel' && (
-                  <div className="pt-2 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={customHostInput}
-                      onChange={(e) => setCustomHostInput(e.target.value)}
-                      placeholder="https://mon-magasin.entreprise.com"
-                      className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-mono"
-                    />
-                    <button
-                      onClick={() => {
-                        const updated = { ...config, publicHostUrl: customHostInput };
-                        setConfig(updated);
-                        mobileSyncService.saveConfig(updated);
-                      }}
-                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold"
-                    >
-                      Enregistrer URL
-                    </button>
-                  </div>
-                )}
+                <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200 mb-3">
+                  <QRCodeDisplay value={currentQrCodeValue} size={210} />
+                </div>
+
+                <p className="text-xs font-semibold text-slate-800 mb-1">
+                  Pointez l'application Android vers ce QR Code
+                </p>
+                <p className="text-[11px] text-slate-500 max-w-xs">
+                  L'application extrait automatiquement l'adresse IP, le port, le poste cible et le token SHA-256.
+                </p>
+
+                <div className="flex items-center gap-2 mt-4">
+                  <button
+                    onClick={() => handleCopy(currentQrCodeValue, 'qr_raw')}
+                    className="flex items-center gap-1.5 text-xs bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg shadow-xs"
+                  >
+                    {copiedKey === 'qr_raw' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>Copier Payload</span>
+                  </button>
+                  <button
+                    onClick={onOpenMobileSimulator}
+                    className="flex items-center gap-1.5 text-xs bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-medium"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Tester PWA</span>
+                  </button>
+                </div>
               </div>
 
-              {/* QR Code & SHA-256 Credentials Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                {/* Left: Real High-Res Scannable QR Code */}
-                <div className="space-y-3">
-                  <QRCodeDisplay
-                    value={pairingUrl}
-                    size={220}
-                    label="QR Code d'Accès Sécurisé"
-                    sublabel="Scannez avec l'appareil photo d'un smartphone pour ouvrir la PWA avec les identifiants pré-remplis."
-                  />
-
-                  <div className="text-center">
+              {/* Right Station Parameters & JSON Viewer */}
+              <div className="md:col-span-7 flex flex-col justify-between space-y-4">
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                      <h3 className="text-sm font-bold text-slate-900">Identifiants du Poste Desktop</h3>
+                    </div>
                     <button
                       onClick={handleRegenerateCredentials}
                       disabled={isRegenerating}
-                      className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                      className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
-                      <span>Générer de Nouveaux Identifiants Cryptés (Nouveau SHA-256)</span>
+                      <span>Renouveler Token</span>
                     </button>
                   </div>
-                </div>
 
-                {/* Right: Mandatory Credentials & Cryptographic Proof */}
-                <div className="space-y-4">
-                  <div className="bg-slate-900 rounded-2xl p-5 text-white shadow-lg space-y-4 border border-slate-800">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                      <div className="flex items-center gap-2">
-                        <Lock className="w-4 h-4 text-emerald-400" />
-                        <span className="font-extrabold text-xs uppercase tracking-wider text-slate-200">
-                          Identifiants Obligatoires PWA
-                        </span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        SHA-256
-                      </span>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                          Code PIN d'Accès Opérateur :
-                        </span>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="px-3 py-1.5 bg-slate-950 rounded-xl font-mono text-xl font-extrabold text-amber-400 border border-slate-800 tracking-widest">
-                            {config.credentials?.authPin || '4829'}
-                          </span>
-                          <span className="text-[11px] text-slate-400">
-                            Requis sur smartphone si ouvert manuellement
-                          </span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                          Jeton de Session SHA-256 (32 Caractères) :
-                        </span>
-                        <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-mono text-[11px] text-indigo-300 break-all select-all mt-1">
-                          {config.credentials?.sessionToken || 'a9f24e8bc103859d04736f1c48209ad4'}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-[11px]">
-                        <div className="p-2 bg-slate-950 rounded-lg border border-slate-800">
-                          <span className="text-slate-500 text-[10px] block">Identifiant Instance</span>
-                          <span className="font-mono text-white font-bold">{config.instanceId}</span>
-                        </div>
-                        <div className="p-2 bg-slate-950 rounded-lg border border-slate-800">
-                          <span className="text-slate-500 text-[10px] block">Expiration Session</span>
-                          <span className="font-mono text-emerald-400 font-bold">30 Jours</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200 text-indigo-900 text-xs space-y-1.5">
-                    <div className="font-bold flex items-center gap-1.5">
-                      <Camera className="w-4 h-4 text-indigo-600" />
-                      <span>Scans par Caméra Smartphone Intégrés</span>
-                    </div>
-                    <p className="text-[11px] text-indigo-800/90 leading-relaxed">
-                      Aucun lecteur laser ou matériel Zebra requis : vos collaborateurs ouvrent la PWA sur leur téléphone personnel (iPhone ou Android) et scannent en direct les étiquettes en pointant l'appareil photo avec autofocus et visée laser.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: RECEIVED LOTS MANAGEMENT */}
-          {activeTab === 'lots' && (
-            <div className="flex-1 flex overflow-hidden">
-              {/* Left Column: Lots List */}
-              <div className="w-2/5 border-r border-slate-200 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider px-1">
-                  <span>Lots disponibles ({lots.length})</span>
-                  <button
-                    onClick={() => setLots([...mobileSyncService.getLots()])}
-                    className="hover:text-indigo-600 flex items-center gap-1 text-[11px]"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Actualiser</span>
-                  </button>
-                </div>
-
-                {lots.length === 0 ? (
-                  <div className="p-8 text-center bg-white rounded-xl border border-dashed border-slate-300 space-y-2">
-                    <Smartphone className="w-8 h-8 text-slate-400 mx-auto" />
-                    <div className="text-xs font-bold text-slate-700">Aucun lot scanné</div>
-                    <p className="text-[11px] text-slate-500">
-                      Scannez des articles depuis votre terminal mobile ou utilisez le bouton simulateur pour tester.
-                    </p>
-                  </div>
-                ) : (
-                  lots.map((lot) => {
-                    const totalQty = lot.items.reduce((s, it) => s + (it.quantity || 1), 0);
-                    const isSelected = selectedLot?.id === lot.id;
-
-                    return (
-                      <div
-                        key={lot.id}
-                        onClick={() => setSelectedLot(lot)}
-                        className={`p-3.5 rounded-xl border transition cursor-pointer text-left ${
-                          isSelected
-                            ? 'bg-indigo-50/80 border-indigo-500 shadow-xs ring-1 ring-indigo-500/20'
-                            : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-2xs'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="font-extrabold text-sm text-slate-900 truncate">
-                            {lot.name}
-                          </div>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                              lot.status === 'spooled'
-                                ? 'bg-slate-100 text-slate-600'
-                                : lot.status === 'ready'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}
-                          >
-                            {lot.status === 'spooled'
-                              ? 'Imprimé'
-                              : lot.status === 'ready'
-                              ? 'Prêt à Imprimer'
-                              : 'Reçu'}
-                          </span>
-                        </div>
-
-                        <div className="text-xs text-slate-600 mt-1 flex items-center gap-1.5 font-medium">
-                          <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{lot.deviceName} ({lot.operatorName})</span>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2.5 pt-2 border-t border-slate-100">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-700">
-                              {lot.items.length} réf.
-                            </span>
-                            <span>•</span>
-                            <span className="font-bold text-indigo-600">
-                              {totalQty} étiquettes
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-400">
-                            {new Date(lot.updatedAt).toLocaleTimeString('fr-FR', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Right Column: Selected Lot Details & Actions */}
-              <div className="flex-1 overflow-y-auto p-6 bg-white flex flex-col justify-between">
-                {selectedLot ? (
-                  <div className="space-y-6">
-                    <div className="flex items-start justify-between pb-4 border-b border-slate-200">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                            {selectedLot.name}
-                          </h3>
-                          <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                            {selectedLot.id}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                          <span>Opérateur : <strong>{selectedLot.operatorName}</strong></span>
-                          <span>•</span>
-                          <span>Appareil : <strong>{selectedLot.deviceName}</strong></span>
-                          <span>•</span>
-                          <span>
-                            Gabarit cible :{' '}
-                            <strong className="text-indigo-600">
-                              {selectedLot.targetTemplateId || 'Gabarit par défaut'}
-                            </strong>
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          if (window.confirm('Supprimer définitivement ce lot ?')) {
-                            mobileSyncService.deleteLot(selectedLot.id);
-                            setSelectedLot(null);
-                          }
-                        }}
-                        className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 border border-slate-200 transition"
-                        title="Supprimer ce lot"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Prominent Action Banner */}
-                    <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-2xl p-5 flex items-center justify-between shadow-xs">
-                      <div className="space-y-1">
-                        <div className="font-extrabold text-indigo-950 text-sm flex items-center gap-2">
-                          <Printer className="w-4 h-4 text-indigo-600" />
-                          <span>Génération d'Imposition & Impression Directe</span>
-                        </div>
-                        <p className="text-xs text-indigo-700/90 max-w-lg">
-                          Générez la planche d'étiquettes correspondante avec le gabarit sélectionné ({selectedLot.items.reduce((s, it) => s + (it.quantity || 1), 0)} étiquettes au total).
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2.5 shrink-0">
-                        {onOpenInEditor && selectedLot.targetTemplateId && (
-                          <button
-                            onClick={() => onOpenInEditor(selectedLot.targetTemplateId!)}
-                            className="px-3 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition shadow-2xs"
-                          >
-                            <Eye className="w-4 h-4 text-slate-500" />
-                            <span>Voir Gabarit</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            mobileSyncService.updateLotStatus(selectedLot.id, 'spooled');
-                            onGenerateLot(selectedLot);
-                            onClose();
-                          }}
-                          className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-extrabold rounded-xl text-xs flex items-center gap-2 shadow-md shadow-indigo-600/30 transition"
-                        >
-                          <Printer className="w-4 h-4" />
-                          <span>Générer & Imprimer le Lot</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Items Table */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                        <span>Articles du Lot ({selectedLot.items.length} références)</span>
-                        <span className="text-indigo-600 font-semibold">
-                          Total : {selectedLot.items.reduce((s, it) => s + (it.quantity || 1), 0)} étiquettes
-                        </span>
-                      </div>
-
-                      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold">
-                            <tr>
-                              <th className="py-2.5 px-3">Code / EAN</th>
-                              <th className="py-2.5 px-3">Désignation Produit</th>
-                              <th className="py-2.5 px-3 text-right">Prix Vente</th>
-                              <th className="py-2.5 px-3 text-center">Quantité Étiquettes</th>
-                              <th className="py-2.5 px-3">Heure Scan</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {selectedLot.items.map((item, idx) => (
-                              <tr key={item.id || idx} className="hover:bg-slate-50/70">
-                                <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
-                                  {item.code}
-                                </td>
-                                <td className="py-2.5 px-3 font-medium text-slate-900">
-                                  <div>{item.designation || 'Article scanné'}</div>
-                                  {item.note && (
-                                    <span className="text-[10px] text-amber-600 italic">
-                                      {item.note}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
-                                  {item.price !== undefined ? `${item.price.toFixed(2)} €` : '-'}
-                                  {item.promoPrice && (
-                                    <span className="block text-[10px] text-rose-600">
-                                      Promo: {item.promoPrice.toFixed(2)} €
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-3 text-center">
-                                  <span className="inline-block px-2 py-0.5 rounded-full font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs">
-                                    x{item.quantity || 1}
-                                  </span>
-                                </td>
-                                <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
-                                  {new Date(item.scannedAt).toLocaleTimeString('fr-FR', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400 space-y-3">
-                    <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
-                      <Tag className="w-8 h-8" />
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">ID du Poste (stationId)</label>
+                      <input
+                        type="text"
+                        value={editableStationId}
+                        onChange={(e) => setEditableStationId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 font-mono bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-bold focus:bg-white"
+                      />
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-700 text-base">Aucun lot sélectionné</h4>
-                      <p className="text-xs text-slate-500 max-w-sm mt-1">
-                        Sélectionnez un lot dans la colonne de gauche pour l'inspecter et lancer son impression sur planche.
-                      </p>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">Nom du Poste</label>
+                      <input
+                        type="text"
+                        value={editableStationName}
+                        onChange={(e) => setEditableStationName(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">Adresse IP Locale (Wi-Fi)</label>
+                      <input
+                        type="text"
+                        value={editableHostIp}
+                        onChange={(e) => setEditableHostIp(e.target.value)}
+                        className="w-full px-2.5 py-1.5 font-mono bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">Port Serveur</label>
+                      <input
+                        type="number"
+                        value={editablePort}
+                        onChange={(e) => setEditablePort(Number(e.target.value))}
+                        className="w-full px-2.5 py-1.5 font-mono bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">Code PIN Opérateur</label>
+                      <input
+                        type="text"
+                        value={editablePin}
+                        onChange={(e) => setEditablePin(e.target.value)}
+                        maxLength={6}
+                        className="w-full px-2.5 py-1.5 font-mono bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-bold tracking-widest text-center focus:bg-white"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        onClick={handleSaveStationSettings}
+                        className="w-full py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs"
+                      >
+                        Appliquer Modifications
+                      </button>
                     </div>
                   </div>
-                )}
+                </div>
+
+                {/* Raw JSON Preview according to spec */}
+                <div className="bg-slate-900 text-slate-200 p-4 rounded-2xl font-mono text-[11px] overflow-x-auto relative">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
+                    <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                      <Terminal className="w-3.5 h-3.5" />
+                      Payload JSON généré par le Desktop
+                    </span>
+                    <button
+                      onClick={() => handleCopy(JSON.stringify(pairingPayloadV2, null, 2), 'json_spec')}
+                      className="text-slate-400 hover:text-white flex items-center gap-1 text-[10px]"
+                    >
+                      {copiedKey === 'json_spec' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>Copier</span>
+                    </button>
+                  </div>
+                  <pre>{JSON.stringify(pairingPayloadV2, null, 2)}</pre>
+                </div>
               </div>
             </div>
           )}
 
-          {/* TAB 3: NETWORK & MULTI-WORKSTATION INSTANCES */}
-          {activeTab === 'instances' && (
-            <div className="flex-1 overflow-y-auto p-8 max-w-4xl mx-auto space-y-6">
-              <div className="space-y-1">
-                <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                  Architecture Multi-Postes & Partage Décentralisé
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Gérez la redondance et le partage automatique de lots d'étiquettes entre les différents postes du magasin ou de l'entrepôt.
-                </p>
+          {/* TAB 2: TABLES & SCAN LOTS RECEIVED */}
+          {activeTab === 'lots' && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Tables Scannées Reçues du Mobile</h3>
+                  <p className="text-xs text-slate-500">
+                    Ces tables sont reçues via <code className="text-blue-600 font-mono">POST /api/v2/tables/import</code> ou le simulateur de test.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleTestSimulateImport}
+                    disabled={testSimulating}
+                    className="flex items-center gap-1.5 text-xs bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-700 font-semibold px-3 py-1.5 rounded-lg shadow-xs"
+                  >
+                    <Zap className={`w-3.5 h-3.5 ${testSimulating ? 'animate-bounce' : ''}`} />
+                    <span>Simuler Réception Table</span>
+                  </button>
+                  <label className="flex items-center gap-1.5 text-xs bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg shadow-xs cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Importer JSON</span>
+                    <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
+                  </label>
+                  <button
+                    onClick={handleExportLots}
+                    className="flex items-center gap-1.5 text-xs bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Exporter</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="p-5 bg-indigo-50/70 rounded-2xl border border-indigo-200 space-y-3">
-                <div className="flex items-center gap-2 font-bold text-sm text-indigo-950">
-                  <Radio className="w-4 h-4 text-indigo-600" />
-                  <span>Mode Relais P2P & Serveur Hôte Local</span>
+              {testResult && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>{testResult}</span>
                 </div>
-                <p className="text-xs text-indigo-900/90 leading-relaxed">
-                  Cette instance logicielle fait office de <strong>relais récepteur</strong>. Dès qu'un lot est transmis par un opérateur mobile, il est enregistré localement et diffusé sur le bus réseau local aux autres postes connectés. Si le poste principal est éteint, n'importe quelle autre machine du réseau peut réceptionner les lots et imprimer les planches.
-                </p>
-              </div>
+              )}
 
-              <div className="space-y-3">
-                <div className="font-bold text-xs text-slate-700 uppercase tracking-wider">
-                  Postes de Travail Détectés sur le Réseau
+              {lots.length === 0 ? (
+                <div className="p-12 text-center bg-slate-50 border border-dashed border-slate-300 rounded-2xl">
+                  <Smartphone className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-slate-700">Aucune table scannée reçue</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Scannez des articles sur votre terminal Android ou cliquez sur "Simuler Réception Table".
+                  </p>
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  {/* Lots List */}
+                  <div className="md:col-span-5 space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                    {lots.map((lot) => {
+                      const totalQty = lot.items.reduce((s, it) => s + (it.quantity || 1), 0);
+                      const isSelected = selectedLot?.id === lot.id || (!selectedLot && lots[0].id === lot.id);
 
-                <div className="space-y-2">
-                  <div className="p-4 bg-white rounded-xl border border-slate-200 flex items-center justify-between shadow-2xs">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-                      <div>
-                        <div className="font-bold text-xs text-slate-900">
-                          {config.instanceName} (Ce poste - Actif)
+                      return (
+                        <div
+                          key={lot.id}
+                          onClick={() => setSelectedLot(lot)}
+                          className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-50/70 border-blue-300 shadow-xs'
+                              : 'bg-white border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-mono text-[11px] font-bold text-blue-700 bg-blue-100/60 px-1.5 py-0.5 rounded">
+                              {lot.tableId || lot.id}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {new Date(lot.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="font-semibold text-xs text-slate-900 truncate">{lot.name}</div>
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+                            <span>{lot.operatorName}</span>
+                            <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
+                              {totalQty} étiquettes ({lot.items.length} réf.)
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          ID: {config.instanceId} • IP: {config.hostAddress}:{config.port}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                      Hôte Principal
-                    </span>
+                      );
+                    })}
                   </div>
 
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-slate-400" />
-                      <div>
-                        <div className="font-bold text-xs text-slate-700">
-                          Poste Caisse Centrale (Secondaire)
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          ID: inst_caisse_01 • En veille de synchronisation
-                        </div>
-                      </div>
+                  {/* Selected Lot Details & Action */}
+                  <div className="md:col-span-7 bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between max-h-[420px] overflow-y-auto">
+                    {(() => {
+                      const current = selectedLot || lots[0];
+                      if (!current) return null;
+                      const totalLabels = current.items.reduce((sum, it) => sum + (it.quantity || 1), 0);
+
+                      return (
+                        <>
+                          <div>
+                            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+                              <div>
+                                <h4 className="font-bold text-sm text-slate-900">{current.name}</h4>
+                                <p className="text-[11px] text-slate-500">
+                                  Table : <span className="font-mono font-bold text-slate-700">{current.tableId || current.id}</span> | Opérateur : {current.operatorName} ({current.deviceName})
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => mobileSyncService.deleteLot(current.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                                title="Supprimer la table"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Items List */}
+                            <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                              {current.items.map((item, idx) => (
+                                <div
+                                  key={item.id || idx}
+                                  className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs"
+                                >
+                                  <div>
+                                    <div className="font-semibold text-slate-800">{item.designation || 'Article scanné'}</div>
+                                    <div className="font-mono text-[10px] text-slate-400">{item.code}</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="font-bold text-slate-900">
+                                      {item.price ? `${item.price.toFixed(2)} €` : 'Prix standard'}
+                                      {item.promoPrice && (
+                                        <span className="ml-1 text-red-600 font-bold">({item.promoPrice.toFixed(2)} €)</span>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded">
+                                      x{item.quantity} étiquettes
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Big Generate Action Button */}
+                          <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-xs text-slate-500">Total à imprimer :</div>
+                              <div className="text-base font-extrabold text-slate-900">
+                                {totalLabels} étiquettes sur planche
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                onGenerateLot(current);
+                                onClose();
+                              }}
+                              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02]"
+                            >
+                              <Printer className="w-4 h-4" />
+                              <span>Générer la Planche d'Impression</span>
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: REST ENDPOINTS & TESTS */}
+          {activeTab === 'endpoints' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Serveur HTTP REST Intégré (Port :8080)</h3>
+                  <p className="text-xs text-slate-500">
+                    Ces routes sont prêtes à être appelées par l'application mobile Android pour l'échange bidirectionnel.
+                  </p>
+                </div>
+                <span className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full font-semibold">
+                  <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                  REST API v2.0 Prête
+                </span>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                {/* Route 1: Handshake */}
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded text-[11px]">POST</span>
+                      <span className="font-mono font-bold text-slate-900">/api/v2/handshake</span>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">
-                      Synchronisé
-                    </span>
+                    <span className="text-[11px] text-slate-500">Validation d'appairage & Attribution de session</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mb-2">
+                    Appelé lors du scan initial du QR code pour échanger les métadonnées et récupérer le catalogue.
+                  </p>
+                  <pre className="bg-slate-900 text-slate-300 p-2.5 rounded-lg text-[10px] overflow-x-auto">
+{`// Requête Mobile : { deviceId, deviceName, operatorName, token, clientTimestamp }
+// Réponse Desktop (200 OK) : { status: "PAIRED", stationId: "${config.instanceId}", storeName: "${config.storeName}", sessionToken: "...", availableTemplates: [...] }`}
+                  </pre>
+                </div>
+
+                {/* Route 2: Tables Import */}
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-[11px]">POST</span>
+                      <span className="font-mono font-bold text-slate-900">/api/v2/tables/import</span>
+                    </div>
+                    <span className="text-[11px] text-slate-500">Réception principale des tables de scans</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mb-2">
+                    Appelé lorsque l'opérateur appuie sur "EXPORTER / SYNCHRONISER" sur le mobile.
+                  </p>
+                  <pre className="bg-slate-900 text-slate-300 p-2.5 rounded-lg text-[10px] overflow-x-auto">
+{`// Requête Mobile : { tableId: "TB-849201", tableName: "...", items: [{ barcode, designation, quantity, regularPrice }] }
+// Réponse Desktop (200 OK) : { success: true, importedTableId: "TB-849201", printJobStatus: "QUEUED" }`}
+                  </pre>
+                </div>
+
+                {/* Route 3: Catalog Sync */}
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded text-[11px]">GET</span>
+                      <span className="font-mono font-bold text-slate-900">/api/v2/catalog/sync</span>
+                    </div>
+                    <span className="text-[11px] text-slate-500">Téléchargement du catalogue hors-ligne</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600">
+                    Permet au terminal mobile de stocker les articles pour afficher instantanément libellé et prix au scan.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: mDNS & NETWORK ZERO-CONF */}
+          {activeTab === 'network' && (
+            <div className="space-y-4 text-xs">
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                  <Radio className="w-5 h-5 text-blue-600" />
+                  <h3 className="text-sm font-bold text-slate-900">Annonceur de Découverte Réseau (mDNS & ZeroConf)</h3>
+                </div>
+
+                <p className="text-slate-600 leading-relaxed">
+                  Pour que l'application Android liste automatiquement les PC allumés en magasin sans scanner de QR Code :
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-[11px]">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="font-bold text-blue-700 mb-1">Service mDNS (Bonjour / Zeroconf)</div>
+                    <div className="text-slate-600">Type : <span className="font-bold text-slate-900">_estudio-desktop._tcp.local.</span></div>
+                    <div className="text-slate-600">Port : <span className="font-bold text-slate-900">8080</span></div>
+                    <div className="text-slate-600">TXT : name=E-Studio Desktop, version=2.4.0</div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="font-bold text-indigo-700 mb-1">Alternative UDP Broadcast</div>
+                    <div className="text-slate-600">Port UDP : <span className="font-bold text-slate-900">8081</span></div>
+                    <div className="text-slate-600">Commande : <span className="font-bold text-slate-900">&#123;"cmd": "DISCOVER_ESTUDIO"&#125;</span></div>
+                    <div className="text-slate-600">Réponse : IP, nom du poste et port HTTP</div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Configuration Pare-feu Windows / macOS requise :</span>
+                    <p className="mt-0.5 text-amber-800">
+                      Autoriser les connexions entrantes sur le port <strong>TCP 8080</strong> (HTTP REST) et <strong>UDP 8081</strong> pour le profil réseau Privé (Wi-Fi Magasin).
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
           )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="bg-slate-50 border-t border-slate-200 px-6 py-3 flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>Station ID: <strong className="text-slate-700">{config.instanceId}</strong></span>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold shadow-xs"
+          >
+            Fermer la Fenêtre
+          </button>
         </div>
       </div>
     </div>

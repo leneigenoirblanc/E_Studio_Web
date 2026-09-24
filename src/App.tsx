@@ -12,6 +12,7 @@ import { FontManagerModal } from './components/FontManagerModal';
 import { AuditTrailModal } from './components/AuditTrailModal';
 import { MappingDictionaryModal } from './components/MappingDictionaryModal';
 import { MappingDictionaryProvider } from './context/MappingDictionaryContext';
+import { MasterDatabaseStudio } from './components/MasterDatabaseStudio';
 import {
   MobileTerminalView,
   MobileSyncHubModal,
@@ -39,7 +40,7 @@ function AppContent() {
     return DEFAULT_TEMPLATES;
   });
 
-  const [currentView, setCurrentView] = useState<'home' | 'editor' | 'generation' | 'mobile'>(() => {
+  const [currentView, setCurrentView] = useState<'home' | 'editor' | 'generation' | 'mobile' | 'database'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const mode = params.get('mode');
@@ -58,7 +59,7 @@ function AppContent() {
   const [isMappingDictionaryOpen, setIsMappingDictionaryOpen] = useState(false);
   const [isMobileSyncOpen, setIsMobileSyncOpen] = useState(false);
 
-  // Incoming mobile lots state
+  // Incoming mobile or database products state
   const [mobileLots, setMobileLots] = useState<MobileScanLot[]>(() => mobileSyncService.getLots());
   const [mobileInitialProducts, setMobileInitialProducts] = useState<ProductRecord[] | undefined>(undefined);
   const [mobileInitialBatchName, setMobileInitialBatchName] = useState<string | undefined>(undefined);
@@ -104,6 +105,15 @@ function AppContent() {
     setActiveTemplate(snapshot);
     setMobileInitialProducts(records);
     setMobileInitialBatchName(lot.name);
+    setCurrentView('generation');
+  };
+
+  const handleGenerateFromDatabaseProducts = (products: ProductRecord[]) => {
+    const defaultTemplate = templates[0] || DEFAULT_TEMPLATES[0];
+    const snapshot: LabelTemplate = JSON.parse(JSON.stringify(defaultTemplate));
+    setActiveTemplate(snapshot);
+    setMobileInitialProducts(products);
+    setMobileInitialBatchName(`Impression Base de Données (${products.length} réf.)`);
     setCurrentView('generation');
   };
 
@@ -177,6 +187,7 @@ function AppContent() {
           onOpenFontManager={() => setIsFontManagerOpen(true)}
           onOpenMappingDictionary={() => setIsMappingDictionaryOpen(true)}
           onOpenMobileSync={() => setIsMobileSyncOpen(true)}
+          onOpenMasterDatabase={() => setCurrentView('database')}
           pendingLotsCount={pendingLotsCount}
         />
       )}
@@ -209,6 +220,14 @@ function AppContent() {
         <MobileTerminalView
           templates={templates}
           onBackToDesktop={() => setCurrentView('home')}
+        />
+      )}
+
+      {currentView === 'database' && (
+        <MasterDatabaseStudio
+          onBack={() => setCurrentView('home')}
+          templates={templates}
+          onGenerateFromDatabase={handleGenerateFromDatabaseProducts}
         />
       )}
 
@@ -286,4 +305,3 @@ export function App() {
 }
 
 export default App;
-

@@ -489,6 +489,7 @@ export interface ProductRecord {
   PARTNO?: string;
   ITEMNAME: string;
   ITEMDESCRIPTION?: string;
+  HSCOD?: string;
   DIV_NAME?: string;
   DEPT_NAME?: string;
   CATEGORY_NAME?: string;
@@ -499,6 +500,42 @@ export interface ProductRecord {
   SELLING_UNIT?: string;
   SELLING_PRICE: number;
   PROMOPRICE?: number;
+  SUPPLIER?: string;
+  ITEM_TYPE?: string;
+  CASE_SIZE?: number;
+  CASE_UNIT?: string;
+  TAX?: string;
+  TAX_RATE?: number;
+  TAX_TYPE?: string;
+  ITEM_CREATED_DATE?: string;
+  ITEM_CREATED_BY?: string;
+  ITEM_UPDATED_BY?: string;
+  SOH?: number;
+  LAST_GRN_DATE?: string;
+  LAST_GRN_QTY?: number;
+  SALE_QTY_AFTER_LAST_GRN?: number;
+  LAST_PO_DATE?: string;
+  LAST_RECEIVE_NOTE_DATE?: string;
+  ON_ORDER_QTY?: number;
+  STOCK_JOURNAL_CONSUMPTION?: number;
+  GOODS_IN_TRANSIT?: number;
+  QTY_SOLD?: number;
+  QTY_SALES_RETURN?: number;
+  LAST_SOLD_DATE?: string;
+  QTYSOLDINLAST30DAYS?: number;
+  QTYSOLDINLAST60DAYS?: number;
+  QTYSOLDINLAST90DAYS?: number;
+  WAC_COST?: number;
+  AGING_STATUS?: string;
+  ITEM_LOC_STATUS?: string;
+  TOTAL_STOCK_RETAIL_INCL_TAX?: number;
+  DMS?: number;
+  TOTAL_STOCK_COST_EXCL_TAX?: number;
+  LAST_COST_EXCL_TAX?: number;
+  ITEM_SOURCE?: string;
+  PRODUCTION_ITEM?: string;
+  MARGIN?: number;
+
   DISCOUNT_PCT?: number; // e.g. 20 for -20%
   PROMO_LABEL?: string; // e.g. "1 ACHETÉ = 1 OFFERT", "VENTE FLASH"
   PROMO_START_DATE?: string;
@@ -509,12 +546,6 @@ export interface ProductRecord {
   ORIGIN_COUNTRY?: string; // e.g. "Origine France"
   NET_WEIGHT_KG?: number; // e.g. 0.25 for 250g
   VOLUME_L?: number; // e.g. 1.0 for 1L
-  ITEM_TYPE?: string;
-  CASE_SIZE?: number;
-  CASE_UNIT?: string;
-  TAX?: string;
-  TAX_RATE?: number;
-  TAX_TYPE?: string;
   IMAGE_PATH?: string;
   TIERS?: PriceTier[];
   price_tiers?: PriceTierBreak[];
