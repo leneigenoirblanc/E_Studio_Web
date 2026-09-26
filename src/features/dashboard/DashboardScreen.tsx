@@ -1,17 +1,22 @@
 import React from 'react';
+import { useAppStore } from '../../app/providers/AppProviders';
 
 export function DashboardScreen() {
+  const { templates, products, syncJobs } = useAppStore();
+
+  const cards = [
+    { label: 'Templates', value: String(templates.length), tone: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Products', value: String(products.length), tone: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Sync Jobs', value: String(syncJobs.length), tone: 'text-amber-600', bg: 'bg-amber-50' },
+  ];
+
   return (
     <section className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
-        {[
-          { label: 'Templates', value: '12', tone: 'blue' },
-          { label: 'Products', value: '8,420', tone: 'emerald' },
-          { label: 'Sync Jobs', value: '4', tone: 'amber' },
-        ].map((item) => (
+        {cards.map((item) => (
           <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{item.label}</div>
-            <div className={`mt-3 text-3xl font-extrabold text-${item.tone}-600`}>{item.value}</div>
+            <div className={`mt-3 text-3xl font-extrabold ${item.tone}`}>{item.value}</div>
           </div>
         ))}
       </div>
