@@ -2,8 +2,8 @@ import React, { useMemo } from 'react';
 import { LabelTemplate, ProductRecord, TemplateItem, RotationHandleType } from '../types';
 import { TierEngine } from '../utils/tierEngine';
 import { PricingEngine } from '../utils/pricingEngine';
-import { generateCode128Bars, generateEAN13Bars } from '../utils/barcodeGenerator';
-import { generateQrMatrix } from '../utils/qrGenerator';
+import { generateCode128Bars, generateEAN13Bars, getBarcodeSvgPath } from '../utils/barcodeGenerator';
+import { generateQrMatrix, getQrSvgPath } from '../utils/qrGenerator';
 import { SmartGuideLine } from '../utils/smartGuides';
 import { PictogramRenderer } from './PictogramRenderer';
 import { CurvedTextRenderer } from './CurvedTextRenderer';
@@ -569,19 +569,9 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                   viewBox={`0 0 ${totalBars} 100`}
                   preserveAspectRatio="none"
                   className="w-full"
+                  shapeRendering="crispEdges"
                 >
-                  {bars.map((isBar, idx) =>
-                    isBar ? (
-                      <rect
-                        key={idx}
-                        x={idx}
-                        y={0}
-                        width={1.05}
-                        height={100}
-                        fill={item.bar_color || '#000000'}
-                      />
-                    ) : null
-                  )}
+                  <path d={getBarcodeSvgPath(bars, 100)} fill={item.bar_color || '#000000'} />
                 </svg>
                 {item.show_text && (
                   <span
@@ -606,19 +596,9 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
                   viewBox={`0 0 ${totalBars} 100`}
                   preserveAspectRatio="none"
                   className="w-full"
+                  shapeRendering="crispEdges"
                 >
-                  {bars.map((isBar, idx) =>
-                    isBar ? (
-                      <rect
-                        key={idx}
-                        x={idx}
-                        y={0}
-                        width={1.05}
-                        height={100}
-                        fill={item.bar_color || '#000000'}
-                      />
-                    ) : null
-                  )}
+                  <path d={getBarcodeSvgPath(bars, 100)} fill={item.bar_color || '#000000'} />
                 </svg>
                 {item.show_text && (
                   <span
@@ -645,8 +625,6 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
       case 'qrcode': {
         const content = PricingEngine.resolveQrContent(item, record);
         const matrix = generateQrMatrix(content);
-        const matrixSize = matrix.length;
-        const cellSize = 100 / matrixSize;
 
         return (
           <div
@@ -658,20 +636,7 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
               className="w-full h-full"
               shapeRendering="crispEdges"
             >
-              {matrix.map((row, rIdx) =>
-                row.map((val, cIdx) =>
-                  val ? (
-                    <rect
-                      key={`${rIdx}-${cIdx}`}
-                      x={cIdx * cellSize}
-                      y={rIdx * cellSize}
-                      width={cellSize + 0.05}
-                      height={cellSize + 0.05}
-                      fill={item.module_color || '#000000'}
-                    />
-                  ) : null
-                )
-              )}
+              <path d={getQrSvgPath(matrix)} fill={item.module_color || '#000000'} />
             </svg>
           </div>
         );

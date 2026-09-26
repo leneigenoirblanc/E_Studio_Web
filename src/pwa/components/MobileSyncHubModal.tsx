@@ -43,6 +43,8 @@ import {
   Activity,
   Check,
   Terminal,
+  BookOpen,
+  Database,
 } from 'lucide-react';
 
 interface MobileSyncHubModalProps {
@@ -65,7 +67,7 @@ export const MobileSyncHubModal: React.FC<MobileSyncHubModalProps> = ({
   const [lots, setLots] = useState<MobileScanLot[]>([]);
   const [selectedLot, setSelectedLot] = useState<MobileScanLot | null>(null);
   const [config, setConfig] = useState<SyncConnectionConfig>(mobileSyncService.getConfig());
-  const [activeTab, setActiveTab] = useState<'pairing' | 'lots' | 'network' | 'endpoints'>('pairing');
+  const [activeTab, setActiveTab] = useState<'pairing' | 'lots' | 'network' | 'endpoints' | 'guide'>('pairing');
   const [qrFormat, setQrFormat] = useState<'json_v2' | 'uri_scheme' | 'web_pwa'>('json_v2');
 
   const [pairingPayloadV2, setPairingPayloadV2] = useState<EstudioPairV2Payload | null>(null);
@@ -308,6 +310,18 @@ export const MobileSyncHubModal: React.FC<MobileSyncHubModalProps> = ({
           >
             <Radio className="w-4 h-4" />
             <span>4. Découverte mDNS & Réseau</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('guide')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-t border-x ${
+              activeTab === 'guide'
+                ? 'bg-white text-blue-600 border-slate-200 shadow-sm -mb-px'
+                : 'text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>5. Guide App Mobile & Benchmark</span>
           </button>
         </div>
 
@@ -746,6 +760,246 @@ export const MobileSyncHubModal: React.FC<MobileSyncHubModalProps> = ({
                       Autoriser les connexions entrantes sur le port <strong>TCP 8080</strong> (HTTP REST) et <strong>UDP 8081</strong> pour le profil réseau Privé (Wi-Fi Magasin).
                     </p>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: COMPANION APP IMPLEMENTATION GUIDE & BENCHMARK */}
+          {activeTab === 'guide' && (
+            <div className="space-y-6 text-xs text-slate-700">
+              {/* Architecture Blueprint Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-5 h-5 text-blue-600" />
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Guide d'Implémentation de l'Application Mobile Compagnon
+                    </h3>
+                  </div>
+                  <span className="px-2.5 py-1 text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 rounded-full">
+                    Spécification Protocole v2.4
+                  </span>
+                </div>
+
+                <p className="leading-relaxed">
+                  L'application compagnon mobile E-Studio permet aux employés de rayon et gestionnaires de stock d'effectuer des relevés de prix, des audits d'étiquetage et des réimpressions directement en rayon sans jamais bloquer le poste caisse ou le bureau administratif.
+                </p>
+
+                {/* 4-Step Technical Workflow */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-slate-900">
+                      <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">
+                        1
+                      </span>
+                      <span>Appairage Instantané par QR Code</span>
+                    </div>
+                    <p className="text-slate-600 text-[11px] leading-relaxed">
+                      L'application mobile utilise la caméra pour scanner le QR Code affiché sur l'onglet <strong>1. Appairage Station</strong>.
+                      Le payload JSON contient le token SHA-256 éphémère, l'IP locale du PC et le port. L'application enregistre ces paramètres dans son stockage sécurisé (EncryptedSharedPreferences sur Android ou Keychain sur iOS) et effectue un handshake POST sur <code>/api/v2/handshake</code>.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-slate-900">
+                      <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">
+                        2
+                      </span>
+                      <span>Mise en Cache Hors-Ligne (Offline-First)</span>
+                    </div>
+                    <p className="text-slate-600 text-[11px] leading-relaxed">
+                      L'application télécharge le catalogue complet (EAN, SKU, libellé, prix régulier, prix promo) via <code>GET /api/v2/catalog/sync</code> et le persiste dans une base SQLite/Room locale.
+                      L'employé peut travailler dans des zones sans réseau Wi-Fi (chambres froides, réserves aveugles) avec un affichage instantané (&lt; 1 ms) des fiches articles au scan.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-slate-900">
+                      <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">
+                        3
+                      </span>
+                      <span>Capture Matérielle & Lots de Scans</span>
+                    </div>
+                    <p className="text-slate-600 text-[11px] leading-relaxed">
+                      L'application capture les codes-barres soit via l'optique caméra (Google ML Kit Barcode), soit via les scanners laser matériels durcis (Zebra DataWedge via Intent API, Honeywell CT40 ou Datalogic).
+                      L'opérateur ajuste le nombre d'étiquettes à réimprimer (ex: 2 par facing) et groupe les articles dans un lot nommé (ex: "Changement Prix Épicerie").
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-slate-900">
+                      <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">
+                        4
+                      </span>
+                      <span>Transfert Automatique & File d'Impression</span>
+                    </div>
+                    <p className="text-slate-600 text-[11px] leading-relaxed">
+                      Dès que la connexion Wi-Fi ou réseau local est détectée, le terminal pousse la table vers le PC de bureau via <code>POST /api/v2/tables/import</code>.
+                      Le poste Desktop E-Studio reçoit l'alerte en temps réel (Server-Sent Events) et intègre directement les articles dans le gabarit d'étiquettes correspondant, prêt pour l'impression thermique ou laser.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Benchmark vs Industry Leading Softwares Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-3 border-b border-slate-200">
+                  <Activity className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Revue Comparative du Workflow face aux Leaders Industriels
+                  </h3>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                    <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="p-3">Solution Logicielle</th>
+                        <th className="p-3">Mécanisme Mobile / Desktop</th>
+                        <th className="p-3">Fonctionnement Hors-Ligne</th>
+                        <th className="p-3">Temps de Mise en Œuvre</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      <tr className="bg-blue-50/60 font-semibold text-blue-950">
+                        <td className="p-3 font-bold flex items-center gap-1.5">
+                          <Check className="w-4 h-4 text-blue-600" />
+                          <span>E-Studio Pro (Notre Solution)</span>
+                        </td>
+                        <td className="p-3">
+                          Appairage QR Code dynamique, API REST locale LAN/HTTP, SSE temps réel + PWA zéro installation
+                        </td>
+                        <td className="p-3 text-emerald-700">
+                          100% Autonome (Cache SQLite/IndexedDB embarqué)
+                        </td>
+                        <td className="p-3 text-emerald-700">&lt; 1 minute (Scan QR direct)</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 font-bold text-slate-900">Zebra DataWedge & Enterprise Browser</td>
+                        <td className="p-3 text-slate-600">
+                          Intents Android propriétaires, nécessite configuration de profils XML et licences Zebra
+                        </td>
+                        <td className="p-3 text-emerald-700">Oui (sur terminaux Zebra uniquement)</td>
+                        <td className="p-3 text-slate-600">Complexe (déploiement MDM)</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 font-bold text-slate-900">BarTender Print Portal</td>
+                        <td className="p-3 text-slate-600">
+                          Portail web IIS client-serveur lourd avec pilote d'impression serveur Windows
+                        </td>
+                        <td className="p-3 text-rose-700">Non (connexion continue requise)</td>
+                        <td className="p-3 text-slate-600">Moyen (infrastructure serveur)</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 font-bold text-slate-900">Scandit Enterprise Barcode</td>
+                        <td className="p-3 text-slate-600">
+                          SDK scanner MatrixScan puissant pour smartphones grand public, coût de licence par scan élevé
+                        </td>
+                        <td className="p-3 text-emerald-700">Oui</td>
+                        <td className="p-3 text-slate-600">Développement SDK natif</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 font-bold text-slate-900">Honeywell Operational Intelligence</td>
+                        <td className="p-3 text-slate-600">
+                          Plateforme Cloud télémétrique propriétaire avec agent résident sur terminaux Honeywell
+                        </td>
+                        <td className="p-3 text-amber-700">Partiel (téléchargement différé)</td>
+                        <td className="p-3 text-slate-600">Complexe (Cloud enterprise)</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Ready-to-Use Kotlin Code Snippet Card */}
+              <div className="bg-slate-900 text-slate-100 rounded-2xl p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="w-5 h-5 text-emerald-400" />
+                    <h3 className="text-sm font-bold text-white">
+                      Extrait de Code Android Kotlin (Client HTTP Retrofit Prêt à l'Emploi)
+                    </h3>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400">Kotlin / OkHttp / Retrofit</span>
+                </div>
+
+                <pre className="bg-slate-950 p-4 rounded-xl text-[11px] font-mono overflow-x-auto text-emerald-300 leading-relaxed border border-slate-800">
+{`// 1. Interface Retrofit de communication avec E-Studio Desktop
+interface EStudioApi {
+    @POST("/api/v2/handshake")
+    suspend fun handshake(@Body req: HandshakeRequest): HandshakeResponse
+
+    @GET("/api/v2/catalog/sync")
+    suspend fun syncCatalog(@Query("version") sinceVersion: String?): CatalogResponse
+
+    @POST("/api/v2/tables/import")
+    suspend fun importTable(@Body payload: MobileTablePayload): ImportResponse
+}
+
+// 2. Exemple d'envoi d'un lot de scans scannés en rayon
+suspend fun sendScannedLotToDesktop(hostIp: String, port: Int, lot: MobileTablePayload) {
+    val retrofit = Retrofit.Builder()
+        .baseUrl("http://$hostIp:$port")
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    val api = retrofit.create(EStudioApi::class.java)
+    val response = api.importTable(lot)
+    if (response.success) {
+        Log.i("EStudio", "Lot \${lot.tableId} transmis avec succès au PC caisse !")
+    }
+}`}
+                </pre>
+              </div>
+
+              {/* Local-First Two-Database Architecture Card (Turso / libSQL) */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-5 h-5 text-indigo-600" />
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Architecture "Local-First" à Double Base (System DB + Dataset DB)
+                    </h3>
+                  </div>
+                  <span className="px-2.5 py-1 text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 rounded-full">
+                    Sécurité & Performance Multi-plateforme
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Cette architecture sépare la logique applicative du jeu de données utilisateur. Au lieu de figer une base maître massive ou de coder en dur des jetons API sensibles dans le binaire d'installation, deux bases SQLite locales distinctes sont gérées dans le dossier applicatif (AppData / Application Support) :
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span>1. System DB (system.db)</span>
+                    </div>
+                    <p className="text-slate-600 text-[11px]">
+                      Stocke la configuration globale, les profils utilisateurs, les thèmes et les chemins des bases actives. Livrée vierge et initialisée au 1er boot.
+                    </p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-purple-500" />
+                      <span>2. Dataset DB (dataset_xyz.db)</span>
+                    </div>
+                    <p className="text-slate-600 text-[11px]">
+                      Héberge le catalogue articles et les lots scannés. Créée dynamiquement à la volée avec <code>@libsql/client</code> lors de la création d'espace ou d'import.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-950 text-[11px] space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Synchronisation Cloud Turso Découplée (Optionnelle)</span>
+                  </div>
+                  <p className="text-indigo-800">
+                    Pour répliquer les données vers le mobile ou le cloud, le fichier SQLite local est transformé en réplica Turso (<code>syncUrl: "libsql://dataset.turso.io"</code>) avec un jeton éphémère limité à ce seul dataset, sans exposer les clés d'administration.
+                  </p>
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-// Vector Code 128 and EAN-13 Barcode generator
+// Vector Code 128 and EAN-13 Barcode generator with High-Performance LRU/Map caching
 
 const CODE128_PATTERNS: string[] = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
@@ -14,8 +14,16 @@ const CODE128_PATTERNS: string[] = [
   "114131", "311141", "411131", "211412", "211214", "211232", "2331112"
 ];
 
+// Runtime Memoization Caches
+const code128Cache = new Map<string, boolean[]>();
+const ean13Cache = new Map<string, { bars: boolean[]; formattedCode: string }>();
+const svgPathCache = new Map<string, string>();
+
 export function generateCode128Bars(text: string): boolean[] {
   const clean = text || "123456789012";
+  const cached = code128Cache.get(clean);
+  if (cached) return cached;
+
   const startCodeB = 104; // Start B
   const codes: number[] = [startCodeB];
 
@@ -53,6 +61,9 @@ export function generateCode128Bars(text: string): boolean[] {
   }
   // Terminal bar
   bars.push(true, true);
+
+  if (code128Cache.size > 2000) code128Cache.clear();
+  code128Cache.set(clean, bars);
   return bars;
 }
 
@@ -75,6 +86,9 @@ const EAN_PARITY = [
 ];
 
 export function generateEAN13Bars(code: string): { bars: boolean[]; formattedCode: string } {
+  const cached = ean13Cache.get(code);
+  if (cached) return cached;
+
   const digitsOnly = code.replace(/\D/g, "").padStart(12, "0").slice(-12);
   
   // Calculate checksum
@@ -102,12 +116,12 @@ export function generateEAN13Bars(code: string): { bars: boolean[]; formattedCod
     }
   }
 
-  // Center guard: 01010
+  // Center guard pattern: 01010
   bars.push(false, true, false, true, false);
 
-  // Second group of 6 digits (R)
-  for (let i = 0; i < 6; i++) {
-    const digit = parseInt(full13[i + 7], 10);
+  // Second group of 6 digits (always R)
+  for (let i = 6; i < 12; i++) {
+    const digit = parseInt(full13[i + 1], 10);
     const pattern = EAN_R[digit];
     for (let b = 0; b < pattern.length; b++) {
       bars.push(pattern[b] === '1');
@@ -117,34 +131,65 @@ export function generateEAN13Bars(code: string): { bars: boolean[]; formattedCod
   // End guard: 101
   bars.push(true, false, true);
 
-  return { bars, formattedCode: full13 };
+  const formattedCode = `${full13[0]} ${full13.slice(1, 7)} ${full13.slice(7)}`;
+  const result = { bars, formattedCode };
+
+  if (ean13Cache.size > 2000) ean13Cache.clear();
+  ean13Cache.set(code, result);
+  return result;
 }
 
 /**
- * Renders a crisp rasterized barcode dataURL (PNG) for office document embeds (PPTX, HTML)
+ * Converts a boolean bar array into a single contiguous SVG path string
+ * Drops 100+ separate <rect> nodes down to 1 single <path> node (99% DOM reduction!)
+ */
+export function getBarcodeSvgPath(bars: boolean[], height: number = 100): string {
+  const cacheKey = `${bars.length}_${height}_${bars.slice(0, 10).join('')}`;
+  const cached = svgPathCache.get(cacheKey);
+  if (cached) return cached;
+
+  let d = '';
+  for (let i = 0; i < bars.length; i++) {
+    if (bars[i]) {
+      let run = 1;
+      while (i + 1 < bars.length && bars[i + 1]) {
+        run++;
+        i++;
+      }
+      d += `M${i - run + 1} 0h${run}v${height}h-${run}Z `;
+    }
+  }
+
+  if (svgPathCache.size > 1000) svgPathCache.clear();
+  svgPathCache.set(cacheKey, d);
+  return d;
+}
+
+/**
+ * High-performance offscreen canvas renderer for exporting raster images
  */
 export function renderBarcodeToDataUrl(
   code: string,
-  barcodeType: 'ean13' | 'code128' = 'ean13',
+  type: 'code128' | 'ean13',
   showText: boolean = true,
-  barColor: string = '#000000'
+  barColor: string = '#000000',
+  scale: number = 2
 ): string {
   if (typeof document === 'undefined') return '';
-
   const canvas = document.createElement('canvas');
-  const scale = 4; // High-resolution scale factor for sharp rendering
   
   let bars: boolean[] = [];
   let textToShow = code;
-  if (barcodeType === 'ean13') {
-    try {
+
+  try {
+    if (type === 'ean13') {
       const res = generateEAN13Bars(code);
       bars = res.bars;
       textToShow = res.formattedCode;
-    } catch {
+    } else {
       bars = generateCode128Bars(code);
     }
-  } else {
+  } catch {
     bars = generateCode128Bars(code);
   }
 

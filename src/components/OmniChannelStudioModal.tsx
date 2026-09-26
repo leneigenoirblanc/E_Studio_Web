@@ -12,7 +12,7 @@ import {
 import { DEVICE_PROFILES, SAMPLE_STORES } from '../rulesEngine/deviceProfiles';
 import { DEFAULT_RULES } from '../rulesEngine/defaultRules';
 import { RulesEngine } from '../rulesEngine/engine';
-import { SAMPLE_PRODUCTS } from '../sampleData';
+import { databaseService } from '../services/databaseService';
 import {
   Cpu,
   Tv,
@@ -81,9 +81,24 @@ export const OmniChannelStudioModal: React.FC<OmniChannelStudioModalProps> = ({
 
   const engine = useMemo(() => new RulesEngine(rules), [rules]);
 
+  const simProducts = useMemo(() => {
+    const dbItems = databaseService.getProducts();
+    if (dbItems.length > 0) return dbItems;
+    return [
+      {
+        id: 'SIM-001',
+        ITEMNAME: 'Café Moulu Pur Arabica 250g',
+        SELLING_PRICE: 2450,
+        ITEMDESCRIPTION: 'Torréfaction artisanale supérieure, arômes équilibrés et intenses.',
+        PRODUCT_SCAN: '3250390123456',
+        DEPT_NAME: 'BOISSONS',
+      },
+    ];
+  }, []);
+
   // Current context constructed for simulation
   const currentProduct = useMemo(() => {
-    const base = SAMPLE_PRODUCTS[selectedProductIdx] || SAMPLE_PRODUCTS[0];
+    const base = simProducts[selectedProductIdx] || simProducts[0];
     const discount = simulatedDiscount;
     const basePrice = Number(base.SELLING_PRICE) || 10;
     const promoPrice = Number((basePrice * (1 - discount / 100)).toFixed(2));
@@ -94,7 +109,7 @@ export const OmniChannelStudioModal: React.FC<OmniChannelStudioModalProps> = ({
       PROMOPRICE: promoPrice,
       ITEMDESCRIPTION: base.ITEMDESCRIPTION || 'Torréfaction artisanale supérieure, arômes équilibrés et intenses.',
     };
-  }, [selectedProductIdx, simulatedDiscount]);
+  }, [simProducts, selectedProductIdx, simulatedDiscount]);
 
   const currentDevice = useMemo(() => {
     return DEVICE_PROFILES[selectedDeviceKey] || DEVICE_PROFILES.EINK_2_1_INCH;
@@ -368,7 +383,7 @@ export const OmniChannelStudioModal: React.FC<OmniChannelStudioModalProps> = ({
                   onChange={(e) => setSelectedProductIdx(Number(e.target.value))}
                   className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                 >
-                  {SAMPLE_PRODUCTS.map((prod, idx) => (
+                  {simProducts.map((prod, idx) => (
                     <option key={prod.id} value={idx}>
                       {prod.ITEMNAME} ({prod.SELLING_PRICE} {currentStore.currency})
                     </option>

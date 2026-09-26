@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { LabelTemplate, ProductRecord, ImpositionConfig, PdfExportConfig } from '../types';
-import { SAMPLE_PRODUCTS } from '../sampleData';
+import { databaseService } from '../services/databaseService';
 import { LabelRenderer } from './LabelRenderer';
 import { ImpositionCalculator } from '../utils/impositionCalculator';
 import { TierEngine } from '../utils/tierEngine';
@@ -48,6 +48,10 @@ import {
   ChevronDown,
   Settings,
   BookOpen,
+  Target,
+  CheckSquare,
+  Square,
+  Copy,
 } from 'lucide-react';
 
 interface GenerationWorkspaceProps {
@@ -63,7 +67,19 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   initialProducts,
   initialBatchName,
 }) => {
-  const [products, setProducts] = useState<ProductRecord[]>(initialProducts || SAMPLE_PRODUCTS);
+  const [products, setProducts] = useState<ProductRecord[]>(() => {
+    if (initialProducts && initialProducts.length > 0) return initialProducts;
+    return databaseService.getProducts();
+  });
+
+  React.useEffect(() => {
+    if (!initialProducts || initialProducts.length === 0) {
+      const unsub = databaseService.subscribe((dbItems) => {
+        setProducts(dbItems);
+      });
+      return () => unsub();
+    }
+  }, [initialProducts]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<
@@ -126,6 +142,13 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
 
   const currentProduct = filteredProducts[currentIndex] || filteredProducts[0] || null;
 
+  // Print & Preview Scope Mode (Defaults to Selected Item Only to avoid entire catalog overhauls!)
+  const [printScope, setPrintScope] = useState<'selected_only' | 'checked_only' | 'all'>('selected_only');
+  const [selectedCopies, setSelectedCopies] = useState<number>(1);
+  const [fillSheetWithSelected, setFillSheetWithSelected] = useState<boolean>(false);
+  const [checkedProductIds, setCheckedProductIds] = useState<Set<string>>(new Set());
+  const [itemCopies, setItemCopies] = useState<Record<string, number>>({});
+
   // Imposition calculation
   const imposition = useMemo(() => {
     try {
@@ -139,6 +162,29 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
       return null;
     }
   }, [template, impositionConfig]);
+
+  // Effective print & preview items calculated strictly according to active scope
+  const effectivePrintItems = useMemo<ProductRecord[]>(() => {
+    if (printScope === 'selected_only') {
+      if (!currentProduct) return [];
+      const count = fillSheetWithSelected && imposition
+        ? imposition.total_per_page
+        : Math.max(1, selectedCopies);
+      return Array.from({ length: count }, () => currentProduct);
+    }
+    if (printScope === 'checked_only') {
+      const checked = products.filter((p) => checkedProductIds.has(p.id));
+      if (checked.length === 0) {
+        return currentProduct ? [currentProduct] : [];
+      }
+      return checked.flatMap((p) => {
+        const qty = Math.max(1, itemCopies[p.id] || 1);
+        return Array.from({ length: qty }, () => p);
+      });
+    }
+    // 'all'
+    return filteredProducts;
+  }, [printScope, currentProduct, fillSheetWithSelected, imposition, selectedCopies, products, checkedProductIds, itemCopies, filteredProducts]);
 
   // Preflight diagnostics for rows
   const diagnostics = useMemo(() => {
@@ -239,7 +285,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   const handleExportPptx = async () => {
     if (!imposition) return;
     try {
-      await PptxExporter.exportToPptx(template, products, imposition, impositionConfig);
+      await PptxExporter.exportToPptx(template, effectivePrintItems, imposition, impositionConfig);
     } catch (err) {
       alert("Erreur lors de l'export PowerPoint : " + String(err));
     }
@@ -248,7 +294,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   // ZPL Direct Thermal Export
   const handleExportZpl = () => {
     try {
-      const zplContent = ZplExporter.generateBatchZpl(template, products, {
+      const zplContent = ZplExporter.generateBatchZpl(template, effectivePrintItems, {
         dpi: zplDpi,
         quantity: 1,
         printSpeed: 4,
@@ -281,9 +327,9 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
     const labelsPerPage = imposition.total_per_page;
     const startOffset = Math.max(0, Math.min(labelsPerPage - 1, impositionConfig.start_offset_slot || 0));
     
-    // Calculate total pages considering start offset
-    const totalItemsToPlace = products.length + startOffset;
-    const totalPages = Math.ceil(totalItemsToPlace / labelsPerPage);
+    // Calculate total pages considering start offset and effective scope items
+    const totalItemsToPlace = effectivePrintItems.length + startOffset;
+    const totalPages = Math.max(1, Math.ceil(totalItemsToPlace / labelsPerPage));
 
     const gapX = Math.max(0, impositionConfig.gap_x_mm ?? impositionConfig.gap_mm ?? 2.0);
     const gapY = Math.max(0, impositionConfig.gap_y_mm ?? impositionConfig.gap_mm ?? 2.0);
@@ -300,8 +346,8 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
           continue;
         }
 
-        if (productCursor >= products.length) break;
-        const prod = products[productCursor];
+        if (productCursor >= effectivePrintItems.length) break;
+        const prod = effectivePrintItems[productCursor];
         productCursor++;
 
         const col = slot % imposition.cols;
@@ -900,11 +946,113 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
         </div>
       </header>
 
+      {/* Global Print & Preview Scope Control Bar */}
+      <div className="bg-slate-900 text-white border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0 z-20 shadow-xs">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 font-bold text-slate-300">
+            <Target className="w-4 h-4 text-blue-400 shrink-0" />
+            <span>Périmètre d'Aperçu & Impression :</span>
+          </div>
+
+          <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+            <button
+              onClick={() => setPrintScope('selected_only')}
+              className={`px-3 py-1 rounded-md font-semibold text-xs transition flex items-center gap-1.5 ${
+                printScope === 'selected_only'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Générer et prévisualiser uniquement pour l'article sélectionné"
+            >
+              <span>🎯 Article sélectionné seul</span>
+            </button>
+
+            <button
+              onClick={() => setPrintScope('checked_only')}
+              className={`px-3 py-1 rounded-md font-semibold text-xs transition flex items-center gap-1.5 ${
+                printScope === 'checked_only'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Générer pour les articles cochés avec leurs quantités respectives"
+            >
+              <span>☑️ Articles cochés ({checkedProductIds.size})</span>
+            </button>
+
+            <button
+              onClick={() => setPrintScope('all')}
+              className={`px-3 py-1 rounded-md font-semibold text-xs transition flex items-center gap-1.5 ${
+                printScope === 'all'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Générer pour la totalité du catalogue ou du lot filtré"
+            >
+              <span>📦 Tout le catalogue ({filteredProducts.length})</span>
+            </button>
+          </div>
+
+          {printScope === 'selected_only' && (
+            <div className="flex items-center gap-2.5 pl-2 border-l border-slate-800">
+              <label className="flex items-center gap-1.5 text-slate-300 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={fillSheetWithSelected}
+                  onChange={(e) => setFillSheetWithSelected(e.target.checked)}
+                  className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                />
+                <span>Remplir planche ({imposition?.total_per_page || 1} ex.)</span>
+              </label>
+
+              {!fillSheetWithSelected && (
+                <div className="flex items-center gap-1 text-slate-300 text-xs">
+                  <span className="text-slate-400">Exemplaires :</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    value={selectedCopies}
+                    onChange={(e) => setSelectedCopies(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-14 px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-center font-mono text-xs text-white"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {printScope === 'checked_only' && (
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-800 text-xs">
+              <button
+                onClick={() => setCheckedProductIds(new Set(filteredProducts.map((p) => p.id)))}
+                className="text-blue-400 hover:underline font-medium"
+              >
+                Tout cocher
+              </button>
+              <span className="text-slate-600">•</span>
+              <button
+                onClick={() => setCheckedProductIds(new Set())}
+                className="text-slate-400 hover:underline"
+              >
+                Tout décocher
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Live Calculation Output Indicator */}
+        <div className="flex items-center gap-2 text-slate-400 text-xs">
+          <span>Sortie prévue :</span>
+          <span className="px-2 py-0.5 rounded font-mono font-bold bg-slate-800 text-blue-300 border border-slate-700">
+            {effectivePrintItems.length} étiquette{effectivePrintItems.length > 1 ? 's' : ''} • {Math.ceil((effectivePrintItems.length + (impositionConfig.start_offset_slot || 0)) / (imposition?.total_per_page || 1))} feuille{Math.ceil((effectivePrintItems.length + (impositionConfig.start_offset_slot || 0)) / (imposition?.total_per_page || 1)) > 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
       {/* Tab 1: Single Label Live Preview with Next/Prev Carousel */}
       {activeTab === 'preview' && (
         <div className="flex-1 flex overflow-hidden">
           {/* Left Sidebar: Articles List */}
-          <div className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0">
+          <div className="w-84 bg-white border-r border-slate-200 flex flex-col shrink-0">
             <div className="p-3 border-b border-slate-200 bg-slate-50/70">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
@@ -925,6 +1073,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
               {filteredProducts.map((p, idx) => {
                 const diag = diagnostics.find((d) => d.id === p.id);
                 const isSelected = idx === currentIndex;
+                const isChecked = checkedProductIds.has(p.id);
                 return (
                   <div
                     key={p.id}
@@ -933,6 +1082,21 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
                       isSelected ? 'bg-blue-50/80 border-l-3 border-blue-600' : 'hover:bg-slate-50'
                     }`}
                   >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setCheckedProductIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(p.id)) next.delete(p.id);
+                          else next.add(p.id);
+                          return next;
+                        });
+                      }}
+                      className="mt-1 rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 shrink-0 cursor-pointer"
+                      title="Cocher pour impression par lot"
+                    />
                     <div className="pt-0.5">
                       {diag?.status === 'error' ? (
                         <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
@@ -950,11 +1114,11 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
                         </span>
                       </div>
                       <p className="font-semibold text-xs text-slate-800 truncate mt-0.5">{p.ITEMNAME}</p>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                      <div className="flex items-center justify-between text-[10px] text-slate-500 mt-0.5">
                         <span className="font-mono">{p.PRODUCT_SCAN || 'Sans code-barres'}</span>
-                        {p.TIERS && p.TIERS.length > 0 && (
-                          <span className="px-1.5 py-0.2 bg-sky-100 text-sky-800 rounded text-[9px] font-bold">
-                            {p.TIERS.length} paliers
+                        {isChecked && (
+                          <span className="px-1.5 py-0.2 bg-blue-100 text-blue-800 rounded text-[9px] font-bold">
+                            Coché
                           </span>
                         )}
                       </div>
@@ -990,13 +1154,27 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
               </div>
 
               {currentProduct && (
-                <div className="text-xs text-slate-600 flex items-center gap-3">
-                  <span>
-                    Marque: <strong className="text-slate-800">{currentProduct.BRAND_INFO || '—'}</strong>
-                  </span>
-                  <span>
-                    Rayon: <strong className="text-slate-800">{currentProduct.CATEGORY_NAME || '—'}</strong>
-                  </span>
+                <div className="flex items-center gap-3">
+                  <div className="hidden sm:flex items-center gap-3 text-xs text-slate-600">
+                    <span>
+                      Marque: <strong className="text-slate-800">{currentProduct.BRAND_INFO || '—'}</strong>
+                    </span>
+                    <span>
+                      Rayon: <strong className="text-slate-800">{currentProduct.CATEGORY_NAME || '—'}</strong>
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setPrintScope('selected_only');
+                      handleDirectPrint();
+                    }}
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition"
+                    title="Imprimer directement cet article sélectionné"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Imprimer cet article</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -1352,7 +1530,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
                     Par feuille: <strong className="text-blue-700">{imposition.total_per_page} étiquettes</strong>
                   </div>
                   <div>
-                    Feuilles requises: <strong className="text-slate-900">{Math.ceil((products.length + (impositionConfig.start_offset_slot || 0)) / imposition.total_per_page)}</strong>
+                    Feuilles requises: <strong className="text-slate-900">{Math.ceil((effectivePrintItems.length + (impositionConfig.start_offset_slot || 0)) / imposition.total_per_page)} ({effectivePrintItems.length} étiquette{effectivePrintItems.length > 1 ? 's' : ''})</strong>
                   </div>
                   <div>
                     Marge Horiz.: <strong className="text-slate-900">{imposition.horizontal_offset_mm.toFixed(1)} mm</strong>
@@ -1385,7 +1563,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
                   const startOffset = impositionConfig.start_offset_slot || 0;
                   const isSkipped = slotIdx < startOffset;
                   const prodIndex = slotIdx - startOffset;
-                  const prod = prodIndex >= 0 ? products[prodIndex] : undefined;
+                  const prod = prodIndex >= 0 ? effectivePrintItems[prodIndex] : undefined;
 
                   const x = imposition.horizontal_offset_mm + col * (imposition.label_total_w_mm + impositionConfig.gap_mm);
                   const y = imposition.vertical_offset_mm + row * (imposition.label_total_h_mm + impositionConfig.gap_mm);

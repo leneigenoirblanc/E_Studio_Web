@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LabelTemplate, TemplateItem, ProductRecord } from '../types';
-import { SAMPLE_PRODUCTS } from '../sampleData';
+import { databaseService } from '../services/databaseService';
 import {
   Layers,
   Database,
@@ -67,7 +67,7 @@ export const SmartNavTreeSidebar: React.FC<SmartNavTreeSidebarProps> = ({
   const [activeTab, setActiveTab] = useState<'layers' | 'data' | 'rules'>('layers');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const sampleProduct: ProductRecord = SAMPLE_PRODUCTS[0] || ({} as ProductRecord);
+  const sampleProduct: ProductRecord = databaseService.getProducts()[0] || ({} as ProductRecord);
 
   // Available data catalog fields
   const dataCatalogFields = [

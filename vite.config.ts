@@ -46,15 +46,29 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
       },
       devOptions: {
-        enabled: true,
-        type: 'module',
+        enabled: false,
       },
     }),
   ],
+  build: {
+    target: 'esnext',
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-xlsx': ['xlsx'],
+          'vendor-jspdf': ['jspdf'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-react': ['react', 'react-dom'],
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
     allowedHosts: true,
+    hmr: false,
   },
 });
 

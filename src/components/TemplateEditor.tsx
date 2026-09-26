@@ -10,7 +10,7 @@ import { FindReplaceModal } from './FindReplaceModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { CanvasRulers } from './CanvasRulers';
 import { FloatingRulerHUD } from './FloatingRulerHUD';
-import { SAMPLE_PRODUCTS } from '../sampleData';
+import { databaseService } from '../services/databaseService';
 import {
   createObjectInstance,
   ElementStylePayload,
@@ -297,9 +297,36 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [marqueeStart, setMarqueeStart] = useState<{ x_mm: number; y_mm: number } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x_mm: number; y_mm: number; w_mm: number; h_mm: number } | null>(null);
 
+  const dbProducts = databaseService.getProducts();
+  const availablePreviewProducts: ProductRecord[] =
+    dbProducts.length > 0
+      ? dbProducts
+      : [
+          {
+            id: 'PREVIEW-001',
+            STORE_NAME: 'EXEMPLE MAGASIN',
+            PRODUCT_SCAN: '3250390123456',
+            PARTNO: 'REF-001',
+            ITEMNAME: 'Désignation Produit Exemple',
+            ITEMDESCRIPTION: 'Description détaillée pour aperçu du gabarit',
+            DIV_NAME: 'ÉPICERIE',
+            DEPT_NAME: 'BOISSONS',
+            CATEGORY_NAME: 'CAFÉ & THÉ',
+            BRAND_INFO: 'Marque Exemple',
+            PACK_UNIT: 'Paquet 250g',
+            SELLING_PRICE: 2450,
+            PROMOPRICE: 1950,
+            DISCOUNT_PCT: 20,
+            PROMO_LABEL: '-20% IMMÉDIAT',
+            UNIT_PRICE_TEXT: '9.80 € / kg',
+            TAX: 'TVA 18%',
+            SOH: 120,
+          },
+        ];
+
   const selectedItems = template.items.filter((i) => selectedItemIds.includes(i.id));
   const currentPreviewRecord: ProductRecord | undefined =
-    previewDataIndex !== null ? SAMPLE_PRODUCTS[previewDataIndex] : undefined;
+    previewDataIndex !== null ? availablePreviewProducts[previewDataIndex] || availablePreviewProducts[0] : undefined;
 
   // History / Undo / Redo
   const pushState = (newTemplate: LabelTemplate) => {
@@ -2191,7 +2218,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                 <button
                   onClick={() =>
                     setPreviewDataIndex((prev) =>
-                      prev !== null ? (prev > 0 ? prev - 1 : SAMPLE_PRODUCTS.length - 1) : 0
+                      prev !== null ? (prev > 0 ? prev - 1 : availablePreviewProducts.length - 1) : 0
                     )
                   }
                   className="p-0.5 hover:bg-slate-100 rounded text-slate-600"
@@ -2199,12 +2226,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                   <ChevronLeft className="w-3 h-3" />
                 </button>
                 <span className="font-mono text-[10px] text-slate-700 font-bold px-0.5">
-                  #{previewDataIndex + 1}/{SAMPLE_PRODUCTS.length}
+                  #{previewDataIndex + 1}/{availablePreviewProducts.length}
                 </span>
                 <button
                   onClick={() =>
                     setPreviewDataIndex((prev) =>
-                      prev !== null ? (prev < SAMPLE_PRODUCTS.length - 1 ? prev + 1 : 0) : 0
+                      prev !== null ? (prev < availablePreviewProducts.length - 1 ? prev + 1 : 0) : 0
                     )
                   }
                   className="p-0.5 hover:bg-slate-100 rounded text-slate-600"

@@ -1,6 +1,13 @@
-// Lightweight, robust QR code matrix generator for labels and shelf tags
+// Lightweight, robust QR code matrix generator with High-Performance LRU/Map caching
+
+const qrMatrixCache = new Map<string, boolean[][]>();
+const qrPathCache = new Map<string, string>();
 
 export function generateQrMatrix(text: string): boolean[][] {
+  const content = text || 'https://example.com';
+  const cached = qrMatrixCache.get(content);
+  if (cached) return cached;
+
   const size = 25; // 25x25 Version 2 grid
   const matrix: boolean[][] = Array.from({ length: size }, () => Array(size).fill(false));
 
@@ -50,8 +57,8 @@ export function generateQrMatrix(text: string): boolean[][] {
 
   // Deterministic pseudo-random fill based on input text content
   let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  for (let i = 0; i < content.length; i++) {
+    hash = ((hash << 5) - hash + content.charCodeAt(i)) | 0;
   }
   let seed = Math.abs(hash) || 12345;
 
@@ -76,7 +83,48 @@ export function generateQrMatrix(text: string): boolean[][] {
     }
   }
 
+  if (qrMatrixCache.size > 2000) qrMatrixCache.clear();
+  qrMatrixCache.set(content, matrix);
   return matrix;
+}
+
+/**
+ * Builds a single SVG path definition string for a QR matrix.
+ * Collapses up to ~841 individual SVG <rect> tags into 1 single <path> tag!
+ */
+export function getQrSvgPath(matrix: boolean[][]): string {
+  const size = matrix.length;
+  const cacheKey = `${size}_${matrix[0]?.slice(0, 10).join('')}_${matrix[matrix.length - 1]?.slice(0, 10).join('')}`;
+  const cached = qrPathCache.get(cacheKey);
+  if (cached) return cached;
+
+  let d = '';
+  const cellSize = 100 / size;
+
+  for (let r = 0; r < size; r++) {
+    const y = (r * cellSize).toFixed(2);
+    const h = (cellSize + 0.05).toFixed(2);
+
+    let c = 0;
+    while (c < size) {
+      if (matrix[r][c]) {
+        let span = 1;
+        while (c + span < size && matrix[r][c + span]) {
+          span++;
+        }
+        const x = (c * cellSize).toFixed(2);
+        const w = (span * cellSize + 0.05).toFixed(2);
+        d += `M${x} ${y}h${w}v${h}h-${w}Z `;
+        c += span;
+      } else {
+        c++;
+      }
+    }
+  }
+
+  if (qrPathCache.size > 1000) qrPathCache.clear();
+  qrPathCache.set(cacheKey, d);
+  return d;
 }
 
 /**
