@@ -26,7 +26,8 @@
     "react-dom": "^18.3.1",
     "tailwind-merge": "^3.0.1",
     "tsx": "^4.23.15",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@nanonets/graft": "^0.20.0",

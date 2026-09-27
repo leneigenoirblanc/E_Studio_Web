@@ -11,6 +11,7 @@ import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { CanvasRulers } from './CanvasRulers';
 import { FloatingRulerHUD } from './FloatingRulerHUD';
 import { databaseService } from '../services/databaseService';
+import { useAppStore } from '../store/useAppStore';
 import {
   createObjectInstance,
   ElementStylePayload,
@@ -25,6 +26,7 @@ import {
 } from '../utils/smartGuides';
 import { applySemanticSnapping } from '../utils/semanticSnapping';
 import { calculateDynamicInstantiationPosition } from '../utils/dynamicPlacement';
+import { alignTemplateItems, distributeTemplateItems, AlignmentDirection } from '../utils/canvasAlignment';
 import {
   Save,
   Download,
@@ -135,10 +137,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [isInspectorDrawerOpen, setIsInspectorDrawerOpen] = useState(true);
   const [isHeatmapActive, setIsHeatmapActive] = useState(false);
 
-  // Modals state
-  const [showCalibrationModal, setShowCalibrationModal] = useState(false);
-  const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
-  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  // Centralized Modals state from useAppStore
+  const { modals, openModal, closeModal } = useAppStore();
 
   // Mouse live position (mm) for bottom status bar
   const [mousePosMm, setMousePosMm] = useState<{ x_mm: number; y_mm: number } | null>(null);
@@ -451,77 +451,16 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   };
 
   // Alignment & Distribution helpers for multi-selection
-  const handleAlign = (type: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
+  const handleAlign = (type: AlignmentDirection) => {
     if (selectedItems.length < 2) return;
-
-    let targetVal = 0;
-    if (type === 'left') {
-      targetVal = Math.min(...selectedItems.map((i) => i.x_mm));
-    } else if (type === 'right') {
-      targetVal = Math.max(...selectedItems.map((i) => i.x_mm + i.w_mm));
-    } else if (type === 'center') {
-      const minX = Math.min(...selectedItems.map((i) => i.x_mm));
-      const maxX = Math.max(...selectedItems.map((i) => i.x_mm + i.w_mm));
-      targetVal = (minX + maxX) / 2;
-    } else if (type === 'top') {
-      targetVal = Math.min(...selectedItems.map((i) => i.y_mm));
-    } else if (type === 'bottom') {
-      targetVal = Math.max(...selectedItems.map((i) => i.y_mm + i.h_mm));
-    } else if (type === 'middle') {
-      const minY = Math.min(...selectedItems.map((i) => i.y_mm));
-      const maxY = Math.max(...selectedItems.map((i) => i.y_mm + i.h_mm));
-      targetVal = (minY + maxY) / 2;
-    }
-
-    const updated = selectedItems.map((item) => {
-      if (type === 'left') return { ...item, x_mm: targetVal };
-      if (type === 'right') return { ...item, x_mm: targetVal - item.w_mm };
-      if (type === 'center') return { ...item, x_mm: targetVal - item.w_mm / 2 };
-      if (type === 'top') return { ...item, y_mm: targetVal };
-      if (type === 'bottom') return { ...item, y_mm: targetVal - item.h_mm };
-      if (type === 'middle') return { ...item, y_mm: targetVal - item.h_mm / 2 };
-      return item;
-    });
-
+    const updated = alignTemplateItems(selectedItems, type, template);
     handleUpdateMultipleItems(updated);
   };
 
   const handleDistribute = (direction: 'horizontal' | 'vertical') => {
     if (selectedItems.length < 3) return;
-
-    if (direction === 'horizontal') {
-      const sorted = [...selectedItems].sort((a, b) => a.x_mm - b.x_mm);
-      const minX = sorted[0].x_mm;
-      const last = sorted[sorted.length - 1];
-      const maxX = last.x_mm + last.w_mm;
-      const totalItemW = sorted.reduce((sum, item) => sum + item.w_mm, 0);
-      const totalGap = maxX - minX - totalItemW;
-      const gap = totalGap / (sorted.length - 1);
-
-      let currentX = minX;
-      const updated = sorted.map((item) => {
-        const res = { ...item, x_mm: currentX };
-        currentX += item.w_mm + gap;
-        return res;
-      });
-      handleUpdateMultipleItems(updated);
-    } else {
-      const sorted = [...selectedItems].sort((a, b) => a.y_mm - b.y_mm);
-      const minY = sorted[0].y_mm;
-      const last = sorted[sorted.length - 1];
-      const maxY = last.y_mm + last.h_mm;
-      const totalItemH = sorted.reduce((sum, item) => sum + item.h_mm, 0);
-      const totalGap = maxY - minY - totalItemH;
-      const gap = totalGap / (sorted.length - 1);
-
-      let currentY = minY;
-      const updated = sorted.map((item) => {
-        const res = { ...item, y_mm: currentY };
-        currentY += item.h_mm + gap;
-        return res;
-      });
-      handleUpdateMultipleItems(updated);
-    }
+    const updated = distributeTemplateItems(selectedItems, direction);
+    handleUpdateMultipleItems(updated);
   };
 
   const addItem = (type: TemplateItem['type'] | string, customField?: string) => {
@@ -1037,7 +976,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
     // Find & Replace: Ctrl+F
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-      setIsFindReplaceOpen(true);
+      openModal('isFindReplaceOpen');
       e.preventDefault();
       return;
     }
@@ -1753,7 +1692,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             category="Édition"
           >
             <button
-              onClick={() => setIsFindReplaceOpen(true)}
+              onClick={() => openModal('isFindReplaceOpen')}
               className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
             >
               <Search className="w-3.5 h-3.5 text-blue-600" />
@@ -1772,7 +1711,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             category="Aide"
           >
             <button
-              onClick={() => setIsShortcutsOpen(true)}
+              onClick={() => openModal('isShortcutsOpen')}
               className="p-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-lg transition"
             >
               <Keyboard className="w-4 h-4 text-slate-600" />
@@ -2157,7 +2096,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
             {/* Calibration Modal Trigger */}
             <button
-              onClick={() => setShowCalibrationModal(true)}
+              onClick={() => openModal('isCalibrationOpen')}
               className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition ${
                 template.calibration_image?.visible
                   ? 'bg-amber-100 text-amber-800 font-bold'
@@ -2585,7 +2524,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       </footer>
 
       {/* Calibration Image Settings Modal */}
-      {showCalibrationModal && (
+      {modals.isCalibrationOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
@@ -2594,7 +2533,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                 <h2 className="font-bold text-slate-900 text-sm">Image de Calibration & Repérage</h2>
               </div>
               <button
-                onClick={() => setShowCalibrationModal(false)}
+                onClick={() => closeModal('isCalibrationOpen')}
                 className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition"
               >
                 <X className="w-4 h-4" />
@@ -2899,7 +2838,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
             <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
               <button
-                onClick={() => setShowCalibrationModal(false)}
+                onClick={() => closeModal('isCalibrationOpen')}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs shadow-xs"
               >
                 Appliquer et Fermer
@@ -2911,8 +2850,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
       {/* Global Find and Replace Modal */}
       <FindReplaceModal
-        isOpen={isFindReplaceOpen}
-        onClose={() => setIsFindReplaceOpen(false)}
+        isOpen={modals.isFindReplaceOpen}
+        onClose={() => closeModal('isFindReplaceOpen')}
         items={template.items}
         selectedItemIds={selectedItemIds}
         onSelectItems={setSelectedItemIds}
@@ -2921,8 +2860,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
       {/* Keyboard Shortcuts Cheatsheet Modal */}
       <KeyboardShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
+        isOpen={modals.isShortcutsOpen}
+        onClose={() => closeModal('isShortcutsOpen')}
       />
     </div>
   );

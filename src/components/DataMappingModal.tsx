@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useMappingDictionary } from '../context/MappingDictionaryContext';
 import { ProductRecord } from '../types';
+import { useAppStore } from '../store/useAppStore';
 import {
   Check,
   ArrowRight,
@@ -13,7 +14,6 @@ import {
   BookOpen,
   CheckCircle2,
 } from 'lucide-react';
-import { MappingDictionaryModal } from './MappingDictionaryModal';
 
 export interface DataMappingModalProps {
   rawHeaders: string[];
@@ -29,7 +29,7 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
   onCancel,
 }) => {
   const { dictionary, detectField, addAlias } = useMappingDictionary();
-  const [isDictionaryModalOpen, setIsDictionaryModalOpen] = useState(false);
+  const { openModal } = useAppStore();
   const [savedAliasesFeedback, setSavedAliasesFeedback] = useState<Record<string, string>>({});
 
   // Compute sample values for each column (up to 5 non-empty values for heuristic detection)
@@ -157,7 +157,7 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setIsDictionaryModalOpen(true)}
+              onClick={() => openModal('isMappingDictionaryOpen')}
               className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
             >
               <BookOpen className="w-3.5 h-3.5 text-blue-600" />
@@ -350,12 +350,6 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Mapping Dictionary Modal */}
-      <MappingDictionaryModal
-        isOpen={isDictionaryModalOpen}
-        onClose={() => setIsDictionaryModalOpen(false)}
-      />
     </div>
   );
 };

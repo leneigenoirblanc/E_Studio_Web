@@ -16,8 +16,8 @@ import { TierPricingStudio } from './TierPricingStudio';
 import { ProductClusteringStudio } from './ProductClusteringStudio';
 import { MultiSlotSignageStudio } from './MultiSlotSignageStudio';
 import { ImpositionCalibrationBoard } from './ImpositionCalibrationBoard';
-import { MappingDictionaryModal } from './MappingDictionaryModal';
 import { ContextTooltip, useTooltip } from '../context/TooltipContext';
+import { useAppStore } from '../store/useAppStore';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import {
@@ -85,15 +85,14 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   const [activeTab, setActiveTab] = useState<
     'preview' | 'data' | 'imposition' | 'tiers' | 'clustering' | 'multislot' | 'blueprint'
   >('preview');
+  const { modals, openModal, closeModal } = useAppStore();
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
-  const [isDictionaryModalOpen, setIsDictionaryModalOpen] = useState(false);
 
   const handleUpdateSingleProduct = (updated: ProductRecord) => {
     setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   };
 
-  // Excel Mapping Modal State
-  const [mappingModalOpen, setMappingModalOpen] = useState(false);
+  // Excel Mapping State
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<any[]>([]);
 
@@ -243,7 +242,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
           const headers = Object.keys(rawJson[0]);
           setRawHeaders(headers);
           setRawRows(rawJson);
-          setMappingModalOpen(true);
+          openModal('isDataMappingOpen');
         }
       } catch (err) {
         alert("Erreur lors de l'importation du fichier Excel/CSV : " + String(err));
@@ -257,7 +256,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   const handleApplyMapping = (mappedProducts: ProductRecord[]) => {
     setProducts(mappedProducts);
     setCurrentIndex(0);
-    setMappingModalOpen(false);
+    closeModal('isDataMappingOpen');
   };
 
   // Export Excel template of current records
@@ -671,7 +670,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
               category="Données"
             >
               <button
-                onClick={() => setIsDictionaryModalOpen(true)}
+                onClick={() => openModal('isMappingDictionaryOpen')}
                 className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
               >
                 <BookOpen className="w-3.5 h-3.5 text-blue-600" />
@@ -1781,20 +1780,14 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
       )}
 
       {/* Excel / CSV Built-in Data Mapping Modal */}
-      {mappingModalOpen && (
+      {modals.isDataMappingOpen && (
         <DataMappingModal
           rawHeaders={rawHeaders}
           rawRows={rawRows}
           onApplyMapping={handleApplyMapping}
-          onCancel={() => setMappingModalOpen(false)}
+          onCancel={() => closeModal('isDataMappingOpen')}
         />
       )}
-
-      {/* Mapping Dictionary Modal */}
-      <MappingDictionaryModal
-        isOpen={isDictionaryModalOpen}
-        onClose={() => setIsDictionaryModalOpen(false)}
-      />
 
       {/* ZPL Thermal Printer Modal */}
       {showZplModal && (
