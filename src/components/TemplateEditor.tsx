@@ -2866,3 +2866,5 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     </div>
   );
 };
+
+export default TemplateEditor;

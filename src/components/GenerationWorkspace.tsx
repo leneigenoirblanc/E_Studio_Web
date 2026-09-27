@@ -1990,3 +1990,5 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
     </div>
   );
 };
+
+export default GenerationWorkspace;

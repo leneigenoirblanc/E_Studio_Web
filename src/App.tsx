@@ -2,66 +2,30 @@ import React, { useEffect, Suspense, lazy } from 'react';
 import { LabelTemplate, ProductRecord } from './types';
 import { DEFAULT_TEMPLATES } from './defaultTemplates';
 import { HomeDashboard } from './components/HomeDashboard';
-import { TooltipProvider, useTooltip } from './context/TooltipContext';
+import { TooltipProvider } from './context/TooltipContext';
 import { MappingDictionaryProvider } from './context/MappingDictionaryContext';
 import { ToastProvider, useToast } from './components/ToastNotification';
 import { MobileScanLot, OfflineIndicator } from './pwa';
 import { AppTopNavigationBar } from './components/AppTopNavigationBar';
 import { useAppStore } from './store/useAppStore';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
-// Lazy-loaded heavy views and studios to maximize initial load performance
-const TemplateEditor = lazy(() =>
-  import('./components/TemplateEditor').then((m) => ({ default: m.TemplateEditor }))
-);
-const GenerationWorkspace = lazy(() =>
-  import('./components/GenerationWorkspace').then((m) => ({ default: m.GenerationWorkspace }))
-);
-const MasterDatabaseStudio = lazy(() =>
-  import('./components/MasterDatabaseStudio').then((m) => ({ default: m.MasterDatabaseStudio }))
-);
-const NewGabaritWizard = lazy(() =>
-  import('./components/NewGabaritWizard').then((m) => ({ default: m.NewGabaritWizard }))
-);
-const OmniChannelStudioModal = lazy(() =>
-  import('./components/OmniChannelStudioModal').then((m) => ({ default: m.OmniChannelStudioModal }))
-);
-const AccessibilityPreferencesModal = lazy(() =>
-  import('./components/AccessibilityPreferencesModal').then((m) => ({ default: m.AccessibilityPreferencesModal }))
-);
-const FontManagerModal = lazy(() =>
-  import('./components/FontManagerModal').then((m) => ({ default: m.FontManagerModal }))
-);
-const AuditTrailModal = lazy(() =>
-  import('./components/AuditTrailModal').then((m) => ({ default: m.AuditTrailModal }))
-);
-const MappingDictionaryModal = lazy(() =>
-  import('./components/MappingDictionaryModal').then((m) => ({ default: m.MappingDictionaryModal }))
-);
-const MobileTerminalView = lazy(() =>
-  import('./pwa/components/MobileTerminalView').then((m) => ({ default: m.MobileTerminalView }))
-);
-const MobileSyncHubModal = lazy(() =>
-  import('./pwa/components/MobileSyncHubModal').then((m) => ({ default: m.MobileSyncHubModal }))
-);
-const LabelsHubStudio = lazy(() =>
-  import('./components/LabelsHubStudio').then((m) => ({ default: m.LabelsHubStudio }))
-);
-const PrintersStudio = lazy(() =>
-  import('./components/PrintersStudio').then((m) => ({ default: m.PrintersStudio }))
-);
-const PrintJobsStudio = lazy(() =>
-  import('./components/PrintJobsStudio').then((m) => ({ default: m.PrintJobsStudio }))
-);
-const PrintingSettingsModal = lazy(() =>
-  import('./components/PrintingSettingsModal').then((m) => ({ default: m.PrintingSettingsModal }))
-);
-
-const ViewLoadingFallback = () => (
-  <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 text-white min-h-[50vh] p-8">
-    <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-4" />
-    <span className="text-sm font-semibold text-slate-300">Chargement du module...</span>
-  </div>
-);
+// Direct imports for core studio views to eliminate dynamic chunk loading failures
+import { TemplateEditor } from './components/TemplateEditor';
+import { GenerationWorkspace } from './components/GenerationWorkspace';
+import { MasterDatabaseStudio } from './components/MasterDatabaseStudio';
+import { NewGabaritWizard } from './components/NewGabaritWizard';
+import { OmniChannelStudioModal } from './components/OmniChannelStudioModal';
+import { AccessibilityPreferencesModal } from './components/AccessibilityPreferencesModal';
+import { FontManagerModal } from './components/FontManagerModal';
+import { AuditTrailModal } from './components/AuditTrailModal';
+import { MappingDictionaryModal } from './components/MappingDictionaryModal';
+import { LabelsHubStudio } from './components/LabelsHubStudio';
+import { PrintersStudio } from './components/PrintersStudio';
+import { PrintJobsStudio } from './components/PrintJobsStudio';
+import { PrintingSettingsModal } from './components/PrintingSettingsModal';
+import { MobileTerminalView } from './pwa/components/MobileTerminalView';
+import { MobileSyncHubModal } from './pwa/components/MobileSyncHubModal';
 
 function AppContent() {
   const toast = useToast();
@@ -71,9 +35,6 @@ function AppContent() {
     templates,
     activeTemplate,
     currentView,
-    totalProductsCount,
-    tursoConfig,
-    pendingLotsCount,
     modals,
     mobileInitialProducts,
     mobileInitialBatchName,
@@ -142,9 +103,9 @@ function AppContent() {
       {/* Top Application Navigation Bar with Integrated History & Centralized State */}
       <AppTopNavigationBar />
 
-      {/* Main Viewport Container */}
+      {/* Main Viewport Container protected with ErrorBoundary */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-        <Suspense fallback={<ViewLoadingFallback />}>
+        <ErrorBoundary onReset={() => navigateTo('home')}>
           {currentView === 'home' && (
             <HomeDashboard
               onDuplicateTemplate={handleDuplicateTemplate}
@@ -265,7 +226,7 @@ function AppContent() {
             isOpen={modals.isPrintingSettingsOpen}
             onClose={() => closeModal('isPrintingSettingsOpen')}
           />
-        </Suspense>
+        </ErrorBoundary>
       </div>
 
       {/* Global PWA Offline Connectivity Indicator */}
@@ -276,13 +237,15 @@ function AppContent() {
 
 export function App() {
   return (
-    <TooltipProvider>
-      <MappingDictionaryProvider>
-        <ToastProvider>
-          <AppContent />
-        </ToastProvider>
-      </MappingDictionaryProvider>
-    </TooltipProvider>
+    <ErrorBoundary>
+      <TooltipProvider>
+        <MappingDictionaryProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </MappingDictionaryProvider>
+      </TooltipProvider>
+    </ErrorBoundary>
   );
 }
 
