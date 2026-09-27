@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Settings,
+  Printer,
   Type,
   BookOpen,
   Cpu,
@@ -93,8 +94,11 @@ export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) =
   const navItems: { view: AppView; label: string; badge?: number }[] = [
     { view: 'home', label: "Vue d'ensemble" },
     { view: 'database', label: 'Catalogue' },
+    { view: 'labels', label: 'Formats & Gabarits' },
     { view: 'editor', label: 'Conception' },
     { view: 'generation', label: 'Tirage & Planches' },
+    { view: 'printers', label: 'Imprimantes' },
+    { view: 'jobs', label: 'File & Historique' },
     { view: 'mobile', label: 'Collecte Mobile', badge: pendingLotsCount > 0 ? pendingLotsCount : undefined },
   ];
 
@@ -185,6 +189,17 @@ export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) =
 
             {toolsOpen && (
               <div className="absolute right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-1 z-50 animate-in fade-in-50 zoom-in-95">
+                <button
+                  onClick={() => {
+                    setToolsOpen(false);
+                    store.openModal('isPrintingSettingsOpen');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-blue-400 hover:bg-slate-700/70 transition-colors text-left"
+                >
+                  <Printer className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Paramètres d'impression (i18n)</span>
+                </button>
+
                 <button
                   onClick={() => {
                     setToolsOpen(false);

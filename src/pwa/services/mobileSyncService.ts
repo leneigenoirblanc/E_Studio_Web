@@ -20,87 +20,11 @@ import {
   createEstudioPairV2Uri,
 } from '../crypto';
 
-const STORAGE_LOTS_KEY = 'estudio_pwa_lots_v2';
+const STORAGE_LOTS_KEY = 'estudio_pwa_lots_v3';
 const STORAGE_CONFIG_KEY = 'estudio_pwa_sync_config_v2';
 const BROADCAST_CHANNEL_NAME = 'estudio_mobile_sync_bus_v2';
 
-const SAMPLE_MOBILE_LOTS: MobileScanLot[] = [
-  {
-    id: 'TB-849201',
-    tableId: 'TB-849201',
-    name: 'Changement Prix Épicerie',
-    department: 'Épicerie',
-    colorTag: 'GREEN',
-    createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
-    updatedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    operatorName: 'Jean Dupont',
-    deviceName: 'Terminal Rayon 03 (Android)',
-    deviceType: 'android',
-    status: 'ready',
-    targetTemplateId: 'Étiquette Rayon Classique (50x30 mm)',
-    syncMethod: 'direct_lan',
-    totalLabelsCount: 15,
-    items: [
-      {
-        id: 'item_01',
-        code: '3017620422003',
-        designation: 'Nutella Pâte à Tartiner 400g',
-        price: 3.89,
-        promoPrice: 3.29,
-        quantity: 5,
-        facing: 2,
-        scannedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-        note: 'Sticker promo -15% à apposer',
-      },
-      {
-        id: 'item_02',
-        code: '5449000000996',
-        designation: 'Coca-Cola Original 1.5L',
-        price: 1.95,
-        quantity: 10,
-        facing: 4,
-        scannedAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-      },
-    ],
-  },
-  {
-    id: 'TB-920412',
-    tableId: 'TB-920412',
-    name: 'Arrivage Boissons & Jus Frais',
-    department: 'Boissons',
-    colorTag: 'BLUE',
-    createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-    updatedAt: new Date(Date.now() - 1000 * 60 * 85).toISOString(),
-    operatorName: 'Sébastien M.',
-    deviceName: 'Terminal Zebra TC26 (Android DataWedge)',
-    deviceType: 'native_terminal',
-    status: 'received',
-    targetTemplateId: 'Étiquette Promotionnelle Rouge (70x40 mm)',
-    syncMethod: 'direct_lan',
-    totalLabelsCount: 10,
-    items: [
-      {
-        id: 'item_m4',
-        code: '3250390667788',
-        designation: "Jus d'Orange Pur Jus Sans Pulpe 1L",
-        price: 2.19,
-        promoPrice: 1.79,
-        quantity: 6,
-        facing: 2,
-        scannedAt: new Date(Date.now() - 1000 * 60 * 110).toISOString(),
-      },
-      {
-        id: 'item_m5',
-        code: '3250390112233',
-        designation: 'Limonade Artisanale Citron Bio 75cl',
-        price: 1.89,
-        quantity: 4,
-        facing: 1,
-        scannedAt: new Date(Date.now() - 1000 * 60 * 95).toISOString(),
-      },
-    ],
-  },
-];
+const SAMPLE_MOBILE_LOTS: MobileScanLot[] = [];
 
 class MobileSyncService {
   private lots: MobileScanLot[] = [];

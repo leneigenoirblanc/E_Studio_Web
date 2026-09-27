@@ -81,7 +81,8 @@ export function sanitizePriceValue(val: any): number {
   // Remove currency symbols, units and letter words
   str = str.replace(/[€$£a-zA-Z\s]/g, '');
 
-  // Handle European comma vs dot (e.g. 12,50 -> 12.50)
+  // Handle European comma or slash vs dot (e.g. 12,50 or 12/50 -> 12.50)
+  str = str.replace(/\//g, ',');
   if (str.includes(',') && !str.includes('.')) {
     str = str.replace(',', '.');
   } else if (str.includes(',') && str.includes('.')) {

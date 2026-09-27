@@ -8,6 +8,8 @@ import { PricingEngine } from '../utils/pricingEngine';
 import { DataMappingModal } from './DataMappingModal';
 import { PptxExporter } from '../utils/pptxExporter';
 import { ZplExporter } from '../utils/zplExporter';
+import { HeadlessCanvasRenderer } from '../utils/headlessCanvasRenderer';
+import { ExportService } from '../domain/exportService';
 import { generateCode128Bars, generateEAN13Bars } from '../utils/barcodeGenerator';
 import { generateQrMatrix } from '../utils/qrGenerator';
 import { AVERY_STANDARD_CATALOG } from '../utils/averyCatalog';
@@ -16,10 +18,12 @@ import { TierPricingStudio } from './TierPricingStudio';
 import { ProductClusteringStudio } from './ProductClusteringStudio';
 import { MultiSlotSignageStudio } from './MultiSlotSignageStudio';
 import { ImpositionCalibrationBoard } from './ImpositionCalibrationBoard';
+import { ProductionPrintModal } from './ProductionPrintModal';
 import { ContextTooltip, useTooltip } from '../context/TooltipContext';
 import { useAppStore } from '../store/useAppStore';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import {
   ChevronLeft,
   ChevronRight,
@@ -85,8 +89,9 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   const [activeTab, setActiveTab] = useState<
     'preview' | 'data' | 'imposition' | 'tiers' | 'clustering' | 'multislot' | 'blueprint'
   >('preview');
-  const { modals, openModal, closeModal } = useAppStore();
+  const { modals, openModal, closeModal, navigateTo } = useAppStore();
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [isProductionPrintOpen, setIsProductionPrintOpen] = useState(false);
 
   const handleUpdateSingleProduct = (updated: ProductRecord) => {
     setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
@@ -141,8 +146,8 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
 
   const currentProduct = filteredProducts[currentIndex] || filteredProducts[0] || null;
 
-  // Print & Preview Scope Mode (Defaults to Selected Item Only to avoid entire catalog overhauls!)
-  const [printScope, setPrintScope] = useState<'selected_only' | 'checked_only' | 'all'>('selected_only');
+  // Print & Preview Scope Mode (Defaults to 'all' to print all actual user products)
+  const [printScope, setPrintScope] = useState<'selected_only' | 'checked_only' | 'all'>('all');
   const [selectedCopies, setSelectedCopies] = useState<number>(1);
   const [fillSheetWithSelected, setFillSheetWithSelected] = useState<boolean>(false);
   const [checkedProductIds, setCheckedProductIds] = useState<Set<string>>(new Set());
@@ -184,6 +189,15 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
     // 'all'
     return filteredProducts;
   }, [printScope, currentProduct, fillSheetWithSelected, imposition, selectedCopies, products, checkedProductIds, itemCopies, filteredProducts]);
+
+  // Unique products for fast WYSIWYG rasterization cache
+  const uniqueProductsToRender = useMemo(() => {
+    const map = new Map<string, ProductRecord>();
+    effectivePrintItems.forEach((p) => {
+      if (!map.has(p.id)) map.set(p.id, p);
+    });
+    return Array.from(map.values()).slice(0, 150);
+  }, [effectivePrintItems]);
 
   // Preflight diagnostics for rows
   const diagnostics = useMemo(() => {
@@ -256,6 +270,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   const handleApplyMapping = (mappedProducts: ProductRecord[]) => {
     setProducts(mappedProducts);
     setCurrentIndex(0);
+    setPrintScope('all');
     closeModal('isDataMappingOpen');
   };
 
@@ -589,45 +604,122 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
     return doc;
   };
 
-  // Generate and download Imposed PDF
-  const handleGeneratePdf = () => {
-    const doc = buildPdfDocument();
-    if (doc) {
-      doc.save(`etiquettes_imposees_${template.name.toLowerCase().replace(/\s+/g, '_')}.pdf`);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  // Helper: Build the WYSIWYG printable PDF document with high-DPI rasterization
+  const buildPdfDocumentAsync = async (): Promise<jsPDF | null> => {
+    if (!imposition) return null;
+    const isLandscape = impositionConfig.orientation === 'landscape';
+    const pdfFormat =
+      impositionConfig.page_size === 'CUSTOM' && impositionConfig.custom_page_w_mm && impositionConfig.custom_page_h_mm
+        ? [impositionConfig.custom_page_w_mm, impositionConfig.custom_page_h_mm]
+        : impositionConfig.page_size.toLowerCase();
+
+    const doc = new jsPDF({
+      orientation: isLandscape ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: pdfFormat as any,
+    });
+
+    const labelsPerPage = imposition.total_per_page;
+    const startOffset = Math.max(0, Math.min(labelsPerPage - 1, impositionConfig.start_offset_slot || 0));
+    const totalItemsToPlace = effectivePrintItems.length + startOffset;
+    const totalPages = Math.max(1, Math.ceil(totalItemsToPlace / labelsPerPage));
+
+    const gapX = Math.max(0, impositionConfig.gap_x_mm ?? impositionConfig.gap_mm ?? 2.0);
+    const gapY = Math.max(0, impositionConfig.gap_y_mm ?? impositionConfig.gap_mm ?? 2.0);
+
+    // Raster cache per product ID to achieve blazing-fast WYSIWYG exports
+    const renderedCache = new Map<string, string>();
+
+    let productCursor = 0;
+
+    for (let page = 0; page < totalPages; page++) {
+      if (page > 0) doc.addPage();
+
+      for (let slot = 0; slot < labelsPerPage; slot++) {
+        if (page === 0 && slot < startOffset) continue;
+        if (productCursor >= effectivePrintItems.length) break;
+
+        const prod = effectivePrintItems[productCursor];
+        productCursor++;
+
+        const col = slot % imposition.cols;
+        const row = Math.floor(slot / imposition.cols);
+
+        const x = imposition.horizontal_offset_mm + col * (imposition.label_total_w_mm + gapX);
+        const y = imposition.vertical_offset_mm + row * (imposition.label_total_h_mm + gapY);
+
+        // Render using Headless Canvas Reproduction
+        const cacheKey = `${template.name}_${prod?.id || 'demo'}_${template.items.length}`;
+        let imgData = renderedCache.get(cacheKey);
+
+        if (!imgData) {
+          imgData = await HeadlessCanvasRenderer.renderLabelToDataUrl(template, prod, {
+            dpi: pdfConfig.dpi || 300,
+            renderBackground: true,
+          });
+          renderedCache.set(cacheKey, imgData);
+        }
+
+        if (imgData) {
+          doc.addImage(imgData, 'PNG', x, y, template.width_mm, template.height_mm);
+        }
+
+        // Draw crop marks / cut marks on the page if requested
+        if (impositionConfig.show_cut_marks) {
+          doc.setDrawColor(180, 180, 180);
+          doc.setLineWidth(0.15);
+          doc.line(x - 2, y, x + 2, y);
+          doc.line(x, y - 2, x, y + 2);
+          doc.line(x + template.width_mm - 2, y + template.height_mm, x + template.width_mm + 2, y + template.height_mm);
+          doc.line(x + template.width_mm, y + template.height_mm - 2, x + template.width_mm, y + template.height_mm + 2);
+        }
+      }
+    }
+
+    return doc;
+  };
+
+  // Generate and download Imposed PDF with WYSIWYG guarantee
+  const handleGeneratePdf = async () => {
+    if (!imposition) return;
+    setIsExportingPdf(true);
+    try {
+      const doc = await ExportService.generatePdfBatchAsync(
+        template,
+        effectivePrintItems,
+        imposition,
+        impositionConfig,
+        pdfConfig
+      );
+      if (doc) {
+        doc.save(`etiquettes_imposees_${template.name.toLowerCase().replace(/\s+/g, '_')}.pdf`);
+      }
+    } catch (err) {
+      console.warn('WYSIWYG PDF error, using vector fallback', err);
+      const fallback = buildPdfDocument();
+      if (fallback) fallback.save(`etiquettes_imposees_${template.name.toLowerCase().replace(/\s+/g, '_')}.pdf`);
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
   // Direct Print to Physical Printer via iframe/blob
-  const handleDirectPrint = () => {
-    const doc = buildPdfDocument();
-    if (!doc) return;
-
+  const handleDirectPrint = async () => {
+    if (!imposition) return;
+    setIsExportingPdf(true);
     try {
-      const blob = doc.output('blob');
-      const blobUrl = URL.createObjectURL(blob);
-
-      // Create hidden iframe to trigger native browser/physical print dialog
-      const printIframe = document.createElement('iframe');
-      printIframe.style.position = 'fixed';
-      printIframe.style.right = '0';
-      printIframe.style.bottom = '0';
-      printIframe.style.width = '0';
-      printIframe.style.height = '0';
-      printIframe.style.border = '0';
-      printIframe.src = blobUrl;
-
-      printIframe.onload = () => {
-        try {
-          printIframe.contentWindow?.focus();
-          printIframe.contentWindow?.print();
-        } catch {
-          window.open(blobUrl, '_blank');
-        }
-      };
-
-      document.body.appendChild(printIframe);
+      await ExportService.printLabelsDirectlyAsync(
+        template,
+        effectivePrintItems,
+        imposition,
+        impositionConfig
+      );
     } catch {
       window.print();
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -762,16 +854,16 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
             </div>
 
             <ContextTooltip
-              title="Impression Directe Navigateur"
-              content="Envoyer directement la planche d'étiquettes vers l'imprimante laser ou thermique par défaut"
+              title="Lancer le Tirage de Production"
+              content="Sélection de l'imprimante, contrôle de compatibilité matérielle, gestion du spooler et tirage direct"
               category="Production"
             >
               <button
-                onClick={handleDirectPrint}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+                onClick={() => setIsProductionPrintOpen(true)}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
               >
                 <Printer className="w-3.5 h-3.5 text-white" />
-                <span>Imprimer Direct</span>
+                <span>Lancer le Tirage</span>
               </button>
             </ContextTooltip>
 
@@ -782,10 +874,11 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
             >
               <button
                 onClick={handleGeneratePdf}
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
+                disabled={isExportingPdf}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition disabled:opacity-60"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Télécharger PDF Planche</span>
+                <Download className={`w-3.5 h-3.5 ${isExportingPdf ? 'animate-bounce' : ''}`} />
+                <span>{isExportingPdf ? 'Génération WYSIWYG 300 DPI...' : 'Télécharger PDF Planche'}</span>
               </button>
             </ContextTooltip>
           </div>
@@ -1594,17 +1687,26 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
                           <span className="text-[8px] font-bold text-amber-700">Déjà Utilisé (#{slotIdx + 1})</span>
                           <span className="text-[7px] text-amber-600/80">Sauté</span>
                         </div>
+                      ) : prod ? (
+                        <div className="w-full h-full pointer-events-none relative overflow-hidden flex items-center justify-center">
+                          <div style={{ transform: `scale(${1.5 / 3.78})`, transformOrigin: 'top left', width: `${template.width_mm * 3.78}px`, height: `${template.height_mm * 3.78}px` }}>
+                            <LabelRenderer
+                              template={template}
+                              record={prod}
+                              zoom={1.0}
+                              scalePxPerMm={3.78}
+                              showBleed={false}
+                              showInnerMargins={false}
+                              showHazardWarnings={false}
+                              interactive={false}
+                            />
+                          </div>
+                        </div>
                       ) : (
-                        <>
-                          <div className="flex items-center justify-between text-[8px] font-bold text-slate-700">
-                            <span className="truncate">{prod ? prod.ITEMNAME : `Emplacement #${slotIdx + 1}`}</span>
-                            {prod && <span className="text-blue-600">{prod.SELLING_PRICE} F</span>}
-                          </div>
-                          <div className="flex items-center justify-between text-[7px] text-slate-400 font-mono">
-                            <span>{prod?.PRODUCT_SCAN || '3250390123456'}</span>
-                            <span>{template.width_mm}x{template.height_mm}mm</span>
-                          </div>
-                        </>
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-1 text-[8px] text-slate-400">
+                          <span>Emplacement #{slotIdx + 1}</span>
+                          <span className="text-[7px] text-slate-300">Libre</span>
+                        </div>
                       )}
                     </div>
                   );
@@ -1876,6 +1978,15 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
           </div>
         </div>
       )}
+
+      {/* Production Print & Compatibility Modal */}
+      <ProductionPrintModal
+        isOpen={isProductionPrintOpen}
+        onClose={() => setIsProductionPrintOpen(false)}
+        template={template}
+        products={products}
+        onOpenPrintJobs={() => navigateTo('jobs')}
+      />
     </div>
   );
 };

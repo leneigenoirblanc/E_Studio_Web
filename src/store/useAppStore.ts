@@ -29,7 +29,8 @@ export type AppModalKey =
   | 'isFindReplaceOpen'
   | 'isShortcutsOpen'
   | 'isCalibrationOpen'
-  | 'isDataMappingOpen';
+  | 'isDataMappingOpen'
+  | 'isPrintingSettingsOpen';
 
 export interface NavigationHistoryEntry {
   view: AppView;
@@ -168,6 +169,7 @@ export const useAppStore = create<AppState>((set, get) => {
       isShortcutsOpen: false,
       isCalibrationOpen: false,
       isDataMappingOpen: false,
+      isPrintingSettingsOpen: false,
     },
 
     // Synchronous Setters

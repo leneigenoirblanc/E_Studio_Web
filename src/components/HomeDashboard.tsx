@@ -1,25 +1,29 @@
-import React, { useState, useRef } from 'react';
-import { LabelTemplate } from '../types';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { LabelTemplate, ProductRecord } from '../types';
 import { LabelRenderer } from './LabelRenderer';
 import { SAMPLE_PRODUCTS } from '../sampleData';
 import { Button, Card, Input } from './ui';
 import { ThemeConstants } from '../theme/ThemeConstants';
 import { useAppStore } from '../store/useAppStore';
+import { printerRepository } from '../domain/printing/printerRepository';
+import { printJobService } from '../domain/printing/printJobService';
+import { formatRepository } from '../domain/printing/formatRepository';
+import { databaseService } from '../services/databaseService';
 import {
-  Plus,
   Printer,
-  Edit3,
   Copy,
   Trash2,
   Download,
   Upload,
   Search,
   Database,
-  Smartphone,
   Layers,
   ArrowRight,
   MoreVertical,
   X,
+  Clock,
+  SlidersHorizontal,
+  Plus,
 } from 'lucide-react';
 
 export interface HomeDashboardProps {
@@ -30,13 +34,6 @@ export interface HomeDashboardProps {
   onDuplicateTemplate?: (template: LabelTemplate) => void;
   onDeleteTemplate?: (templateName: string) => void;
   onImportTemplate?: (template: LabelTemplate) => void;
-  onOpenRulesModal?: () => void;
-  onOpenAuditLogs?: () => void;
-  onOpenFontManager?: () => void;
-  onOpenMappingDictionary?: () => void;
-  onOpenMobileSync?: () => void;
-  onOpenMasterDatabase?: () => void;
-  pendingLotsCount?: number;
 }
 
 type TemplateCategoryFilter = 'ALL' | 'SHELF' | 'PROMO' | 'TIERS';
@@ -50,17 +47,27 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
   const onDuplicateTemplate = props.onDuplicateTemplate ?? ((tpl) => store.duplicateTemplate(tpl.name));
   const onDeleteTemplate = props.onDeleteTemplate ?? ((name) => store.deleteTemplate(name));
   const onImportTemplate = props.onImportTemplate ?? store.importTemplate;
-  const onOpenMobileSync = props.onOpenMobileSync ?? (() => store.openModal('isMobileSyncOpen'));
-  const onOpenMasterDatabase = props.onOpenMasterDatabase ?? (() => store.navigateTo('database'));
-  const pendingLotsCount = props.pendingLotsCount ?? store.pendingLotsCount;
+  const navigateTo = store.navigateTo;
+
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<TemplateCategoryFilter>('ALL');
   const [activeMenuTemplate, setActiveMenuTemplate] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Live operational data from domain repositories
+  const configuredPrinters = useMemo(() => printerRepository.getAll(), []);
+  const allFormats = useMemo(() => formatRepository.getAll(), []);
+  const printJobs = useMemo(() => printJobService.getAll(), []);
+  const activeJobs = useMemo(
+    () => printJobs.filter((j) => j.status === 'QUEUED' || j.status === 'PREPARING' || j.status === 'PRINTING'),
+    [printJobs]
+  );
+  const totalProductsCount = useMemo(() => databaseService.getProducts().length, []);
+
   // Keyboard shortcut '/' to focus search
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') {
         e.preventDefault();
@@ -129,21 +136,76 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
     e.target.value = '';
   };
 
+  const sampleProductsList: ProductRecord[] = useMemo(() => {
+    const dbProds = databaseService.getProducts();
+    return dbProds.length > 0 ? dbProds : SAMPLE_PRODUCTS;
+  }, []);
+
+  // Consolidated studio navigation items
+  const centralStudios = [
+    {
+      id: 'labels',
+      title: 'Studio Formats & Gabarits',
+      subtitle: `${templates.length} gabarits · ${allFormats.length} formats`,
+      description: 'Catalogue des formats normalisés (Small, Shelf, Large, Continu) et conception de gabarits.',
+      icon: <Layers className="w-5 h-5 text-violet-600" />,
+      bgIcon: 'bg-violet-50',
+      actionLabel: 'Gérer les formats & gabarits',
+      onClick: () => navigateTo('labels'),
+    },
+    {
+      id: 'printers',
+      title: 'Studio Parc d’Imprimantes',
+      subtitle: configuredPrinters.length === 0 ? 'Aucune configurée' : `${configuredPrinters.length} active(s)`,
+      description: 'Connexions physiques (WebUSB, Réseau RAW 9100, Wi-Fi, Pilote Système), calibrations et DPI.',
+      icon: <SlidersHorizontal className="w-5 h-5 text-emerald-600" />,
+      bgIcon: 'bg-emerald-50',
+      actionLabel: 'Gérer les imprimantes',
+      onClick: () => navigateTo('printers'),
+    },
+    {
+      id: 'jobs',
+      title: 'Studio File & Tirages',
+      subtitle: activeJobs.length > 0 ? `${activeJobs.length} en cours` : `${printJobs.length} travail(s)`,
+      description: 'File d’attente d’impression, monitoring en direct, reprise sur incident et historique des lots.',
+      icon: <Clock className="w-5 h-5 text-indigo-600" />,
+      bgIcon: 'bg-indigo-50',
+      actionLabel: 'Consulter la file',
+      onClick: () => navigateTo('jobs'),
+    },
+    {
+      id: 'database',
+      title: 'Catalogue Articles & Données',
+      subtitle: `${totalProductsCount} articles`,
+      description: 'Base de données des articles, prix de vente, codes EAN-13, promotions et paliers tarifaires.',
+      icon: <Database className="w-5 h-5 text-blue-600" />,
+      bgIcon: 'bg-blue-50',
+      actionLabel: 'Accéder au catalogue',
+      onClick: () => navigateTo('database'),
+    },
+  ];
+
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-y-auto min-h-0">
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8">
-        {/* Workspace Header & Operational Summary */}
+        
+        {/* Workspace Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200/80 pb-6">
           <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-semibold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                E-Studio · Système d'Étiquetage
+              </span>
+            </div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Poste de Balisage & Production
+              Vue d'Ensemble & Studios Centraux
             </h1>
             <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-              Concevez vos gabarits d'étiquettes, synchronisez les scans magasins et lancez vos planches d'impression.
+              Poste unifié de gestion : formats physiques, modèles d'imprimantes, gabarits vectoriels et production.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <input
               type="file"
               ref={fileInputRef}
@@ -156,6 +218,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
               size="sm"
               onClick={() => fileInputRef.current?.click()}
               leftIcon={<Upload className="w-4 h-4 text-slate-500" />}
+              title="Importer un gabarit JSON"
             >
               Importer Gabarit
             </Button>
@@ -171,124 +234,41 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
           </div>
         </div>
 
-        {/* Operational Workflow Steps (4 Core Modes) */}
+        {/* Consolidated Studios Navigation (Single Coherent List) */}
         <div>
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
-            Chaîne de Traitement Opérationnelle
+            Studios Centraux de l'Application
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Step 1: Catalog */}
-            <Card
-              variant="interactive"
-              onClick={onOpenMasterDatabase}
-              className="group flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <Database className="w-4 h-4" />
+            {centralStudios.map((studio) => (
+              <Card
+                key={studio.id}
+                variant="interactive"
+                onClick={studio.onClick}
+                className="group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${studio.bgIcon}`}>
+                      {studio.icon}
+                    </div>
+                    <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                      {studio.subtitle}
+                    </span>
                   </div>
-                  <span className="text-xs font-medium text-slate-400 font-mono">01</span>
+                  <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                    {studio.title}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    {studio.description}
+                  </p>
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                  Catalogue & Articles
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Importation des bases articles, codes-barres, tarification et remises.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-blue-600">
-                <span>Accéder au catalogue</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-            </Card>
-
-            {/* Step 2: Templates */}
-            <Card
-              variant="interactive"
-              onClick={onOpenNewWizard}
-              className="group flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                    <Layers className="w-4 h-4" />
-                  </div>
-                  <span className="text-xs font-mono font-medium text-slate-400">02</span>
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-blue-600">
+                  <span>{studio.actionLabel}</span>
+                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                  Conception Vectorielle
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Alignements magnétiques, typographies réglementaires et reliure aux champs.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-indigo-600">
-                <span>Créer un gabarit</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-            </Card>
-
-            {/* Step 3: Mobile Intake */}
-            <Card
-              variant="interactive"
-              onClick={onOpenMobileSync}
-              className="group flex flex-col justify-between relative"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-                    <Smartphone className="w-4 h-4" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {pendingLotsCount > 0 && (
-                      <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
-                        {pendingLotsCount} lot(s)
-                      </span>
-                    )}
-                    <span className="text-xs font-mono font-medium text-slate-400">03</span>
-                  </div>
-                </div>
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-amber-600 transition-colors">
-                  Collecte en Rayon
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Scans sur terminaux mobiles avec transmission instantanée vers la station.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-amber-600">
-                <span>Passerelle scans</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-            </Card>
-
-            {/* Step 4: Imposition & Print */}
-            <Card
-              variant="interactive"
-              onClick={() => {
-                if (templates.length > 0) onSelectTemplateToGenerate(templates[0]);
-              }}
-              className="group flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                    <Printer className="w-4 h-4" />
-                  </div>
-                  <span className="text-xs font-mono font-medium text-slate-400">04</span>
-                </div>
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
-                  Imposition & Tirage
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Calepinage multi-étiquettes A4/A3, repères de coupe, PDF haute définition et ZPL.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-emerald-600">
-                <span>Lancer le tirage</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-            </Card>
+              </Card>
+            ))}
           </div>
         </div>
 
@@ -298,7 +278,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
             <div className={ThemeConstants.classes.metadataContainer}>
               <span className="font-semibold text-slate-900">Bibliothèque de Gabarits</span>
               <span className={ThemeConstants.classes.metadataSeparator} aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums">{filteredTemplates.length} formats disponibles</span>
+              <span className="font-mono tabular-nums">{filteredTemplates.length} gabarits</span>
             </div>
 
             {/* Segmented Filter Control */}
@@ -326,7 +306,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
             </div>
           </div>
 
-          {/* Search Bar using UI Input */}
+          {/* Search Bar */}
           <div className="relative">
             <Input
               ref={searchInputRef}
@@ -357,7 +337,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
           {filteredTemplates.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredTemplates.map((template) => {
-                const sampleProduct = SAMPLE_PRODUCTS[0];
+                const sampleProduct = sampleProductsList[0];
                 const isMenuOpen = activeMenuTemplate === template.name;
 
                 return (
@@ -366,10 +346,11 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
                     noPadding
                     className="hover:shadow-md transition-all flex flex-col justify-between group"
                   >
-                    {/* Visual Preview Box */}
+                    {/* Visual Preview Box (Click to Edit) */}
                     <div
                       onClick={() => onSelectTemplateToEdit(template)}
-                      className="p-6 bg-slate-100/70 border-b border-slate-100 flex items-center justify-center cursor-pointer min-h-[170px] relative overflow-hidden"
+                      className="p-6 bg-slate-100/70 border-b border-slate-100 flex items-center justify-center cursor-pointer min-h-[170px] relative overflow-hidden group-hover:bg-slate-100 transition-colors"
+                      title="Ouvrir dans l'éditeur de conception vectorielle"
                     >
                       <div className="shadow-md rounded transition-transform group-hover:scale-[1.02]">
                         <LabelRenderer
@@ -387,6 +368,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
                           <h3
                             onClick={() => onSelectTemplateToEdit(template)}
                             className="font-bold text-sm text-slate-900 hover:text-blue-600 cursor-pointer transition-colors leading-snug"
+                            title="Ouvrir dans l'éditeur vectoriel"
                           >
                             {template.name}
                           </h3>
@@ -441,7 +423,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
                           </div>
                         </div>
 
-                        {/* Unboxed Zero-Pill Metadata */}
+                        {/* Physical Format & Specs */}
                         <div className="flex items-center gap-2 text-xs text-slate-500 mt-2 font-mono tabular-nums">
                           <span>
                             {template.width_mm} × {template.height_mm} mm
@@ -453,16 +435,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
                         </div>
                       </div>
 
-                      {/* Primary Actions */}
+                      {/* Clean Primary Actions */}
                       <div className="mt-5 pt-3 border-t border-slate-100 flex items-center gap-2">
                         <Button
                           variant="secondary"
                           size="sm"
                           fullWidth
                           onClick={() => onSelectTemplateToEdit(template)}
-                          leftIcon={<Edit3 className="w-3.5 h-3.5 text-slate-600" />}
+                          title="Modifier le gabarit dans l'atelier vectoriel"
                         >
-                          Modifier
+                          Concevoir
                         </Button>
 
                         <Button
@@ -471,6 +453,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = (props) => {
                           fullWidth
                           onClick={() => onSelectTemplateToGenerate(template)}
                           leftIcon={<Printer className="w-3.5 h-3.5" />}
+                          title="Lancer le tirage et l'imposition de planches"
                         >
                           Imprimer
                         </Button>

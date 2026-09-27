@@ -7,3 +7,4 @@ export * from './routes/catalogRoutes';
 export * from './routes/devicesRoutes';
 export * from './routes/eventsRoutes';
 export * from './routes/tursoRoutes';
+export * from './routes/printerDiscoveryRoutes';

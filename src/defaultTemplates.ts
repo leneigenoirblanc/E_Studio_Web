@@ -132,7 +132,7 @@ export const DEFAULT_TEMPLATES: LabelTemplate[] = [
         z_index: 3,
         locked: false,
         binding_key: "SELLING_PRICE",
-        text: "2 450",
+        text: "2,45",
         font_family: "Oswald",
         font_size_pt: 22.0,
         font_weight: "bold",

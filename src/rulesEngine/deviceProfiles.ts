@@ -137,33 +137,13 @@ export const DEVICE_PROFILES: Record<string, DeviceProfile> = {
 
 export const SAMPLE_STORES: StoreContext[] = [
   {
-    store_id: 'STORE-FR-042',
-    store_name: 'Hypermarché Paris Nation',
-    location: 'Paris, France',
-    region: 'Île-de-France',
+    store_id: 'STORE-001',
+    store_name: 'Magasin Principal',
+    location: 'Siège',
+    region: 'Principal',
     currency: 'EUR',
     tax_rate: 20.0,
-    active_campaigns: ['NATIONAL_SUMMER_PROMO', 'BIO_FESTIVAL'],
-    is_franchise: false,
-  },
-  {
-    store_id: 'STORE-FR-099',
-    store_name: 'Supermarché Lyon Part-Dieu',
-    location: 'Lyon, France',
-    region: 'Auvergne-Rhône-Alpes',
-    currency: 'EUR',
-    tax_rate: 20.0,
-    active_campaigns: ['NATIONAL_SUMMER_PROMO', 'LOCAL_MARGIN_DEFENSE'],
-    is_franchise: true,
-  },
-  {
-    store_id: 'STORE-CI-001',
-    store_name: 'Supermarché Abidjan Cocody',
-    location: 'Abidjan, Côte d\'Ivoire',
-    region: 'Lagunes',
-    currency: 'FCFA',
-    tax_rate: 18.0,
-    active_campaigns: ['PROMO_CASH_CARRY'],
+    active_campaigns: [],
     is_franchise: false,
   },
 ];

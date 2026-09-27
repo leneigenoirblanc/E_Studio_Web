@@ -262,17 +262,18 @@ export class PricingEngine {
     if (typeof val === 'number') {
       numVal = val;
     } else {
-      const parsed = parseFloat(String(val).replace(',', '.').replace(/[^0-9.-]+/g, ''));
+      const cleaned = String(val).replace(/[\/,]/g, '.').replace(/[^0-9.-]+/g, '');
+      const parsed = parseFloat(cleaned);
       numVal = isNaN(parsed) ? 0 : parsed;
     }
 
-    // Format with 2 decimals if has decimal part or if fixed
+    // Format with 2 decimals
     const formatted = numVal.toFixed(2);
     const [intPart, decPart] = formatted.split('.');
     
     // Group integer with spaces
     const integerGrouped = parseInt(intPart, 10).toLocaleString('fr-FR');
-    const hasDecimals = decPart !== undefined && decPart !== '00';
+    const hasDecimals = decPart !== undefined;
 
     return {
       integerPart: integerGrouped,
@@ -374,8 +375,26 @@ export class PricingEngine {
     if (item.binding_key) {
       const val = PricingEngine.getProductFieldValue(record, item.binding_key);
       if (val !== undefined && val !== null && val !== '') {
+        const isPriceField =
+          item.is_price ||
+          item.binding_key === 'SELLING_PRICE' ||
+          item.binding_key === 'PROMOPRICE' ||
+          item.binding_key.toLowerCase().includes('price') ||
+          item.binding_key.toLowerCase().includes('prix');
+
+        if (isPriceField) {
+          const num = typeof val === 'number'
+            ? val
+            : parseFloat(String(val).replace(/[\/,]/g, '.').replace(/[^0-9.-]+/g, ''));
+          if (!isNaN(num)) {
+            return num.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }
+        }
+
         if (typeof val === 'number') {
-          return val.toLocaleString('fr-FR');
+          return Number.isInteger(val)
+            ? val.toLocaleString('fr-FR')
+            : val.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         return String(val);
       }

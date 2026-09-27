@@ -1,4 +1,4 @@
-export type AppView = 'home' | 'editor' | 'generation' | 'database' | 'mobile';
+export type AppView = 'home' | 'editor' | 'generation' | 'database' | 'mobile' | 'labels' | 'printers' | 'jobs';
 
 export interface RouteState {
   view: AppView;
@@ -40,6 +40,12 @@ class NavigationService {
       view = 'database';
     } else if (cleanPath === 'mobile' || cleanPath === 'pwa' || cleanPath === 'terminal') {
       view = 'mobile';
+    } else if (cleanPath === 'labels' || cleanPath === 'formats' || cleanPath === 'templates') {
+      view = 'labels';
+    } else if (cleanPath === 'printers' || cleanPath === 'imprimantes') {
+      view = 'printers';
+    } else if (cleanPath === 'jobs' || cleanPath === 'queue' || cleanPath === 'travaux') {
+      view = 'jobs';
     } else {
       view = 'home';
     }

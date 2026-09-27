@@ -11,6 +11,7 @@ import {
   devicesRouter,
   eventsRouter,
   tursoRouter,
+  printerDiscoveryRouter,
 } from './src/server';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,6 +79,7 @@ app.use('/api/v2', catalogRouter);
 app.use('/api/v2', devicesRouter);
 app.use('/api/v2', eventsRouter);
 app.use('/api/v2', tursoRouter);
+app.use('/api/v2', printerDiscoveryRouter);
 
 // -------------------------------------------------------------
 // Vite Middlewares (Dev) or Static Assets (Prod)

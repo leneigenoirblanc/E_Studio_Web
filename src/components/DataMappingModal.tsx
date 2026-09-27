@@ -116,8 +116,17 @@ export const DataMappingModal: React.FC<DataMappingModalProps> = ({
         } else {
           const fieldDef = fieldMap.get(target);
           if (fieldDef?.numeric || fieldDef?.value_type === 'currency' || fieldDef?.value_type === 'number') {
-            const num = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.-]+/g, '')) || 0;
-            (prod as any)[target] = num;
+            if (typeof val === 'number') {
+              (prod as any)[target] = val;
+            } else {
+              let s = String(val).trim().replace(/[\/,]/g, '.');
+              // If multiple dots, strip earlier ones (thousands separators)
+              if ((s.match(/\./g) || []).length > 1) {
+                s = s.replace(/\.(?=.*\.)/g, '');
+              }
+              const num = parseFloat(s.replace(/[^0-9.-]+/g, '')) || 0;
+              (prod as any)[target] = num;
+            }
           } else {
             (prod as any)[target] = String(val).trim();
           }

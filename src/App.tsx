@@ -43,6 +43,18 @@ const MobileTerminalView = lazy(() =>
 const MobileSyncHubModal = lazy(() =>
   import('./pwa/components/MobileSyncHubModal').then((m) => ({ default: m.MobileSyncHubModal }))
 );
+const LabelsHubStudio = lazy(() =>
+  import('./components/LabelsHubStudio').then((m) => ({ default: m.LabelsHubStudio }))
+);
+const PrintersStudio = lazy(() =>
+  import('./components/PrintersStudio').then((m) => ({ default: m.PrintersStudio }))
+);
+const PrintJobsStudio = lazy(() =>
+  import('./components/PrintJobsStudio').then((m) => ({ default: m.PrintJobsStudio }))
+);
+const PrintingSettingsModal = lazy(() =>
+  import('./components/PrintingSettingsModal').then((m) => ({ default: m.PrintingSettingsModal }))
+);
 
 const ViewLoadingFallback = () => (
   <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 text-white min-h-[50vh] p-8">
@@ -164,6 +176,18 @@ function AppContent() {
             />
           )}
 
+          {currentView === 'labels' && (
+            <LabelsHubStudio
+              onSelectTemplateToEdit={selectToEdit}
+              onSelectTemplateToGenerate={selectToGenerate}
+              onCreateNewTemplate={() => openModal('isWizardOpen')}
+            />
+          )}
+
+          {currentView === 'printers' && <PrintersStudio />}
+
+          {currentView === 'jobs' && <PrintJobsStudio />}
+
           {currentView === 'mobile' && (
             <MobileTerminalView
               templates={templates}
@@ -234,6 +258,12 @@ function AppContent() {
           <AccessibilityPreferencesModal
             isOpen={modals.isPreferencesModalOpen}
             onClose={() => closeModal('isPreferencesModalOpen')}
+          />
+
+          {/* Printing & Internationalization Settings Modal */}
+          <PrintingSettingsModal
+            isOpen={modals.isPrintingSettingsOpen}
+            onClose={() => closeModal('isPrintingSettingsOpen')}
           />
         </Suspense>
       </div>

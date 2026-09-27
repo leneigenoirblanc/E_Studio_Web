@@ -1,4 +1,5 @@
 import { ProductRecord } from '../types';
+import { SAMPLE_PRODUCTS } from '../sampleData';
 
 const DB_NAME = 'EStudioMasterDB_v3';
 const DB_VERSION = 1;
@@ -168,7 +169,8 @@ class DatabaseService {
               localStorage.removeItem(MASTER_DB_STORAGE_KEY);
             } catch {}
           } else {
-            this.products = [];
+            this.products = [...SAMPLE_PRODUCTS];
+            this.schedulePersistToIndexedDB();
           }
         }
         this.rebuildSearchIndices();
@@ -177,15 +179,18 @@ class DatabaseService {
       };
 
       request.onerror = () => {
-        this.loadFromFallbackStorage();
+        this.products = this.loadFromFallbackStorage();
+        if (this.products.length === 0) {
+          this.products = [...SAMPLE_PRODUCTS];
+        }
         this.rebuildSearchIndices();
         this.isReady = true;
         this.notifyListeners();
       };
     } catch (e) {
       console.error('Error loading products from IndexedDB', e);
-      this.products = [];
-      this.searchIndices = [];
+      this.products = [...SAMPLE_PRODUCTS];
+      this.rebuildSearchIndices();
       this.isReady = true;
       this.notifyListeners();
     }
@@ -205,7 +210,7 @@ class DatabaseService {
     } catch (e) {
       console.warn('Failed to load master database from fallback storage', e);
     }
-    return [];
+    return [...SAMPLE_PRODUCTS];
   }
 
   private rebuildSearchIndices() {

@@ -1,12 +1,15 @@
 /**
  * Export Domain Service
- * Encapsulates all document generation logic (PDF batch generation, PPTX slides,
- * and ZPL II industrial thermal label commands) away from React view components.
+ * Encapsulates all document generation logic (WYSIWYG PDF batch generation,
+ * PPTX slides, direct physical printing, and ZPL II industrial thermal label commands)
+ * using a Headless Canvas Reproduction Strategy that mirrors the Template Editor preview exactly.
  */
 
 import { jsPDF } from 'jspdf';
 import pptxgen from 'pptxgenjs';
-import { LabelTemplate, ProductRecord } from '../types';
+import { LabelTemplate, ProductRecord, ImpositionCalculation, ImpositionConfig, PdfExportConfig } from '../types';
+import { HeadlessCanvasRenderer } from '../utils/headlessCanvasRenderer';
+import { PptxExporter } from '../utils/pptxExporter';
 
 export interface ExportProgressEvent {
   current: number;
@@ -22,6 +25,188 @@ export interface ZplExportOptions {
 }
 
 export class ExportService {
+  /**
+   * Generates a multi-page imposed PDF document using the Headless Canvas Reproduction Strategy.
+   * Ensures 100% WYSIWYG 1:1 scaling and pixel-perfect element placement matching the Template Editor.
+   */
+  public static async generatePdfBatchAsync(
+    template: LabelTemplate,
+    products: ProductRecord[],
+    imposition: ImpositionCalculation,
+    impositionConfig: ImpositionConfig,
+    pdfConfig: PdfExportConfig = {
+      dpi: 300,
+      bleed_mm: 2.0,
+      show_crop_marks: true,
+      show_registration_marks: false,
+      include_calibration_layer: false,
+      color_mode: 'cmyk_sim',
+    },
+    onProgress?: (event: ExportProgressEvent) => void
+  ): Promise<jsPDF> {
+    const isLandscape = impositionConfig.orientation === 'landscape';
+    const pdfFormat =
+      impositionConfig.page_size === 'CUSTOM' && impositionConfig.custom_page_w_mm && impositionConfig.custom_page_h_mm
+        ? [impositionConfig.custom_page_w_mm, impositionConfig.custom_page_h_mm]
+        : impositionConfig.page_size.toLowerCase();
+
+    const doc = new jsPDF({
+      orientation: isLandscape ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: pdfFormat as any,
+    });
+
+    const labelsPerPage = imposition.total_per_page;
+    const startOffset = Math.max(0, Math.min(labelsPerPage - 1, impositionConfig.start_offset_slot || 0));
+    const totalItemsToPlace = products.length + startOffset;
+    const totalPages = Math.max(1, Math.ceil(totalItemsToPlace / labelsPerPage));
+
+    const gapX = Math.max(0, impositionConfig.gap_x_mm ?? impositionConfig.gap_mm ?? 2.0);
+    const gapY = Math.max(0, impositionConfig.gap_y_mm ?? impositionConfig.gap_mm ?? 2.0);
+
+    const renderCache = new Map<string, string>();
+    let productCursor = 0;
+
+    for (let page = 0; page < totalPages; page++) {
+      if (page > 0) doc.addPage();
+
+      if (onProgress) {
+        onProgress({
+          current: Math.min(products.length, productCursor + 1),
+          total: products.length,
+          percentage: Math.round(((page + 1) / totalPages) * 100),
+          phase: 'rendering',
+        });
+      }
+
+      for (let slot = 0; slot < labelsPerPage; slot++) {
+        if (page === 0 && slot < startOffset) continue;
+        if (productCursor >= products.length) break;
+
+        const prod = products[productCursor];
+        productCursor++;
+
+        const col = slot % imposition.cols;
+        const row = Math.floor(slot / imposition.cols);
+
+        const x = imposition.horizontal_offset_mm + col * (imposition.label_total_w_mm + gapX);
+        const y = imposition.vertical_offset_mm + row * (imposition.label_total_h_mm + gapY);
+
+        // Render label headlessly with 1:1 WYSIWYG reproduction
+        const cacheKey = `${template.name}_${prod?.id || 'demo'}_${template.items.length}_${pdfConfig.dpi || 300}`;
+        let imgData = renderCache.get(cacheKey);
+
+        if (!imgData) {
+          imgData = await HeadlessCanvasRenderer.renderLabelToDataUrl(template, prod, {
+            dpi: pdfConfig.dpi || 300,
+            renderBackground: true,
+          });
+          renderCache.set(cacheKey, imgData);
+        }
+
+        if (imgData) {
+          doc.addImage(imgData, 'PNG', x, y, template.width_mm, template.height_mm);
+        }
+
+        // Cut / crop marks
+        if (impositionConfig.show_cut_marks) {
+          doc.setDrawColor(180, 180, 180);
+          doc.setLineWidth(0.15);
+          doc.line(x - 2, y, x + 2, y);
+          doc.line(x, y - 2, x, y + 2);
+          doc.line(x + template.width_mm - 2, y + template.height_mm, x + template.width_mm + 2, y + template.height_mm);
+          doc.line(x + template.width_mm, y + template.height_mm - 2, x + template.width_mm, y + template.height_mm + 2);
+        }
+      }
+    }
+
+    if (onProgress) {
+      onProgress({ current: products.length, total: products.length, percentage: 100, phase: 'done' });
+    }
+
+    return doc;
+  }
+
+  /**
+   * Generates a single-label continuous PDF for roll printers or single-item exports
+   */
+  public static async generateSingleLabelPdfAsync(
+    template: LabelTemplate,
+    record?: ProductRecord,
+    dpi = 300
+  ): Promise<jsPDF> {
+    const isLandscape = template.width_mm > template.height_mm;
+    const doc = new jsPDF({
+      orientation: isLandscape ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: [template.width_mm, template.height_mm],
+    });
+
+    const imgData = await HeadlessCanvasRenderer.renderLabelToDataUrl(template, record, {
+      dpi,
+      renderBackground: true,
+    });
+
+    doc.addImage(imgData, 'PNG', 0, 0, template.width_mm, template.height_mm);
+    return doc;
+  }
+
+  /**
+   * Generates a native Microsoft PowerPoint (.pptx) presentation with one slide per print sheet
+   * using Headless Canvas rasterization to guarantee 1:1 visual parity with the editor.
+   */
+  public static async generatePptxPresentation(
+    template: LabelTemplate,
+    products: ProductRecord[],
+    imposition: ImpositionCalculation,
+    impositionConfig: ImpositionConfig,
+    onProgress?: (event: ExportProgressEvent) => void
+  ): Promise<void> {
+    if (onProgress) {
+      onProgress({ current: 1, total: products.length, percentage: 10, phase: 'preparing' });
+    }
+
+    await PptxExporter.exportToPptx(template, products, imposition, impositionConfig);
+
+    if (onProgress) {
+      onProgress({ current: products.length, total: products.length, percentage: 100, phase: 'done' });
+    }
+  }
+
+  /**
+   * Triggers a direct physical print dialog using a headless canvas generated PDF in a hidden iframe
+   */
+  public static async printLabelsDirectlyAsync(
+    template: LabelTemplate,
+    products: ProductRecord[],
+    imposition: ImpositionCalculation,
+    impositionConfig: ImpositionConfig
+  ): Promise<void> {
+    const doc = await this.generatePdfBatchAsync(template, products, imposition, impositionConfig);
+    const blob = doc.output('blob');
+    const blobUrl = URL.createObjectURL(blob);
+
+    const printIframe = document.createElement('iframe');
+    printIframe.style.position = 'fixed';
+    printIframe.style.right = '0';
+    printIframe.style.bottom = '0';
+    printIframe.style.width = '0';
+    printIframe.style.height = '0';
+    printIframe.style.border = '0';
+    printIframe.src = blobUrl;
+
+    printIframe.onload = () => {
+      try {
+        printIframe.contentWindow?.focus();
+        printIframe.contentWindow?.print();
+      } catch {
+        window.open(blobUrl, '_blank');
+      }
+    };
+
+    document.body.appendChild(printIframe);
+  }
+
   /**
    * Generates industrial standard Zebra Programming Language (ZPL II) code
    * for direct execution on Zebra / Honeywell / Sato thermal printers.
@@ -60,21 +245,20 @@ export class ExportService {
           zplCommands.push(`^A0N,${fontH},${fontH}`);
           zplCommands.push(`^FD${text}^FS`);
         } else if (elem.type === 'barcode') {
-          const barcodeValue = prod.PRODUCT_SCAN || prod.barcode || elem.barcodeValue || '123456789012';
+          const barcodeValue = prod.PRODUCT_SCAN || (prod as any).barcode || elem.barcodeValue || '123456789012';
           const bcH = Math.round((elem.h_mm || 15) * dotsPerMm);
           zplCommands.push(`^FO${xDots},${yDots}`);
-          // EAN-13 / Code 128 command
           zplCommands.push(`^BCN,${bcH},Y,N,N`);
           zplCommands.push(`^FD${barcodeValue}^FS`);
         } else if (elem.type === 'qrcode') {
-          const qrVal = prod.PRODUCT_SCAN || prod.sku || 'https://estudio.internal';
+          const qrVal = prod.PRODUCT_SCAN || (prod as any).sku || 'https://estudio.internal';
           zplCommands.push(`^FO${xDots},${yDots}`);
           zplCommands.push(`^BQN,2,4`);
           zplCommands.push(`^FDLA,${qrVal}^FS`);
         } else if (elem.type === 'shape') {
           const wDots = Math.round((elem.w_mm || 20) * dotsPerMm);
           const hDots = Math.round((elem.h_mm || 10) * dotsPerMm);
-          const borderDots = Math.max(1, Math.round((elem.stroke_width_mm || 1) * (dotsPerMm / 4)));
+          const borderDots = Math.max(1, Math.round((elem.border_width || elem.stroke_width_mm || 1) * (dotsPerMm / 4)));
           zplCommands.push(`^FO${xDots},${yDots}`);
           zplCommands.push(`^GB${wDots},${hDots},${borderDots}^FS`);
         }
@@ -84,96 +268,6 @@ export class ExportService {
     });
 
     return zplCommands.join('\n');
-  }
-
-  /**
-   * Generates a native Microsoft PowerPoint (.pptx) presentation with one slide per label
-   * or imposed slides for client review and marketing teams.
-   */
-  public static async generatePptxPresentation(
-    template: LabelTemplate,
-    products: ProductRecord[],
-    onProgress?: (event: ExportProgressEvent) => void
-  ): Promise<void> {
-    const ppt = new pptxgen();
-    ppt.author = 'E-Studio Retail Production';
-    ppt.company = 'E-Studio Enterprise';
-    ppt.title = `Planches d'Étiquettes - ${template.name}`;
-
-    const total = products.length;
-    for (let i = 0; i < total; i++) {
-      const prod = products[i];
-      if (onProgress) {
-        onProgress({
-          current: i + 1,
-          total,
-          percentage: Math.round(((i + 1) / total) * 100),
-          phase: 'rendering',
-        });
-      }
-
-      const slide = ppt.addSlide();
-      slide.background = { color: 'FFFFFF' };
-
-      // Slide header
-      slide.addText(`${template.name} - ${prod.ITEMNAME || 'Article'}`, {
-        x: 0.5,
-        y: 0.3,
-        fontSize: 14,
-        bold: true,
-        color: '0F172A',
-      });
-
-      // Label background card
-      const scale = 0.05; // mm to inches conversion approximation
-      const cardX = 1.0;
-      const cardY = 1.0;
-      const cardW = template.width_mm * scale;
-      const cardH = template.height_mm * scale;
-
-      slide.addShape(ppt.ShapeType.rect, {
-        x: cardX,
-        y: cardY,
-        w: cardW,
-        h: cardH,
-        fill: { color: 'F8FAFC' },
-        line: { color: 'CBD5E1', width: 1 },
-      });
-
-      // Add elements
-      (template.items || []).forEach((elem: any) => {
-        const elX = cardX + (elem.x_mm || 0) * scale;
-        const elY = cardY + (elem.y_mm || 0) * scale;
-        const elW = (elem.w_mm || 10) * scale;
-        const elH = (elem.h_mm || 5) * scale;
-
-        let txt = elem.text || '';
-        if (elem.binding_key || elem.binding) {
-          const key = elem.binding_key || elem.binding;
-          txt = (prod as any)[key] || txt;
-        }
-
-        if (elem.type === 'text') {
-          slide.addText(txt, {
-            x: elX,
-            y: elY,
-            w: elW,
-            h: elH,
-            fontSize: Math.max(6, Math.round((elem.font_size_pt || 10) * 0.75)),
-            bold: elem.font_weight === 'bold' || elem.font_weight === '800',
-            color: (elem.text_color || '#000000').replace('#', ''),
-          });
-        }
-      });
-    }
-
-    if (onProgress) {
-      onProgress({ current: total, total, percentage: 100, phase: 'packing' });
-    }
-
-    await ppt.writeFile({
-      fileName: `export_pptx_${template.name.toLowerCase().replace(/\s+/g, '_')}.pptx`,
-    });
   }
 
   /**
