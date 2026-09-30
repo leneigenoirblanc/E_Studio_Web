@@ -1,5 +1,3 @@
-use tauri::Manager;
-
 #[tauri::command]
 fn get_desktop_info() -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
@@ -17,6 +15,7 @@ pub fn run() {
         .setup(|_app| {
             #[cfg(debug_assertions)]
             {
+                use tauri::Manager;
                 if let Some(window) = _app.get_webview_window("main") {
                     let _ = window.open_devtools();
                 }
