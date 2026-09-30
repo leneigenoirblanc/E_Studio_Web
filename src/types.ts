@@ -1,3 +1,5 @@
+import { PriceElement } from './domain/pricing/presentation';
+
 export interface Margins {
   top: number;
   bottom: number;
@@ -15,6 +17,7 @@ export type ItemType =
   | 'text'
   | 'rich_text'
   | 'price_block'
+  | 'price'
   | 'curved_text'
   | 'pictogram'
   | 'shape'
@@ -357,6 +360,7 @@ export type TemplateItem =
   | TextItemProperties
   | RichTextItemProperties
   | PriceBlockItemProperties
+  | PriceElement
   | CurvedTextItemProperties
   | PictogramItemProperties
   | ShapeItemProperties

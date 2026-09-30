@@ -1,11 +1,19 @@
 /**
- * E-Studio Preflight Engine
+ * E-Studio Preflight Engine V2 (Sections 56, 77)
  * Contrôle qualité automatisé, détection d'anomalies bloquantes et non-bloquantes
- * avant le Bon à Tirer (BÀT) et la distribution d'impression.
+ * avant le Bon à Tirer (BÀT) et la distribution d'impression :
+ * - Data validation (données manquantes, cohérence)
+ * - Geometry validation (dépassement des marges, collision zones restreintes)
+ * - Typography & Font validation (polices disponibles, fallbacks)
+ * - Barcode validation (checksum EAN-13, zones de silence)
+ * - Pricing validation (promo < régulier, prix au kilo)
+ * - Renderer compatibility validation (ZPL, PDF, Canvas)
  */
 
 import { PreflightReport, PreflightIssue, ImpositionConfig } from './types';
 import { LabelTemplate, ProductRecord } from '../../types';
+import { fontService } from '../canvas/typography/fontService';
+import { ZPL_CAPABILITIES, PDF_CAPABILITIES, CapabilityResolver } from '../rendering/capabilities';
 
 export class PreflightEngine {
   private static instance: PreflightEngine | null = null;
@@ -40,12 +48,13 @@ export class PreflightEngine {
     template: LabelTemplate,
     options: {
       isThermalOutput?: boolean;
+      targetRenderer?: 'canvas' | 'pdf' | 'zpl' | 'pptx';
       impositionConfig?: ImpositionConfig;
     } = {}
   ): PreflightReport {
     const issues: PreflightIssue[] = [];
 
-    // 1. Vérification du gabarit
+    // 1. VÉRIFICATION DU GABARIT & GÉOMÉTRIE (Geometry Validation)
     if (!template || !template.items || template.items.length === 0) {
       issues.push({
         id: `ISSUE-TPL-EMPTY`,
@@ -58,7 +67,9 @@ export class PreflightEngine {
 
     const items = template?.items || [];
     const hasBarcodeElement = items.some((el) => el.type === 'barcode' || el.type === 'qrcode');
-    const hasPriceElement = items.some((el) => el.type === 'price_block' || el.binding_key === 'SELLING_PRICE');
+    const hasPriceElement = items.some(
+      (el) => el.type === 'price' || el.type === 'price_block' || el.binding_key === 'SELLING_PRICE'
+    );
 
     if (!hasPriceElement) {
       issues.push({
@@ -70,7 +81,56 @@ export class PreflightEngine {
       });
     }
 
-    // 2. Contrôle unitaire sur chaque produit du dataset
+    // 1.1 Détection des collisions avec les zones restreintes (Constraint Collision)
+    const restrictedAreas = items.filter((it) => it.type === 'restricted_area');
+    items.forEach((it) => {
+      if (it.type === 'restricted_area') return;
+      restrictedAreas.forEach((res) => {
+        const overlap =
+          it.x_mm < res.x_mm + res.w_mm &&
+          it.x_mm + it.w_mm > res.x_mm &&
+          it.y_mm < res.y_mm + res.h_mm &&
+          it.y_mm + it.h_mm > res.y_mm;
+
+        if (overlap) {
+          issues.push({
+            id: `ISSUE-RESTRICTED-COLLISION-${it.id}`,
+            severity: 'WARNING',
+            category: 'GEOMETRY',
+            message: `L'élément "${it.type}" chevauche une zone restreinte technique (${(res as any).label || 'Encoche'}).`,
+            recommendation: 'Déplacez l\'élément en dehors de la zone d\'exclusion thermique ou mécanique.',
+          });
+        }
+      });
+
+      // Dépassement physique de l'étiquette
+      if (it.x_mm + it.w_mm > template.width_mm || it.y_mm + it.h_mm > template.height_mm) {
+        issues.push({
+          id: `ISSUE-GEOMETRY-OVERFLOW-${it.id}`,
+          severity: 'WARNING',
+          category: 'GEOMETRY',
+          message: `L'élément "${it.type}" dépasse les dimensions physiques de l'étiquette.`,
+          recommendation: 'Redimensionnez ou repositionnez l\'objet à l\'intérieur de la zone imprimable.',
+        });
+      }
+    });
+
+    // 1.2 Compatibilité Renderer (Section 57-58)
+    if (options.targetRenderer === 'zpl') {
+      const hasCurvedText = items.some((it) => it.type === 'curved_text');
+      if (hasCurvedText) {
+        const strat = CapabilityResolver.getStrategy(ZPL_CAPABILITIES, 'curved_text');
+        issues.push({
+          id: `ISSUE-RENDERER-CURVED-ZPL`,
+          severity: strat === 'error' ? 'BLOCKING' : 'INFO',
+          category: 'THERMAL',
+          message: `Texte courbé détecté pour sortie thermique ZPL : tramage bitmap automatique (${strat}).`,
+          recommendation: 'Le moteur convertira automatiquement ce texte en image vectorielle matricielle ZPL.',
+        });
+      }
+    }
+
+    // 2. CONTRÔLE SUR LE JEU DE DONNÉES (Data & Pricing Validation)
     products.forEach((prod, index) => {
       const pName = prod.ITEMNAME || `Article #${index + 1}`;
       const barcode = (prod.PRODUCT_SCAN || prod.BARCODE || '').toString().trim();
@@ -136,8 +196,8 @@ export class PreflightEngine {
         }
       }
 
-      // 2.3 Contrôle Longueur de texte & Débordement potentiel
-      if (pName.length > 55) {
+      // 2.3 Contrôle Longueur de texte
+      if (pName.length > 60) {
         issues.push({
           id: `ISSUE-TEXT-LEN-${index}`,
           productId: prod.id || String(index),
@@ -151,7 +211,7 @@ export class PreflightEngine {
       }
     });
 
-    // 3. Contrôle Imposition Support
+    // 3. CONTRÔLE IMPOSITION PLANCHE
     if (options.impositionConfig) {
       const imp = options.impositionConfig;
       const totalSlots = imp.rows * imp.columns;

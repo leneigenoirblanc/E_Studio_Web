@@ -7,6 +7,7 @@ import { generateQrMatrix, getQrSvgPath } from '../utils/qrGenerator';
 import { SmartGuideLine } from '../utils/smartGuides';
 import { PictogramRenderer } from './PictogramRenderer';
 import { CurvedTextRenderer } from './CurvedTextRenderer';
+import { PriceElementRenderer } from './PriceElementRenderer';
 import { RotateCw } from 'lucide-react';
 
 import { applyBrandDeduplication } from '../utils/dataDrivenTemplateEngine';
@@ -817,6 +818,9 @@ export const LabelRenderer: React.FC<LabelRendererProps> = ({
 
       case 'pictogram':
         return <PictogramRenderer item={item} pxPerMm={pxPerMm} />;
+
+      case 'price':
+        return <PriceElementRenderer type="price" payload={item} product={record} />;
 
       default:
         return null;
