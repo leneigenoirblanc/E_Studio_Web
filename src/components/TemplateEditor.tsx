@@ -10,6 +10,7 @@ import { FindReplaceModal } from './FindReplaceModal';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { CanvasRulers } from './CanvasRulers';
 import { FloatingRulerHUD } from './FloatingRulerHUD';
+import { StudioRibbonToolbar } from './StudioRibbonToolbar';
 import { databaseService } from '../services/databaseService';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -463,9 +464,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     handleUpdateMultipleItems(updated);
   };
 
-  const addItem = (type: TemplateItem['type'] | string, customField?: string) => {
+  const addItem = (type: TemplateItem['type'] | string, customFieldOrPayload?: any) => {
     const id = `item_${Date.now()}`;
     let newItem: TemplateItem;
+    const customField = typeof customFieldOrPayload === 'string' ? customFieldOrPayload : undefined;
+    const payload = typeof customFieldOrPayload === 'object' ? customFieldOrPayload : undefined;
 
     // Determine default dimensions for the element type
     let defaultW = 45.0;
@@ -487,6 +490,10 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       }
     } else {
       switch (type) {
+        case 'price':
+          defaultW = 42.0;
+          defaultH = 16.0;
+          break;
         case 'text':
           defaultW = 45.0;
           defaultH = 12.0;
@@ -914,6 +921,65 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           ],
         };
         break;
+      case 'price': {
+        const preset = payload?.preset || 'simple';
+        newItem = {
+          id,
+          type: 'price',
+          x_mm: posX,
+          y_mm: posY,
+          w_mm: 42.0,
+          h_mm: 16.0,
+          rotation: 0,
+          z_index: template.items.length + 1,
+          locked: false,
+          preset,
+          pricing: {
+            primary: 'product.SELLING_PRICE',
+            currency: '€',
+            ...(preset === 'promotion'
+              ? {
+                  promotional: {
+                    kind: 'promotion',
+                    regularPrice: 'product.REGULAR_PRICE',
+                    promotionalPrice: 'product.PROMOPRICE',
+                    discount: { type: 'percent', percent: 20 },
+                  },
+                }
+              : {}),
+            ...(preset === 'unit_price'
+              ? {
+                  unit: {
+                    kind: 'unit_price',
+                    sourcePrice: 'product.SELLING_PRICE',
+                    measure: 'product.UNIT_WEIGHT_VALUE',
+                    targetUnit: 'kg',
+                    targetQuantity: 1,
+                    prefix: 'Soit ',
+                    suffixPattern: '{price} / {unit}',
+                  },
+                }
+              : {}),
+          },
+          display: {
+            mode: preset === 'simple' ? 'single' : 'stacked',
+          },
+          typography: {
+            default: {
+              fontFamily: 'Plus Jakarta Sans',
+              sizePt: 28,
+              weight: 800,
+              color: '#0f172a',
+            },
+            slots: {
+              integer: { sizePt: 28, weight: 800, color: '#0f172a' },
+              fraction: { sizePt: 14, weight: 700, color: '#0f172a' },
+              currency: { sizePt: 13, weight: 700, color: '#0f172a' },
+            },
+          },
+        } as any;
+        break;
+      }
     }
 
     const next = { ...template, items: [...template.items, newItem] };
@@ -1621,601 +1687,69 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-100 overflow-hidden select-none">
-      {/* Top Application Bar */}
-      <header className="h-14 bg-white border-b border-slate-200 px-4 flex items-center justify-between z-30 shrink-0 shadow-xs">
-        <div className="flex items-center gap-3">
-          <ContextTooltip
-            title="Gabarits d'Étiquettes"
-            content="Revenir au tableau de bord des modèles et étiquettes"
-            shortcut="Esc"
-            category="Navigation"
-          >
-            <button
-              onClick={onBackToHome}
-              className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg flex items-center gap-1 transition"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Gabarits</span>
-            </button>
-          </ContextTooltip>
-          <div className="h-5 w-px bg-slate-200" />
-          <div>
-            <h1 className="text-sm font-bold text-slate-900 leading-none truncate max-w-md">{template.name}</h1>
-            <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-              {template.width_mm} × {template.height_mm} mm • {template.items.length} éléments
-            </p>
-          </div>
-        </div>
-
-        {/* Primary Action Buttons & Undo/Redo/Search/Shortcuts/Preferences */}
-        <div className="flex items-center gap-2">
-          {/* History Stack Controls */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 mr-1">
-            <ContextTooltip
-              title="Annuler (Undo)"
-              content="Annuler la dernière modification effectuée sur le gabarit"
-              shortcut="Ctrl+Z"
-              category="Historique"
-            >
-              <button
-                onClick={handleUndo}
-                disabled={historyIndex <= 0}
-                className="p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 transition flex items-center gap-1"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            </ContextTooltip>
-            <span className="text-[10px] font-mono text-slate-500 font-bold px-1.5 border-x border-slate-200">
-              {historyIndex + 1}/{history.length}
-            </span>
-            <ContextTooltip
-              title="Rétablir (Redo)"
-              content="Rétablir la dernière action annulée"
-              shortcut="Ctrl+Y"
-              category="Historique"
-            >
-              <button
-                onClick={handleRedo}
-                disabled={historyIndex >= history.length - 1}
-                className="p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 transition flex items-center gap-1"
-              >
-                <RotateCw className="w-3.5 h-3.5" />
-              </button>
-            </ContextTooltip>
-          </div>
-
-          {/* Find & Replace Global Trigger */}
-          <ContextTooltip
-            title="Rechercher & Remplacer"
-            content="Chercher des mentions textuelles ou variables et les remplacer dans tous les calques"
-            shortcut="Ctrl+F"
-            category="Édition"
-          >
-            <button
-              onClick={() => openModal('isFindReplaceOpen')}
-              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
-            >
-              <Search className="w-3.5 h-3.5 text-blue-600" />
-              <span>Rechercher...</span>
-              <kbd className="hidden sm:inline-block px-1 py-0.2 bg-white border border-slate-300 rounded font-mono text-[9px] text-slate-500">
-                Ctrl+F
-              </kbd>
-            </button>
-          </ContextTooltip>
-
-          {/* Keyboard Shortcuts Trigger */}
-          <ContextTooltip
-            title="Raccourcis Clavier Pro"
-            content="Afficher l'aide-mémoire et les combinaisons touches professionnelles"
-            shortcut="?"
-            category="Aide"
-          >
-            <button
-              onClick={() => openModal('isShortcutsOpen')}
-              className="p-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-lg transition"
-            >
-              <Keyboard className="w-4 h-4 text-slate-600" />
-            </button>
-          </ContextTooltip>
-
-          {/* Accessibility & UI Preferences Trigger */}
-          <ContextTooltip
-            title="Accessibilité & Préférences UI"
-            content="Configurer le système d'info-bulles contextuelles (délai, opacité) et le mode de zoom du viewport"
-            shortcut="Alt+A"
-            category="Préférences"
-          >
-            <button
-              onClick={openPreferencesModal}
-              className="p-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-lg transition flex items-center justify-center text-amber-700 hover:text-amber-800"
-            >
-              <Settings className="w-4 h-4 text-slate-700" />
-            </button>
-          </ContextTooltip>
-
-          {onOpenRulesModal && (
-            <ContextTooltip
-              title="Moteur de Règles Omni-Canal"
-              content="Configurer les règles dynamiques et simuler l'affichage sur ESL (encre électronique), étiquette papier ou écran LCD"
-              category="Automatisation"
-            >
-              <button
-                onClick={onOpenRulesModal}
-                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
-              >
-                <Cpu className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Règles Omni-Canal</span>
-              </button>
-            </ContextTooltip>
-          )}
-
-          <div className="h-4 w-px bg-slate-200 mx-1" />
-
-          {savedNotification && (
-            <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1 animate-in fade-in">
-              <CheckCircle className="w-4 h-4" />
-              Sauvegardé !
-            </span>
-          )}
-          <ContextTooltip
-            title="Enregistrer le Gabarit"
-            content="Sauvegarder immédiatement les dimensions, calques et règles dans la mémoire du studio"
-            shortcut="Ctrl+S"
-            category="Fichier"
-          >
-            <button
-              onClick={handleSave}
-              className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
-            >
-              <Save className="w-3.5 h-3.5 text-slate-600" />
-              <span>Enregistrer</span>
-            </button>
-          </ContextTooltip>
-          <ContextTooltip
-            title="Exporter Gabarit JSON"
-            content="Télécharger l'intégralité du gabarit et des éléments vectoriels au format standard JSON"
-            category="Export"
-          >
-            <button
-              onClick={exportJson}
-              className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-2xs"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-600" />
-              <span>Export JSON</span>
-            </button>
-          </ContextTooltip>
-          <ContextTooltip
-            title="Atelier d'Imposition & Impression"
-            content="Basculer vers l'espace de génération par lots, imposition de planches A4/A3/Rouleau et exports ZPL/PDF"
-            category="Production"
-          >
-            <button
-              onClick={() => onOpenGeneration(template)}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Générer étiquettes</span>
-            </button>
-          </ContextTooltip>
-        </div>
-      </header>
-
-      {/* Ergonomic Tools Ribbon Toolbar */}
-      <div className="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between shrink-0 overflow-x-auto text-xs gap-3 whitespace-nowrap scrollbar-thin">
-        {/* Insert Palette Clusters */}
-        <div className="flex items-center gap-3 shrink-0">
-          {/* Cluster 1: Typographie & Prix */}
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="text-[10px] uppercase font-bold text-slate-400 mr-0.5 tracking-wider select-none shrink-0">
-              Textes & Prix
-            </span>
-            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs gap-0.5 shrink-0">
-              <button
-                onClick={() => addItem('text')}
-                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter un champ texte standard"
-              >
-                <Type className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <span>Texte</span>
-              </button>
-              <button
-                onClick={() => addItem('rich_text')}
-                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter un texte riche avec multi-segments"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                <span>Texte Riche</span>
-              </button>
-              <button
-                onClick={() => addItem('price_block')}
-                className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-800 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter un bloc de prix avec centimes flottants"
-              >
-                <DollarSign className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                <span>Prix Centimes</span>
-              </button>
-              <button
-                onClick={() => addItem('tier_price')}
-                className="px-2 py-1 rounded bg-sky-50 hover:bg-sky-100 font-semibold text-sky-800 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter un tableau de prix par volume/palier"
-              >
-                <DollarSign className="w-3.5 h-3.5 text-sky-700 shrink-0" />
-                <span>Paliers Prix</span>
-              </button>
-              <button
-                onClick={() => addItem('curved_text')}
-                className="px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 font-semibold text-indigo-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter un texte circulaire / courbé"
-              >
-                <CircleDot className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                <span>Courbe</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="h-4 w-px bg-slate-300 shrink-0" />
-
-          {/* Cluster 2: Formes & Codes */}
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="text-[10px] uppercase font-bold text-slate-400 mr-0.5 tracking-wider select-none shrink-0">
-              Formes & Codes
-            </span>
-            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs gap-0.5 shrink-0">
-              <button
-                onClick={() => addItem('shape')}
-                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter un rectangle"
-              >
-                <Square className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                <span>Rectangle</span>
-              </button>
-              <button
-                onClick={() => addItem('ellipse')}
-                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter une ellipse"
-              >
-                <Circle className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                <span>Ellipse</span>
-              </button>
-              <button
-                onClick={() => addItem('line')}
-                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter une ligne"
-              >
-                <Minus className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                <span>Ligne</span>
-              </button>
-              <button
-                onClick={() => addItem('barcode')}
-                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter un code-barres EAN/Code128"
-              >
-                <Barcode className="w-3.5 h-3.5 text-slate-800 shrink-0" />
-                <span>Code-barres</span>
-              </button>
-              <button
-                onClick={() => addItem('qrcode')}
-                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter un QR Code"
-              >
-                <QrCode className="w-3.5 h-3.5 text-slate-800 shrink-0" />
-                <span>QR Code</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="h-4 w-px bg-slate-300 shrink-0" />
-
-          {/* Cluster 3: Médias & Sécurité */}
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="text-[10px] uppercase font-bold text-slate-400 mr-0.5 tracking-wider select-none shrink-0">
-              Médias & Normes
-            </span>
-            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs gap-0.5 shrink-0">
-              <button
-                onClick={() => addItem('image')}
-                className="px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter une image"
-              >
-                <ImageIcon className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                <span>Image</span>
-              </button>
-              <button
-                onClick={() => addItem('pictogram')}
-                className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 font-semibold text-emerald-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter un pictogramme réglementaire (Nutri-score, Bio, Eco, etc.)"
-              >
-                <Stamp className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Pictogramme</span>
-              </button>
-              <button
-                onClick={() => addItem('restricted_area')}
-                className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 font-semibold text-rose-700 flex items-center gap-1 transition whitespace-nowrap shrink-0"
-                title="Ajouter une zone restreinte non imprimable"
-              >
-                <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                <span>Zone Restreinte</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Alignment & Style Clipboard Group */}
-        {selectedItems.length > 0 && (
-          <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
-            <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 tracking-wider select-none">
-              Agencer
-            </span>
-            <div className="flex items-center bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs gap-0.5">
-              {selectedItems.length > 1 && (
-                <>
-                  <button
-                    onClick={() => handleAlign('left')}
-                    className="p-1 hover:bg-slate-100 rounded text-slate-700"
-                    title="Aligner à gauche"
-                  >
-                    <AlignLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleAlign('center')}
-                    className="p-1 hover:bg-slate-100 rounded text-slate-700"
-                    title="Centrer horizontalement"
-                  >
-                    <AlignCenter className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleAlign('right')}
-                    className="p-1 hover:bg-slate-100 rounded text-slate-700"
-                    title="Aligner à droite"
-                  >
-                    <AlignRight className="w-3.5 h-3.5" />
-                  </button>
-                  <div className="h-3 w-px bg-slate-200 mx-0.5" />
-                  <button
-                    onClick={() => handleAlign('top')}
-                    className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-bold text-slate-700"
-                    title="Aligner en haut"
-                  >
-                    Haut
-                  </button>
-                  <button
-                    onClick={() => handleAlign('middle')}
-                    className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-bold text-slate-700"
-                    title="Centrer au milieu"
-                  >
-                    Milieu
-                  </button>
-                  <button
-                    onClick={() => handleAlign('bottom')}
-                    className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-bold text-slate-700"
-                    title="Aligner en bas"
-                  >
-                    Bas
-                  </button>
-                  {selectedItems.length >= 3 && (
-                    <>
-                      <div className="h-3 w-px bg-slate-200 mx-0.5" />
-                      <button
-                        onClick={() => handleDistribute('horizontal')}
-                        className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-semibold text-slate-700"
-                        title="Répartir horizontalement"
-                      >
-                        Répartir H
-                      </button>
-                      <button
-                        onClick={() => handleDistribute('vertical')}
-                        className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[10px] font-semibold text-slate-700"
-                        title="Répartir verticalement"
-                      >
-                        Répartir V
-                      </button>
-                    </>
-                  )}
-                  <div className="h-3 w-px bg-slate-200 mx-0.5" />
-                </>
-              )}
-
-              <button
-                onClick={() => handleCopyStyle()}
-                className="px-2 py-0.5 rounded hover:bg-slate-100 text-slate-700 text-[11px] font-medium flex items-center gap-1 transition"
-                title="Copier style (Ctrl+Alt+C)"
-              >
-                <Paintbrush className="w-3 h-3 text-indigo-600" />
-                <span>Copier Style</span>
-              </button>
-              <button
-                onClick={handlePasteStyle}
-                disabled={!copiedStyle}
-                className="px-2 py-0.5 rounded hover:bg-slate-100 text-slate-700 disabled:opacity-30 text-[11px] font-medium flex items-center gap-1 transition"
-                title="Coller style (Ctrl+Alt+V)"
-              >
-                <ClipboardCheck className="w-3 h-3 text-emerald-600" />
-                <span>Coller Style</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Repères & Grille Options */}
-        <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
-          <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 tracking-wider select-none">
-            Repères
-          </span>
-          <div className="flex items-center bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs gap-1">
-            {/* Smart Guides */}
-            <button
-              onClick={() => setSmartGuidesEnabled(!smartGuidesEnabled)}
-              className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition ${
-                smartGuidesEnabled
-                  ? 'bg-rose-50 text-rose-700 font-bold'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-              title="Magnétisme dynamique entre éléments"
-            >
-              <Magnet className="w-3 h-3" />
-              <span>Guides</span>
-            </button>
-
-            {/* Grid Snap & Grid Size */}
-            <div className="flex items-center gap-0.5 bg-slate-50 px-1 py-0.5 rounded border border-slate-200">
-              <button
-                onClick={() => setSnapToGrid(!snapToGrid)}
-                className={`text-[11px] font-semibold flex items-center gap-1 ${
-                  snapToGrid ? 'text-blue-700 font-bold' : 'text-slate-400'
-                }`}
-                title="Activer/désactiver la grille"
-              >
-                <Grid className="w-3 h-3" />
-                <span>Grille</span>
-              </button>
-              {snapToGrid && (
-                <select
-                  value={gridSizeMm}
-                  onChange={(e) => setGridSizeMm(parseFloat(e.target.value))}
-                  className="text-[10px] font-mono bg-white border border-slate-300 rounded px-1 py-0.2 font-bold text-slate-700 outline-none"
-                >
-                  <option value={0.5}>0.5mm</option>
-                  <option value={1}>1mm</option>
-                  <option value={2}>2mm</option>
-                  <option value={5}>5mm</option>
-                  <option value={10}>10mm</option>
-                </select>
-              )}
-            </div>
-
-            {/* Rulers Toggle */}
-            <button
-              onClick={() => setShowRulers(!showRulers)}
-              className={`p-1 rounded text-[11px] font-medium transition ${
-                showRulers ? 'bg-amber-50 text-amber-800 font-bold' : 'text-slate-400 hover:text-slate-800'
-              }`}
-              title="Afficher / Masquer les règles millimétrées"
-            >
-              <Ruler className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Calibration Modal Trigger */}
-            <button
-              onClick={() => openModal('isCalibrationOpen')}
-              className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition ${
-                template.calibration_image?.visible
-                  ? 'bg-amber-100 text-amber-800 font-bold'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-              title="Calibrer une image de fond réelle"
-            >
-              <Crosshair className="w-3 h-3 text-amber-600" />
-              <span>Calibrer</span>
-            </button>
-
-            {/* Diagnostic Heatmap Direct Toggle */}
-            <button
-              onClick={() => setIsHeatmapActive(!isHeatmapActive)}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold flex items-center gap-1 transition ${
-                isHeatmapActive
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-              title="Activer/Désactiver le calque Heatmap de diagnostic visuel (Touche M)"
-            >
-              <span className={`w-2 h-2 rounded-full ${isHeatmapActive ? 'bg-slate-950' : 'bg-amber-500'}`} />
-              <span>Heatmap</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Data Simulator & Zoom */}
-        <div className="flex items-center gap-2">
-          {/* Toggle Inspector Drawer */}
-          <button
-            onClick={() => setIsInspectorDrawerOpen(!isInspectorDrawerOpen)}
-            className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border ${
-              isInspectorDrawerOpen && selectedItems.length > 0
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-            }`}
-            title="Afficher/Masquer le tiroir d'inspection contextuel"
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Inspecteur</span>
-          </button>
-          {/* Data Binding Simulator */}
-          <div className="flex items-center gap-1 bg-white border border-slate-200/80 rounded-lg px-2 py-1 shadow-2xs">
-            <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-              <Eye className="w-3 h-3 text-slate-400" />
-              Données:
-            </span>
-            {previewDataIndex === null ? (
-              <button
-                onClick={() => setPreviewDataIndex(0)}
-                className="text-xs font-semibold text-blue-600 hover:underline"
-              >
-                Activer
-              </button>
-            ) : (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() =>
-                    setPreviewDataIndex((prev) =>
-                      prev !== null ? (prev > 0 ? prev - 1 : availablePreviewProducts.length - 1) : 0
-                    )
-                  }
-                  className="p-0.5 hover:bg-slate-100 rounded text-slate-600"
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                </button>
-                <span className="font-mono text-[10px] text-slate-700 font-bold px-0.5">
-                  #{previewDataIndex + 1}/{availablePreviewProducts.length}
-                </span>
-                <button
-                  onClick={() =>
-                    setPreviewDataIndex((prev) =>
-                      prev !== null ? (prev < availablePreviewProducts.length - 1 ? prev + 1 : 0) : 0
-                    )
-                  }
-                  className="p-0.5 hover:bg-slate-100 rounded text-slate-600"
-                >
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={() => setPreviewDataIndex(null)}
-                  className="text-[10px] text-slate-400 hover:text-slate-600 ml-0.5"
-                >
-                  (Off)
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Zoom Widget */}
-          <div className="flex items-center gap-1 bg-white border border-slate-200/80 rounded-lg p-0.5 shadow-2xs">
-            <button
-              onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
-              className="p-1 hover:bg-slate-100 rounded text-slate-600"
-              title="Zoom arrière"
-            >
-              <ZoomOut className="w-3 h-3" />
-            </button>
-            <span className="font-mono text-[11px] px-1 font-bold text-slate-700">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              onClick={() => setZoom((z) => Math.min(3.0, z + 0.25))}
-              className="p-1 hover:bg-slate-100 rounded text-slate-600"
-              title="Zoom avant"
-            >
-              <ZoomIn className="w-3 h-3" />
-            </button>
-            <button
-              onClick={() => setZoom(1.0)}
-              className="px-1 py-0.5 hover:bg-slate-100 rounded text-slate-600 text-[10px] font-bold"
-              title="Taille réelle (100%)"
-            >
-              1:1
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Modern PowerPoint 365 Fluent Ribbon & Title Bar */}
+      <StudioRibbonToolbar
+        template={template}
+        selectedItems={selectedItems}
+        activeTool={activeTool}
+        onToolChange={setActiveTool}
+        onAddItem={(type, payload) => addItem(type, payload)}
+        onUpdateItem={handleUpdateItem}
+        onUpdateMultipleItems={handleUpdateMultipleItems}
+        onDuplicateItems={handleDuplicateMultipleItems}
+        onDeleteItems={handleDeleteMultipleItems}
+        onAlign={handleAlign}
+        onDistribute={handleDistribute}
+        onCenterItem={(id, axis) => {
+          const it = template.items.find((i) => i.id === id);
+          if (!it) return;
+          const patch: any = {};
+          if (axis === 'x' || axis === 'both') {
+            patch.x_mm = Math.max(0, Number(((template.width_mm - it.w_mm) / 2).toFixed(2)));
+          }
+          if (axis === 'y' || axis === 'both') {
+            patch.y_mm = Math.max(0, Number(((template.height_mm - it.h_mm) / 2).toFixed(2)));
+          }
+          handleUpdateItem({ ...it, ...patch });
+        }}
+        onReorderItem={(id, dir) => handleReorderItem(id, dir === 'up' ? 1 : -1)}
+        onRotateStep90={(id) => handleRotateStep90(id, {} as any)}
+        onCopyStyle={handleCopyStyle}
+        onPasteStyle={handlePasteStyle}
+        hasCopiedStyle={Boolean(copiedStyle)}
+        smartGuidesEnabled={smartGuidesEnabled}
+        onToggleSmartGuides={() => setSmartGuidesEnabled(!smartGuidesEnabled)}
+        snapToGrid={snapToGrid}
+        onToggleSnapToGrid={() => setSnapToGrid(!snapToGrid)}
+        gridSizeMm={gridSizeMm}
+        onChangeGridSize={setGridSizeMm}
+        showRulers={showRulers}
+        onToggleRulers={() => setShowRulers(!showRulers)}
+        showBleed={showBleed}
+        onToggleBleed={() => setShowBleed(!showBleed)}
+        showInnerMargins={showInnerMargins}
+        onToggleInnerMargins={() => setShowInnerMargins(!showInnerMargins)}
+        isHeatmapActive={isHeatmapActive}
+        onToggleHeatmap={() => setIsHeatmapActive(!isHeatmapActive)}
+        onOpenCalibration={() => openModal('isCalibrationOpen')}
+        previewDataIndex={previewDataIndex}
+        onChangePreviewDataIndex={setPreviewDataIndex}
+        availablePreviewProducts={availablePreviewProducts}
+        isInspectorDrawerOpen={isInspectorDrawerOpen}
+        onToggleInspectorDrawer={() => setIsInspectorDrawerOpen(!isInspectorDrawerOpen)}
+        onBackToHome={onBackToHome}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
+        historyIndex={historyIndex}
+        historyLength={history.length}
+        onSave={handleSave}
+        onExportJson={exportJson}
+        onOpenGeneration={() => onOpenGeneration(template)}
+        onOpenFindReplace={() => openModal('isFindReplaceOpen')}
+        onOpenRulesModal={onOpenRulesModal}
+      />
 
       {/* Main Workspace Area: Context-Adaptive 2-Pane Layout + Unified Diagnostic Layer */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -2416,6 +1950,19 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               onDuplicateItem={handleDuplicateItem}
               onDeleteItem={handleDeleteItem}
               onReorderItem={(id, dir) => handleReorderItem(id, dir === 'up' ? 1 : -1)}
+              onCenterItem={(id, axis) => {
+                const it = template.items.find((i) => i.id === id);
+                if (!it) return;
+                const patch: any = {};
+                if (axis === 'x' || axis === 'both') {
+                  patch.x_mm = Math.max(0, Number(((template.width_mm - it.w_mm) / 2).toFixed(2)));
+                }
+                if (axis === 'y' || axis === 'both') {
+                  patch.y_mm = Math.max(0, Number(((template.height_mm - it.h_mm) / 2).toFixed(2)));
+                }
+                handleUpdateItem({ ...it, ...patch });
+              }}
+              onRotateStep90={(id) => handleRotateStep90(id, {} as any)}
               onOpenInspectorDrawer={() => setIsInspectorDrawerOpen(true)}
             />
           )}
