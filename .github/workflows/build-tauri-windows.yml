@@ -17,7 +17,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
 
       - name: Install Rust Stable
         uses: dtolnay/rust-toolchain@stable
@@ -30,9 +29,10 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: Install Dependencies
+        shell: pwsh
         run: |
+          if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
           npm install
-          npm install --no-save @rollup/rollup-win32-x64-msvc
 
       - name: Build Frontend & Tauri Windows Bundles
         run: npm run tauri:build
