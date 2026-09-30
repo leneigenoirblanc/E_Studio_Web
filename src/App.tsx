@@ -92,8 +92,8 @@ function AppContent() {
 
   return (
     <div className="h-full flex flex-col font-sans select-none overflow-hidden bg-slate-100 text-slate-900">
-      {/* Top Application Navigation Bar with Integrated History & Centralized State */}
-      <AppTopNavigationBar />
+      {/* Top Application Navigation Bar (Only on Hub Views; in Editor mode, the Ribbon acts as the dedicated Title & Command Bar) */}
+      {currentView !== 'editor' && <AppTopNavigationBar />}
 
       {/* Main Viewport Container protected with ErrorBoundary */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">

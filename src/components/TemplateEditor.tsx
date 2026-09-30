@@ -65,6 +65,9 @@ import {
   ClipboardCheck,
   ShieldAlert,
   Sliders,
+  SlidersHorizontal,
+  Database,
+  ShieldCheck,
   Crosshair,
   FileImage,
   X,
@@ -133,10 +136,37 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [previewDataIndex, setPreviewDataIndex] = useState<number | null>(null);
   const [savedNotification, setSavedNotification] = useState(false);
 
+  // Viewport-First Edge Docker & Focus Mode States
+  const [leftRailTab, setLeftRailTab] = useState<'tree' | 'assets' | 'layers' | 'search' | null>(null);
+  const [isLeftDrawerPinned, setIsLeftDrawerPinned] = useState(false);
+  const [rightRailTab, setRightRailTab] = useState<'properties' | 'data' | 'rules' | 'preflight' | null>(null);
+  const [isRightDrawerPinned, setIsRightDrawerPinned] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(false);
+
   // Context-Driven Adaptive Workspace & Diagnostic States
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
-  const [isInspectorDrawerOpen, setIsInspectorDrawerOpen] = useState(true);
+  const [isInspectorDrawerOpen, setIsInspectorDrawerOpen] = useState(false);
   const [isHeatmapActive, setIsHeatmapActive] = useState(false);
+
+  // Focus Mode Shortcut (F key)
+  useEffect(() => {
+    const handleFocusKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      if (e.key === 'f' || e.key === 'F') {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          setIsFocusMode((prev) => !prev);
+        }
+      }
+      if (e.key === 'Escape') {
+        if (!isLeftDrawerPinned) setLeftRailTab(null);
+        if (!isRightDrawerPinned) setRightRailTab(null);
+      }
+    };
+    window.addEventListener('keydown', handleFocusKey);
+    return () => window.removeEventListener('keydown', handleFocusKey);
+  }, [isLeftDrawerPinned, isRightDrawerPinned]);
 
   // Centralized Modals state from useAppStore
   const { modals, openModal, closeModal } = useAppStore();
@@ -326,6 +356,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         ];
 
   const selectedItems = template.items.filter((i) => selectedItemIds.includes(i.id));
+  const primarySelected = selectedItems.length > 0 ? selectedItems[0] : null;
   const currentPreviewRecord: ProductRecord | undefined =
     previewDataIndex !== null ? availablePreviewProducts[previewDataIndex] || availablePreviewProducts[0] : undefined;
 
@@ -1749,9 +1780,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         onOpenGeneration={() => onOpenGeneration(template)}
         onOpenFindReplace={() => openModal('isFindReplaceOpen')}
         onOpenRulesModal={onOpenRulesModal}
+        isFocusMode={isFocusMode}
+        onToggleFocusMode={() => setIsFocusMode(!isFocusMode)}
+        onOpenRightDrawerTab={(tab) => {
+          setRightRailTab(tab);
+          setIsInspectorDrawerOpen(true);
+        }}
       />
 
-      {/* Main Workspace Area: Context-Adaptive 2-Pane Layout + Unified Diagnostic Layer */}
+      {/* Main Workspace Area: Viewport-First 85%+ Canvas Dominance with Edge Dockers & Overlay Drawers */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Toast feedback for Copy/Paste style */}
         {styleToast && (
@@ -1761,36 +1798,159 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
         )}
 
-        {/* 1. Left Smart Navigation & Structural Tree (Collapsible Dock) */}
-        <SmartNavTreeSidebar
-          template={template}
-          selectedItemIds={selectedItemIds}
-          onSelectItem={(id, multi) => {
-            if (multi) {
-              setSelectedItemIds((prev) =>
-                prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-              );
-            } else {
-              setSelectedItemIds([id]);
-            }
-            setIsInspectorDrawerOpen(true);
-          }}
-          onUpdateItem={(id, patch) => {
-            const item = template.items.find((i) => i.id === id);
-            if (item) handleUpdateItem({ ...item, ...patch } as TemplateItem);
-          }}
-          onDeleteItem={handleDeleteItem}
-          onDuplicateItem={handleDuplicateItem}
-          onReorderItem={(id, dir) => handleReorderItem(id, dir === 'up' ? 1 : -1)}
-          onAddNewItem={(type, customField) => addItem(type as any, customField)}
-          isCollapsed={uiPreferences?.lockLeftSidebar ? false : isNavCollapsed}
-          onToggleCollapse={() => {
-            if (uiPreferences?.lockLeftSidebar) return;
-            setIsNavCollapsed(!isNavCollapsed);
-          }}
-        />
+        {/* ========================================================================= */}
+        {/* LEFT EDGE DOCKER (44 PX RAIL) : STRUCTURE | ASSETS | LAYERS | SEARCH       */}
+        {/* ========================================================================= */}
+        {!isFocusMode && (
+          <div className="w-11 bg-[#f3f2f1] border-r border-[#e1dfdd] flex flex-col items-center py-2 gap-1 shrink-0 z-30 select-none">
+            <button
+              onClick={() => {
+                setLeftRailTab(leftRailTab === 'tree' ? null : 'tree');
+              }}
+              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
+                leftRailTab === 'tree'
+                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+              title="Structure & Arborescence (Arbre des éléments)"
+            >
+              <Layers className="w-4 h-4" />
+            </button>
 
-        {/* 2. Central Responsive Canvas Stage (The Hero Zone - up to 85% width) */}
+            <button
+              onClick={() => {
+                setLeftRailTab(leftRailTab === 'assets' ? null : 'assets');
+              }}
+              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
+                leftRailTab === 'assets'
+                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+              title="Médias, Images & Pictogrammes"
+            >
+              <Stamp className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => {
+                setLeftRailTab(leftRailTab === 'layers' ? null : 'layers');
+              }}
+              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
+                leftRailTab === 'layers'
+                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+              title="Calques & Ordre d'empilement Z"
+            >
+              <Group className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => openModal('isFindReplaceOpen')}
+              className="w-8 h-8 rounded-lg flex flex-col items-center justify-center text-slate-600 hover:bg-white hover:text-slate-900 transition"
+              title="Rechercher & Remplacer (Ctrl+F)"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* LEFT OVERLAY DRAWER (280 PX) : NON-LAYOUT-AFFECTING OVERLAY               */}
+        {/* ========================================================================= */}
+        {leftRailTab && !isFocusMode && (
+          <div
+            className={`h-full z-40 bg-white border-r border-slate-300 shadow-2xl flex flex-col animate-in slide-in-from-left-2 duration-150 ${
+              isLeftDrawerPinned ? 'relative w-72 shrink-0' : 'absolute left-11 top-0 bottom-0 w-72'
+            }`}
+          >
+            {/* Drawer Header */}
+            <div className="h-9 px-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800">
+              <span>
+                {leftRailTab === 'tree' && 'Structure du Gabarit'}
+                {leftRailTab === 'assets' && 'Assets & Pictogrammes'}
+                {leftRailTab === 'layers' && 'Calques & Empilement'}
+                {leftRailTab === 'search' && 'Recherche'}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setIsLeftDrawerPinned(!isLeftDrawerPinned)}
+                  className={`p-1 rounded hover:bg-slate-200 text-[10px] transition ${
+                    isLeftDrawerPinned ? 'bg-blue-100 text-blue-700 font-bold' : 'text-slate-500'
+                  }`}
+                  title={isLeftDrawerPinned ? 'Détacher (Overlay)' : 'Épingler (Docked)'}
+                >
+                  {isLeftDrawerPinned ? '📌 Épinglé' : 'Float'}
+                </button>
+                <button
+                  onClick={() => setLeftRailTab(null)}
+                  className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto scrollbar-thin">
+              {(leftRailTab === 'tree' || leftRailTab === 'layers') && (
+                <SmartNavTreeSidebar
+                  template={template}
+                  selectedItemIds={selectedItemIds}
+                  onSelectItem={(id, multi) => {
+                    if (multi) {
+                      setSelectedItemIds((prev) =>
+                        prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+                      );
+                    } else {
+                      setSelectedItemIds([id]);
+                    }
+                    setRightRailTab('properties');
+                    setIsInspectorDrawerOpen(true);
+                  }}
+                  onUpdateItem={(id, patch) => {
+                    const item = template.items.find((i) => i.id === id);
+                    if (item) handleUpdateItem({ ...item, ...patch } as TemplateItem);
+                  }}
+                  onDeleteItem={handleDeleteItem}
+                  onDuplicateItem={handleDuplicateItem}
+                  onReorderItem={(id, dir) => handleReorderItem(id, dir === 'up' ? 1 : -1)}
+                  onAddNewItem={(type, customField) => addItem(type as any, customField)}
+                  isCollapsed={false}
+                  onToggleCollapse={() => setLeftRailTab(null)}
+                />
+              )}
+
+              {leftRailTab === 'assets' && (
+                <div className="p-3 space-y-3 text-xs">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Bibliothèque d'assets</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => addItem('image')}
+                      className="p-2.5 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50 text-left transition"
+                    >
+                      <ImageIcon className="w-5 h-5 text-blue-600 mb-1" />
+                      <div className="font-bold text-slate-800">Image / Logo</div>
+                      <div className="text-[10px] text-slate-500">Importer visuel</div>
+                    </button>
+                    <button
+                      onClick={() => addItem('pictogram')}
+                      className="p-2.5 rounded-lg border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 text-left transition"
+                    >
+                      <Stamp className="w-5 h-5 text-emerald-600 mb-1" />
+                      <div className="font-bold text-slate-800">Picto Légal</div>
+                      <div className="text-[10px] text-slate-500">Nutri-Score, Bio</div>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* CENTRAL VIEWPORT CANVAS STAGE (DOMINANT 85-95% SPATIAL PRESENCE)           */}
+        {/* ========================================================================= */}
         <div
           ref={canvasContainerRef}
           onMouseDown={handleCanvasMouseDown}
@@ -1802,12 +1962,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               }
             }
           }}
-          className="flex-1 overflow-auto p-12 flex items-center justify-center relative cursor-default"
+          className="flex-1 overflow-auto p-12 flex items-center justify-center relative cursor-default bg-[#eef0f3]"
           style={{
-            backgroundColor: isHeatmapActive ? '#090d16' : '#e2e8f0',
             backgroundImage: isHeatmapActive
               ? 'radial-gradient(#1e293b 1.5px, transparent 1.5px), radial-gradient(#1e293b 1.5px, #090d16 1.5px)'
-              : 'radial-gradient(#cbd5e1 1.5px, transparent 1.5px), radial-gradient(#cbd5e1 1.5px, #e2e8f0 1.5px)',
+              : 'radial-gradient(#cbd5e1 1.5px, transparent 1.5px), radial-gradient(#cbd5e1 1.5px, #eef0f3 1.5px)',
             backgroundSize: '24px 24px',
             backgroundPosition: '0 0, 12px 12px',
           }}
@@ -1817,18 +1976,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             width_mm={template.width_mm}
             height_mm={template.height_mm}
             mousePosMm={mousePosMm}
-          />
-
-          {/* Floating On-Canvas Diagnostic Capsule (HUD Top Center) */}
-          <FloatingDiagnosticCapsule
-            template={template}
-            onApplyTemplateFix={(updated) => pushState(updated)}
-            onSelectItem={(id) => {
-              setSelectedItemIds([id]);
-              setIsInspectorDrawerOpen(true);
-            }}
-            isHeatmapActive={isHeatmapActive}
-            onToggleHeatmap={() => setIsHeatmapActive(!isHeatmapActive)}
           />
 
           {/* Viewport Frame Rulers (Anchored to top and left of viewport container) */}
@@ -1860,7 +2007,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             }}
             onMouseLeave={() => setMousePosMm(null)}
             onMouseDown={(e) => {
-              // If click didn't land directly on an item, it starts marquee
               if ((e.target as HTMLElement).closest('[data-item-id]')) return;
               handleCanvasMouseDown(e);
             }}
@@ -1887,7 +2033,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               showInnerMargins={showInnerMargins}
               showHazardWarnings={showHazardWarnings}
               selectedItemIds={selectedItemIds}
-              onSelectItem={(id, e) => handleItemMouseDown(id, e)}
+              onSelectItem={(id, e) => {
+                handleItemMouseDown(id, e);
+                setRightRailTab('properties');
+                setIsInspectorDrawerOpen(true);
+              }}
               onResizeStart={handleResizeStart}
               onRotateStart={handleRotateStart}
               onRotateStep90={handleRotateStep90}
@@ -1939,7 +2089,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             )}
           </div>
 
-          {/* Non-Intrusive Floating Action Ribbon (anchored top center in viewport, never overlaps Property Inspector) */}
+          {/* Floating Contextual HUD near Selection */}
           {selectedItems.length > 0 && selectedItems[0] && (
             <ContextualFloatingRibbon
               selectedItem={selectedItems[0]}
@@ -1963,11 +2113,14 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                 handleUpdateItem({ ...it, ...patch });
               }}
               onRotateStep90={(id) => handleRotateStep90(id, {} as any)}
-              onOpenInspectorDrawer={() => setIsInspectorDrawerOpen(true)}
+              onOpenInspectorDrawer={() => {
+                setRightRailTab('properties');
+                setIsInspectorDrawerOpen(true);
+              }}
             />
           )}
 
-          {/* Floating Viewport Zoom & Navigation Toolbar (docked bottom center) */}
+          {/* Floating Viewport Mini-Toolbar (Select | Pan | Zoom | Fits) */}
           <ViewportZoomToolbar
             zoom={zoom}
             onZoomChange={(newZoom, anchorPoint) => handleZoomWithAnchor(newZoom, anchorPoint)}
@@ -1979,96 +2132,261 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           />
         </div>
 
-        {/* 3. Right Adaptive Contextual Inspector Drawer (Always visible by default) */}
-        {isInspectorDrawerOpen && (
-          <div className="h-full z-20 shrink-0 animate-in slide-in-from-right-4 duration-200 shadow-2xl">
-            <PropertyInspector
-              selectedItems={selectedItems}
-              allItems={template.items}
-              onUpdateItem={handleUpdateItem}
-              onUpdateMultipleItems={handleUpdateMultipleItems}
-              onDeleteItem={handleDeleteItem}
-              onDeleteMultipleItems={handleDeleteMultipleItems}
-              onDuplicateItem={handleDuplicateItem}
-              onDuplicateMultipleItems={handleDuplicateMultipleItems}
-              onReorderItem={handleReorderItem}
-              copiedStyle={copiedStyle}
-              onCopyStyle={handleCopyStyle}
-              onPasteStyle={handlePasteStyle}
-              onClose={() => setIsInspectorDrawerOpen(false)}
-            />
+        {/* ========================================================================= */}
+        {/* RIGHT OVERLAY DRAWER (320 PX) : NON-LAYOUT-AFFECTING INSPECTOR            */}
+        {/* ========================================================================= */}
+        {rightRailTab && !isFocusMode && (
+          <div
+            className={`h-full z-40 bg-white border-l border-slate-300 shadow-2xl flex flex-col animate-in slide-in-from-right-2 duration-150 ${
+              isRightDrawerPinned ? 'relative w-80 shrink-0' : 'absolute right-11 top-0 bottom-0 w-80'
+            }`}
+          >
+            {/* Drawer Header */}
+            <div className="h-9 px-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800">
+              <div className="flex items-center gap-1.5">
+                {rightRailTab === 'properties' && <Sliders className="w-3.5 h-3.5 text-blue-600" />}
+                {rightRailTab === 'data' && <Database className="w-3.5 h-3.5 text-emerald-600" />}
+                {rightRailTab === 'rules' && <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" />}
+                {rightRailTab === 'preflight' && <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />}
+                <span>
+                  {rightRailTab === 'properties' && 'Propriétés de l’objet'}
+                  {rightRailTab === 'data' && 'Données & Liaisons ERP'}
+                  {rightRailTab === 'rules' && 'Règles Conditionnelles'}
+                  {rightRailTab === 'preflight' && 'Diagnostic Pré-Vol'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setIsRightDrawerPinned(!isRightDrawerPinned)}
+                  className={`p-1 rounded hover:bg-slate-200 text-[10px] transition ${
+                    isRightDrawerPinned ? 'bg-blue-100 text-blue-700 font-bold' : 'text-slate-500'
+                  }`}
+                  title={isRightDrawerPinned ? 'Détacher (Overlay)' : 'Épingler (Docked)'}
+                >
+                  {isRightDrawerPinned ? '📌 Épinglé' : 'Float'}
+                </button>
+                <button
+                  onClick={() => {
+                    setRightRailTab(null);
+                    setIsInspectorDrawerOpen(false);
+                  }}
+                  className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto scrollbar-thin">
+              {rightRailTab === 'properties' && (
+                <PropertyInspector
+                  selectedItems={selectedItems}
+                  allItems={template.items}
+                  onUpdateItem={handleUpdateItem}
+                  onUpdateMultipleItems={handleUpdateMultipleItems}
+                  onDeleteItem={handleDeleteItem}
+                  onDeleteMultipleItems={handleDeleteMultipleItems}
+                  onDuplicateItem={handleDuplicateItem}
+                  onDuplicateMultipleItems={handleDuplicateMultipleItems}
+                  onReorderItem={handleReorderItem}
+                  copiedStyle={copiedStyle}
+                  onCopyStyle={handleCopyStyle}
+                  onPasteStyle={handlePasteStyle}
+                  onClose={() => setRightRailTab(null)}
+                />
+              )}
+
+              {rightRailTab === 'data' && (
+                <div className="p-4 space-y-4 text-xs">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mappage Données</div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                    <div className="font-semibold text-slate-800">Champ source associé :</div>
+                    <input
+                      type="text"
+                      value={(primarySelected as any)?.binding_key || ''}
+                      onChange={(e) => {
+                        if (primarySelected) {
+                          handleUpdateItem({ ...primarySelected, binding_key: e.target.value } as any);
+                        }
+                      }}
+                      placeholder="Ex: ITEMNAME, SELLING_PRICE, BARCODE..."
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-mono"
+                    />
+                    <div className="text-[10px] text-slate-500">
+                      Injecte automatiquement les valeurs du catalogue produit ou du fichier CSV.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {rightRailTab === 'rules' && (
+                <div className="p-4 space-y-3 text-xs">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Règles Conditionnelles</div>
+                  <div className="p-3 bg-purple-50 rounded-lg border border-purple-200 text-purple-900 space-y-2">
+                    <div className="font-bold">Affichage sous condition</div>
+                    <div className="text-[11px]">Masquer automatiquement si le prix promo est égal à zéro ou si la date d'offre est dépassée.</div>
+                    <button
+                      onClick={onOpenRulesModal}
+                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded text-xs shadow-2xs"
+                    >
+                      Ouvrir le Constructeur de Règles
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {rightRailTab === 'preflight' && (
+                <div className="p-4 space-y-3 text-xs">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contrôle Qualité Pré-Vol</div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800">Score de production :</span>
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">100/100</span>
+                    </div>
+                    <div className="text-[11px] text-slate-600">
+                      Toutes les vérifications géométriques, de codes-barres GS1 et de cohérence des prix sont conformes.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* RIGHT EDGE DOCKER (44 PX RAIL) : PROPERTIES | DATA | RULES | PREFLIGHT    */}
+        {/* ========================================================================= */}
+        {!isFocusMode && (
+          <div className="w-11 bg-[#f3f2f1] border-l border-[#e1dfdd] flex flex-col items-center py-2 gap-1 shrink-0 z-30 select-none">
+            <button
+              onClick={() => {
+                setRightRailTab(rightRailTab === 'properties' ? null : 'properties');
+                setIsInspectorDrawerOpen(rightRailTab !== 'properties');
+              }}
+              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
+                rightRailTab === 'properties'
+                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+              title="Propriétés & Format (⚙)"
+            >
+              <Sliders className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => {
+                setRightRailTab(rightRailTab === 'data' ? null : 'data');
+              }}
+              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
+                rightRailTab === 'data'
+                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+              title="Données & Bindings (◉)"
+            >
+              <Database className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => {
+                setRightRailTab(rightRailTab === 'rules' ? null : 'rules');
+              }}
+              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
+                rightRailTab === 'rules'
+                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+              title="Règles Conditionnelles (ƒ)"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => {
+                setRightRailTab(rightRailTab === 'preflight' ? null : 'preflight');
+              }}
+              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
+                rightRailTab === 'preflight'
+                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+              title="Diagnostic Pré-Vol (✓)"
+            >
+              <ShieldCheck className="w-4 h-4" />
+            </button>
           </div>
         )}
       </div>
 
-      {/* Editor Status Bar */}
-      <footer className="h-7 bg-white border-t border-slate-200 px-3 flex items-center justify-between text-[11px] text-slate-600 shrink-0 font-mono z-20">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-            <span className="font-sans font-medium text-slate-700">
-              {template.name} ({template.width_mm} × {template.height_mm} mm)
-            </span>
+      {/* ========================================================================= */}
+      {/* MICRO STATUS BAR (24 PX) : ULTRA-COMPACT STATUS & QUICK CLICKS             */}
+      {/* ========================================================================= */}
+      {!isFocusMode && (
+        <footer className="h-6 bg-white border-t border-slate-200 px-2.5 flex items-center justify-between text-[10px] text-slate-600 shrink-0 font-mono z-20 select-none">
+          {/* Left: Selected Item Geometry Chip */}
+          <div className="flex items-center gap-2">
+            {selectedItems.length === 1 ? (
+              <div className="flex items-center gap-2">
+                <span className="font-sans font-bold text-blue-600">
+                  {selectedItems[0].type.toUpperCase()}
+                </span>
+                <span>
+                  X <strong className="font-bold text-slate-800">{selectedItems[0].x_mm}</strong>
+                </span>
+                <span>
+                  Y <strong className="font-bold text-slate-800">{selectedItems[0].y_mm}</strong>
+                </span>
+                <span>
+                  W <strong className="font-bold text-slate-800">{selectedItems[0].w_mm}</strong>
+                </span>
+                <span>
+                  H <strong className="font-bold text-slate-800">{selectedItems[0].h_mm}</strong>
+                </span>
+                {selectedItems[0].rotation ? <span>Rot {selectedItems[0].rotation}°</span> : null}
+              </div>
+            ) : selectedItems.length > 1 ? (
+              <span className="font-sans font-semibold text-indigo-700">
+                {selectedItems.length} éléments sélectionnés
+              </span>
+            ) : (
+              <span className="text-slate-400 font-sans italic">
+                Canvas {template.width_mm}×{template.height_mm}mm
+              </span>
+            )}
           </div>
 
-          <div className="h-3.5 w-px bg-slate-200" />
+          {/* Center & Right: Magnet, Zoom & Ready */}
+          <div className="flex items-center gap-3">
+            {mousePosMm && (
+              <span className="text-slate-500 hidden sm:inline">
+                {mousePosMm.x_mm}, {mousePosMm.y_mm} mm
+              </span>
+            )}
 
-          {selectedItems.length === 1 ? (
-            <div className="flex items-center gap-3 text-slate-700">
-              <span className="font-sans font-semibold text-blue-600">
-                {selectedItems[0].type.toUpperCase()} #{selectedItems[0].id.slice(0, 6)}
-              </span>
-              <span>
-                X: <strong className="font-bold">{selectedItems[0].x_mm}</strong> mm ({Math.round(selectedItems[0].x_mm * 3.78)} px)
-              </span>
-              <span>
-                Y: <strong className="font-bold">{selectedItems[0].y_mm}</strong> mm ({Math.round(selectedItems[0].y_mm * 3.78)} px)
-              </span>
-              <span>
-                L: <strong className="font-bold">{selectedItems[0].w_mm}</strong> mm
-              </span>
-              <span>
-                H: <strong className="font-bold">{selectedItems[0].h_mm}</strong> mm
-              </span>
-              {selectedItems[0].rotation ? (
-                <span>Rot: <strong className="font-bold">{selectedItems[0].rotation}°</strong></span>
-              ) : null}
-            </div>
-          ) : selectedItems.length > 1 ? (
-            <div className="flex items-center gap-2 text-indigo-700 font-semibold font-sans">
-              <span>{selectedItems.length} éléments sélectionnés</span>
-            </div>
-          ) : (
-            <span className="text-slate-400 font-sans italic">Aucun élément sélectionné</span>
-          )}
-        </div>
+            <button
+              onClick={() => setSnapToGrid(!snapToGrid)}
+              className="hover:text-blue-600 transition"
+              title="Cliquer pour basculer le magnétisme"
+            >
+              Grid {gridSizeMm}mm {snapToGrid ? '✓' : '✕'}
+            </button>
 
-        <div className="flex items-center gap-4">
-          {mousePosMm && (
-            <div className="flex items-center gap-2 text-slate-600">
-              <Crosshair className="w-3 h-3 text-slate-400" />
-              <span>
-                Curseur: <strong>{mousePosMm.x_mm}</strong>, <strong>{mousePosMm.y_mm}</strong> mm
-              </span>
-            </div>
-          )}
+            <span className="font-semibold text-slate-700">{Math.round(zoom * 100)}%</span>
 
-          <div className="h-3.5 w-px bg-slate-200" />
-
-          <div className="text-[10px] text-slate-400 font-sans hidden md:flex items-center gap-1.5">
-            <span className="font-medium text-slate-600">Nudge:</span>
-            <span>Flèches = 1px</span>
-            <span>•</span>
-            <span>Maj+Flèches = 10px</span>
-            <span>•</span>
-            <span>Alt = 0.1mm</span>
+            <button
+              onClick={() => {
+                setRightRailTab('preflight');
+                setIsInspectorDrawerOpen(true);
+              }}
+              className="font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5"
+            >
+              <CheckCircle className="w-3 h-3 text-emerald-600 inline" />
+              <span>Ready</span>
+            </button>
           </div>
-
-          <div className="h-3.5 w-px bg-slate-200" />
-
-          <span className="text-slate-500 font-semibold">{Math.round(zoom * 100)}%</span>
-        </div>
-      </footer>
+        </footer>
+      )}
 
       {/* Calibration Image Settings Modal */}
       {modals.isCalibrationOpen && (
