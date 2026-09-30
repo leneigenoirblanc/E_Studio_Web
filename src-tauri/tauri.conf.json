@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "E-Studio — Retail & Industrial Label Production Suite",
         "width": 1440,
         "height": 920,
