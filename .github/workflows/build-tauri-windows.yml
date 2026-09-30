@@ -30,7 +30,9 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: Install Dependencies
-        run: npm install
+        run: |
+          npm install
+          npm install --no-save @rollup/rollup-win32-x64-msvc
 
       - name: Build Frontend & Tauri Windows Bundles
         run: npm run tauri:build
