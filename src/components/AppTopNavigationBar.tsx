@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppView } from '../services/navigationService';
 import { LabelTemplate } from '../types';
-import { PWAInstallButton } from '../pwa/components/PWAInstallButton';
-import { useOnlineStatus } from '../pwa/hooks/useOnlineStatus';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useAppStore } from '../store/useAppStore';
 import {
   ChevronDown,
@@ -14,7 +13,6 @@ import {
   BookOpen,
   Cpu,
   History,
-  Smartphone,
   Plus,
   WifiOff,
 } from 'lucide-react';
@@ -24,10 +22,8 @@ interface AppTopNavigationBarProps {
   activeTemplate?: LabelTemplate | null;
   templates?: LabelTemplate[];
   totalProductsCount?: number;
-  pendingLotsCount?: number;
   isTursoConfigured?: boolean;
   onNavigate?: (view: AppView) => void;
-  onOpenMobileSync?: () => void;
   onOpenMasterDatabase?: () => void;
   onOpenRulesModal?: () => void;
   onOpenFontManager?: () => void;
@@ -40,9 +36,7 @@ interface AppTopNavigationBarProps {
 export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) => {
   const store = useAppStore();
   const currentView = props.currentView ?? store.currentView;
-  const pendingLotsCount = props.pendingLotsCount ?? store.pendingLotsCount;
   const onNavigate = props.onNavigate ?? store.navigateTo;
-  const onOpenMobileSync = props.onOpenMobileSync ?? (() => store.openModal('isMobileSyncOpen'));
   const onOpenRulesModal = props.onOpenRulesModal ?? (() => store.openModal('isRulesModalOpen'));
   const onOpenFontManager = props.onOpenFontManager ?? (() => store.openModal('isFontManagerOpen'));
   const onOpenAuditLogs = props.onOpenAuditLogs ?? (() => store.openModal('isAuditTrailOpen'));
@@ -83,7 +77,7 @@ export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) =
           onNavigate('generation');
         } else if (e.key === '5') {
           e.preventDefault();
-          onNavigate('mobile');
+          onNavigate('printers');
         }
       }
     };
@@ -91,7 +85,7 @@ export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) =
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onNavigate]);
 
-  const navItems: { view: AppView; label: string; badge?: number }[] = [
+  const navItems: { view: AppView; label: string }[] = [
     { view: 'home', label: "Vue d'ensemble" },
     { view: 'database', label: 'Catalogue' },
     { view: 'labels', label: 'Formats & Gabarits' },
@@ -99,7 +93,6 @@ export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) =
     { view: 'generation', label: 'Tirage & Planches' },
     { view: 'printers', label: 'Imprimantes' },
     { view: 'jobs', label: 'File & Historique' },
-    { view: 'mobile', label: 'Collecte Mobile', badge: pendingLotsCount > 0 ? pendingLotsCount : undefined },
   ];
 
   return (
@@ -147,9 +140,6 @@ export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) =
                 }`}
               >
                 <span>{item.label}</span>
-                {item.badge !== undefined && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" aria-label={`${item.badge} lots en attente`} />
-                )}
                 {isActive && (
                   <span
                     className="absolute -bottom-3.5 left-0 right-0 h-0.5 bg-blue-500 rounded-full"
@@ -172,8 +162,6 @@ export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) =
               <span className="hidden sm:inline">Hors-ligne</span>
             </div>
           )}
-
-          <PWAInstallButton />
 
           {/* Tools Menu Dropdown */}
           <div className="relative" ref={dropdownRef}>
@@ -253,19 +241,6 @@ export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) =
                 >
                   <History className="w-3.5 h-3.5 text-slate-400" />
                   <span>Journal d'audit</span>
-                </button>
-
-                <div className="border-t border-slate-700 my-1" />
-
-                <button
-                  onClick={() => {
-                    setToolsOpen(false);
-                    onOpenMobileSync();
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-blue-400 hover:bg-slate-700/70 transition-colors text-left"
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Passerelle scans mobiles</span>
                 </button>
               </div>
             )}

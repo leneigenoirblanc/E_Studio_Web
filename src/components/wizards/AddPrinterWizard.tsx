@@ -223,6 +223,38 @@ export const AddPrinterWizard: React.FC<AddPrinterWizardProps> = ({
     }
   };
 
+  // Web Serial Discovery
+  const handleScanSerial = async () => {
+    setIsScanning(true);
+    setScanErrorMessage('');
+    try {
+      const serialRes = await printerDiscoveryService.requestSerialDevice();
+      setPrinterCustomName(serialRes.name);
+      setSelectedModel(serialRes.suggestedModel);
+      setSelectedDpi(serialRes.suggestedModel.resolutionOptions[0] || 203);
+      setModelPresetAutoMatched(true);
+      const newDiscovered: DiscoveredPrinter = {
+        id: `serial-${Date.now()}`,
+        name: serialRes.name,
+        address: 'COM Direct',
+        port: 0,
+        protocol: 'RAW 9100',
+        connectionType: 'Serial',
+        discoveredAt: Date.now(),
+        status: 'ONLINE',
+        details: serialRes.details,
+      };
+      setDiscoveredUnits([newDiscovered]);
+      setSelectedDiscoveredId(newDiscovered.id);
+    } catch (err: any) {
+      if (err.name !== 'NotFoundError') {
+        setScanErrorMessage(err.message || 'Connexion Port Série impossible.');
+      }
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   // Manual IP Probe
   const handleProbeAddress = async () => {
     setIsProbing(true);
@@ -399,9 +431,9 @@ export const AddPrinterWizard: React.FC<AddPrinterWizardProps> = ({
                     { id: 'Ethernet', label: 'Réseau (Ethernet / IP)', icon: Wifi },
                     { id: 'Wi-Fi', label: 'Wi-Fi', icon: Wifi },
                     { id: 'USB', label: 'USB Direct (WebUSB)', icon: Usb },
+                    { id: 'Serial', label: 'Port Série / COM (Web Serial)', icon: Radio },
                     { id: 'Bluetooth', label: 'Bluetooth', icon: Bluetooth },
                     { id: 'Windows Driver', label: 'Pilote Système OS', icon: Printer },
-                    { id: 'Generic', label: 'Générique RAW', icon: Sliders },
                   ].map((item) => {
                     const Icon = item.icon;
                     return (
@@ -572,6 +604,26 @@ export const AddPrinterWizard: React.FC<AddPrinterWizardProps> = ({
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
                     <span>Sélectionner le périphérique USB</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Web Serial Scanning Action */}
+              {connectionType === 'Serial' && (
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3 text-center">
+                  <Radio className="w-8 h-8 text-blue-400 mx-auto" />
+                  <h4 className="text-xs font-bold text-white">Connexion Directe Port Série / COM</h4>
+                  <p className="text-[11px] text-slate-400 max-w-md mx-auto">
+                    Connexion via Web Serial API pour imprimantes thermiques RS-232, convertisseurs USB-COM (FTDI, CH340, CP2102) ou ports virtuels.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleScanSerial}
+                    disabled={isScanning}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition inline-flex items-center gap-2"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+                    <span>Sélectionner le port COM / Série</span>
                   </button>
                 </div>
               )}

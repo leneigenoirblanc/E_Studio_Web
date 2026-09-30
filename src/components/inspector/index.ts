@@ -1,5 +1,7 @@
 export * from './MultiSelectInspector';
 export * from './TransformLayoutInspector';
+export * from './AnchorReflowInspector';
+export * from './MaterialAnchorIcons';
 export * from './DataBindingInspector';
 export * from './ConditionalRulesInspector';
 export * from './TextPropertiesInspector';

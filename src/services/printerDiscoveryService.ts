@@ -216,6 +216,35 @@ export class PrinterDiscoveryService {
       suggestedModel,
     };
   }
+
+  /**
+   * Request real physical Serial / USB Virtual COM printer device via Web Serial API
+   */
+  public async requestSerialDevice(): Promise<{
+    port: any;
+    name: string;
+    details: string;
+    suggestedModel: PrinterModel;
+  }> {
+    if (typeof navigator === 'undefined' || !('serial' in navigator)) {
+      throw new Error("L'API Web Serial n'est pas supportée par ce navigateur (recommandé: Google Chrome ou Microsoft Edge).");
+    }
+
+    const port = await (navigator as any).serial.requestPort();
+    const info = port.getInfo ? port.getInfo() : {};
+    const vid = info.usbVendorId ? `0x${info.usbVendorId.toString(16).padStart(4, '0')}` : 'COM Direct';
+    const pid = info.usbProductId ? `0x${info.usbProductId.toString(16).padStart(4, '0')}` : '';
+    const devName = `Port Série / USB COM (${vid}${pid ? ':' + pid : ''})`;
+    const details = `Connexion Port Série / COM directe (VID: ${vid}${pid ? ' · PID: ' + pid : ''}) · Émulation thermique standard`;
+    const suggestedModel = this.matchPreset('serial', 'thermal', devName);
+
+    return {
+      port,
+      name: devName,
+      details,
+      suggestedModel,
+    };
+  }
 }
 
 export const printerDiscoveryService = new PrinterDiscoveryService();

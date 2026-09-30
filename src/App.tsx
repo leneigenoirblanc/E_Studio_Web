@@ -1,11 +1,10 @@
-import React, { useEffect, Suspense, lazy } from 'react';
+import React, { useEffect } from 'react';
 import { LabelTemplate, ProductRecord } from './types';
 import { DEFAULT_TEMPLATES } from './defaultTemplates';
 import { HomeDashboard } from './components/HomeDashboard';
 import { TooltipProvider } from './context/TooltipContext';
 import { MappingDictionaryProvider } from './context/MappingDictionaryContext';
 import { ToastProvider, useToast } from './components/ToastNotification';
-import { MobileScanLot, OfflineIndicator } from './pwa';
 import { AppTopNavigationBar } from './components/AppTopNavigationBar';
 import { useAppStore } from './store/useAppStore';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -24,8 +23,6 @@ import { LabelsHubStudio } from './components/LabelsHubStudio';
 import { PrintersStudio } from './components/PrintersStudio';
 import { PrintJobsStudio } from './components/PrintJobsStudio';
 import { PrintingSettingsModal } from './components/PrintingSettingsModal';
-import { MobileTerminalView } from './pwa/components/MobileTerminalView';
-import { MobileSyncHubModal } from './pwa/components/MobileSyncHubModal';
 
 function AppContent() {
   const toast = useToast();
@@ -36,14 +33,13 @@ function AppContent() {
     activeTemplate,
     currentView,
     modals,
-    mobileInitialProducts,
-    mobileInitialBatchName,
+    batchInitialProducts,
+    batchInitialName,
     openModal,
     closeModal,
     navigateTo,
     selectToEdit,
     selectToGenerate,
-    generateFromMobileLot: storeGenerateLot,
     generateFromDatabase: storeGenerateFromDatabase,
     saveTemplate: storeSaveTemplate,
     createNewTemplate: storeCreateNewTemplate,
@@ -51,7 +47,7 @@ function AppContent() {
     deleteTemplate: storeDeleteTemplate,
     importTemplate: storeImportTemplate,
     setActiveTemplate,
-    setMobileInitialData,
+    setBatchInitialData,
     initSubscriptions,
   } = useAppStore();
 
@@ -60,11 +56,6 @@ function AppContent() {
     const cleanup = initSubscriptions();
     return cleanup;
   }, [initSubscriptions]);
-
-  const handleGenerateFromMobileLot = (lot: MobileScanLot) => {
-    const records = storeGenerateLot(lot);
-    toast.success('Lot mobile importé', `${records.length} articles chargés pour impression`);
-  };
 
   const handleGenerateFromDatabaseProducts = (products: ProductRecord[]) => {
     storeGenerateFromDatabase(products);
@@ -121,7 +112,7 @@ function AppContent() {
               onBackToHome={() => navigateTo('home')}
               onOpenGeneration={(tpl) => {
                 setActiveTemplate(tpl);
-                setMobileInitialData(undefined, undefined);
+                setBatchInitialData(undefined, undefined);
                 navigateTo('generation');
               }}
               onOpenRulesModal={() => openModal('isRulesModalOpen')}
@@ -131,8 +122,8 @@ function AppContent() {
           {currentView === 'generation' && (activeTemplate || templates[0]) && (
             <GenerationWorkspace
               template={activeTemplate || templates[0] || DEFAULT_TEMPLATES[0]}
-              initialProducts={mobileInitialProducts}
-              initialBatchName={mobileInitialBatchName}
+              initialProducts={batchInitialProducts}
+              initialBatchName={batchInitialName}
               onBack={() => navigateTo('home')}
             />
           )}
@@ -149,13 +140,6 @@ function AppContent() {
 
           {currentView === 'jobs' && <PrintJobsStudio />}
 
-          {currentView === 'mobile' && (
-            <MobileTerminalView
-              templates={templates}
-              onBackToDesktop={() => navigateTo('home')}
-            />
-          )}
-
           {currentView === 'database' && (
             <MasterDatabaseStudio
               onBack={() => navigateTo('home')}
@@ -163,25 +147,6 @@ function AppContent() {
               onGenerateFromDatabase={handleGenerateFromDatabaseProducts}
             />
           )}
-
-          {/* Mobile Gateway & Lots Ingestion Modal */}
-          <MobileSyncHubModal
-            isOpen={modals.isMobileSyncOpen}
-            onClose={() => closeModal('isMobileSyncOpen')}
-            templates={templates}
-            onGenerateLot={handleGenerateFromMobileLot}
-            onOpenInEditor={(tplName) => {
-              const tpl = templates.find((t) => t.name === tplName);
-              if (tpl) {
-                selectToEdit(tpl);
-                closeModal('isMobileSyncOpen');
-              }
-            }}
-            onOpenMobileSimulator={() => {
-              closeModal('isMobileSyncOpen');
-              navigateTo('mobile');
-            }}
-          />
 
           {/* Mapping Dictionary Modal */}
           <MappingDictionaryModal
@@ -228,9 +193,6 @@ function AppContent() {
           />
         </ErrorBoundary>
       </div>
-
-      {/* Global PWA Offline Connectivity Indicator */}
-      <OfflineIndicator />
     </div>
   );
 }

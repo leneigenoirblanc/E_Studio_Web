@@ -201,6 +201,17 @@ export class ExportService {
         printIframe.contentWindow?.print();
       } catch {
         window.open(blobUrl, '_blank');
+      } finally {
+        setTimeout(() => {
+          try {
+            if (document.body.contains(printIframe)) {
+              document.body.removeChild(printIframe);
+            }
+            URL.revokeObjectURL(blobUrl);
+          } catch {
+            // Ignore cleanup errors
+          }
+        }, 60000);
       }
     };
 

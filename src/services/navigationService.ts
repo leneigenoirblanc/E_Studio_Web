@@ -1,4 +1,4 @@
-export type AppView = 'home' | 'editor' | 'generation' | 'database' | 'mobile' | 'labels' | 'printers' | 'jobs';
+export type AppView = 'home' | 'editor' | 'generation' | 'database' | 'labels' | 'printers' | 'jobs';
 
 export interface RouteState {
   view: AppView;
@@ -38,8 +38,6 @@ class NavigationService {
       view = 'generation';
     } else if (cleanPath === 'database' || cleanPath === 'articles' || cleanPath === 'catalog') {
       view = 'database';
-    } else if (cleanPath === 'mobile' || cleanPath === 'pwa' || cleanPath === 'terminal') {
-      view = 'mobile';
     } else if (cleanPath === 'labels' || cleanPath === 'formats' || cleanPath === 'templates') {
       view = 'labels';
     } else if (cleanPath === 'printers' || cleanPath === 'imprimantes') {
@@ -61,10 +59,6 @@ class NavigationService {
     // Check query string on window.location.search as fallback (e.g. ?mode=mobile)
     if (window.location.search) {
       const urlParams = new URLSearchParams(window.location.search);
-      const mode = urlParams.get('mode');
-      if (mode === 'mobile' || mode === 'pwa') {
-        view = 'mobile';
-      }
       urlParams.forEach((val, key) => {
         if (!params[key]) {
           params[key] = val;

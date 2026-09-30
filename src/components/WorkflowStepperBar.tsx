@@ -1,13 +1,12 @@
 import React from 'react';
 import { AppView } from '../services/navigationService';
-import { Database, Layers, Smartphone, Printer, ChevronRight, Check } from 'lucide-react';
+import { Database, Layers, Printer, Cpu, ChevronRight, Check } from 'lucide-react';
 
 interface WorkflowStepperBarProps {
   currentView: AppView;
   onNavigate: (view: AppView) => void;
   totalProductsCount: number;
   templatesCount: number;
-  pendingLotsCount: number;
 }
 
 export const WorkflowStepperBar: React.FC<WorkflowStepperBarProps> = ({
@@ -15,7 +14,6 @@ export const WorkflowStepperBar: React.FC<WorkflowStepperBarProps> = ({
   onNavigate,
   totalProductsCount,
   templatesCount,
-  pendingLotsCount,
 }) => {
   const steps = [
     {
@@ -39,24 +37,23 @@ export const WorkflowStepperBar: React.FC<WorkflowStepperBarProps> = ({
       isCompleted: templatesCount > 0,
     },
     {
-      id: 'step_mobile',
-      view: 'mobile' as AppView,
-      stepNumber: 3,
-      label: 'Collecte & Scans',
-      sublabel: pendingLotsCount > 0 ? `${pendingLotsCount} lot(s) en attente` : 'Terminaux synchronisés',
-      icon: Smartphone,
-      isActive: currentView === 'mobile',
-      isCompleted: pendingLotsCount > 0,
-      highlightBadge: pendingLotsCount > 0 ? `${pendingLotsCount}` : undefined,
-    },
-    {
       id: 'step_generation',
       view: 'generation' as AppView,
-      stepNumber: 4,
+      stepNumber: 3,
       label: 'Imposition & Tirage',
       sublabel: 'Planches PDF / ZPL / PPTX',
       icon: Printer,
       isActive: currentView === 'generation',
+      isCompleted: false,
+    },
+    {
+      id: 'step_printers',
+      view: 'printers' as AppView,
+      stepNumber: 4,
+      label: 'Parc Imprimantes',
+      sublabel: 'Pilotes & Détection Directe',
+      icon: Cpu,
+      isActive: currentView === 'printers',
       isCompleted: false,
     },
   ];
@@ -102,11 +99,6 @@ export const WorkflowStepperBar: React.FC<WorkflowStepperBarProps> = ({
                   <div className="flex flex-col min-w-0 pr-1">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-semibold tracking-tight truncate">{step.label}</span>
-                      {step.highlightBadge && (
-                        <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 font-black text-[9px] rounded-full animate-pulse">
-                          {step.highlightBadge}
-                        </span>
-                      )}
                     </div>
                     <span
                       className={`text-[10px] leading-tight truncate hidden md:inline ${
@@ -135,7 +127,7 @@ export const WorkflowStepperBar: React.FC<WorkflowStepperBarProps> = ({
               : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
           }`}
         >
-          Vue Vue d'ensemble
+          Vue d'ensemble
         </button>
       </div>
     </div>

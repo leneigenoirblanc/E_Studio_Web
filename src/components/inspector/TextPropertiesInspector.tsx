@@ -26,6 +26,7 @@ import {
   Superscript as SuperscriptIcon,
   CircleDot,
 } from 'lucide-react';
+import { ContrastAdvisorWidget } from './ContrastAdvisorWidget';
 
 export interface TextPropertiesInspectorProps {
   selectedItem: TemplateItem;
@@ -350,6 +351,15 @@ export const TextPropertiesInspector: React.FC<TextPropertiesInspectorProps> = (
           </div>
         </div>
       </div>
+
+      {/* WCAG Color Contrast & Legibility Advisor */}
+      <ContrastAdvisorWidget
+        textColor={item.text_color || '#000000'}
+        bgColor={item.fill_color || '#ffffff'}
+        fontSizePt={item.font_size_pt || 11}
+        isBold={item.font_weight === 'bold' || item.font_weight === '800'}
+        onApplyRecommended={(recColor) => onUpdate({ text_color: recColor })}
+      />
 
       {/* Ombre Portée (Text Shadow) */}
       <div className="space-y-1.5 p-2 bg-slate-50 rounded border border-slate-200">

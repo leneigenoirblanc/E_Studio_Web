@@ -1,6 +1,7 @@
 import React from 'react';
 import { TemplateItem, SemanticSnapConfig } from '../../types';
 import { Magnet, Link2, Scissors } from 'lucide-react';
+import { AnchorReflowInspector } from './AnchorReflowInspector';
 
 export interface TransformLayoutInspectorProps {
   selectedItem: TemplateItem;
@@ -84,6 +85,9 @@ export const TransformLayoutInspector: React.FC<TransformLayoutInspectorProps> =
           </div>
         </div>
       </div>
+
+      {/* Responsive Gabarit Anchor Constraints with Material Design Icons */}
+      <AnchorReflowInspector selectedItem={selectedItem} onUpdate={onUpdate} />
 
       {/* Print finish & die-cut masks */}
       <div className="pt-2 border-t border-slate-200 space-y-2">

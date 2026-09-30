@@ -1647,7 +1647,7 @@ export const MasterDatabaseStudio: React.FC<MasterDatabaseStudioProps> = ({
                 <span className="text-slate-400 block font-semibold mb-1">Bus Multi-Onglets</span>
                 <span className="font-bold text-white text-sm">BroadcastChannel</span>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Synchronisation instantanée entre onglets ouverts et instance PWA sans rechargement.
+                  Synchronisation instantanée entre onglets ouverts sans rechargement.
                 </p>
               </div>
             </div>

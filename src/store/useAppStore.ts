@@ -3,8 +3,7 @@
  * 
  * Replaces ad-hoc useState hooks with a unified, predictable domain store:
  * - Templates management (persisted via TemplateRepository)
- * - Product catalog & Turso cloud sync status
- * - Mobile scan lots and batch ingestion
+ * - Product catalog & cloud sync status
  * - Modal & navigation orchestrations
  * - Local-First reactive subscriptions
  */
@@ -15,7 +14,6 @@ import { DEFAULT_TEMPLATES } from '../defaultTemplates';
 import { navigationService, AppView } from '../services/navigationService';
 import { databaseService, TursoConfig } from '../services/databaseService';
 import { templateRepository } from '../domain/repositories';
-import { mobileSyncService, MobileScanLot } from '../pwa';
 import { mappingDictionaryManager, FieldAliasDefinition } from '../utils/mappingDictionary';
 
 export type AppModalKey =
@@ -24,7 +22,6 @@ export type AppModalKey =
   | 'isFontManagerOpen'
   | 'isAuditTrailOpen'
   | 'isMappingDictionaryOpen'
-  | 'isMobileSyncOpen'
   | 'isPreferencesModalOpen'
   | 'isFindReplaceOpen'
   | 'isShortcutsOpen'
@@ -58,11 +55,9 @@ export interface AppState {
   // Domain: Mapping Dictionary
   dictionary: FieldAliasDefinition[];
 
-  // Domain: Mobile Lots & Synchronization
-  mobileLots: MobileScanLot[];
-  pendingLotsCount: number;
-  mobileInitialProducts: ProductRecord[] | undefined;
-  mobileInitialBatchName: string | undefined;
+  // Domain: Batch Ingestion
+  batchInitialProducts: ProductRecord[] | undefined;
+  batchInitialName: string | undefined;
   syncStatus: SyncStatus;
 
   // Shell: Routing & View Navigation History
@@ -82,8 +77,7 @@ export interface AppState {
   setTotalProductsCount: (count: number) => void;
   setTursoConfig: (config: TursoConfig) => void;
   setDictionary: (dict: FieldAliasDefinition[]) => void;
-  setMobileLots: (lots: MobileScanLot[]) => void;
-  setMobileInitialData: (products?: ProductRecord[], batchName?: string) => void;
+  setBatchInitialData: (products?: ProductRecord[], batchName?: string) => void;
   setModalOpen: (modalKey: AppModalKey, isOpen: boolean) => void;
   openModal: (modalKey: AppModalKey) => void;
   closeModal: (modalKey: AppModalKey) => void;
@@ -94,7 +88,6 @@ export interface AppState {
   goForward: () => void;
   selectToEdit: (tpl: LabelTemplate) => void;
   selectToGenerate: (tpl: LabelTemplate) => void;
-  generateFromMobileLot: (lot: MobileScanLot) => ProductRecord[];
   generateFromDatabase: (products: ProductRecord[]) => void;
   saveTemplate: (tpl: LabelTemplate) => Promise<void>;
   createNewTemplate: (tpl: LabelTemplate) => Promise<void>;
@@ -121,11 +114,6 @@ export const useAppStore = create<AppState>((set, get) => {
     initialActiveTemplate = initialTemplates[0] || DEFAULT_TEMPLATES[0] || null;
   }
 
-  const initialLots = mobileSyncService.getLots();
-  const initialPendingCount = initialLots.filter(
-    (l) => l.status === 'ready' || l.status === 'received'
-  ).length;
-
   const initialTursoConfig = databaseService.getTursoConfig();
 
   return {
@@ -135,10 +123,8 @@ export const useAppStore = create<AppState>((set, get) => {
     totalProductsCount: databaseService.getProducts().length,
     tursoConfig: initialTursoConfig,
     dictionary: mappingDictionaryManager.getDictionary(),
-    mobileLots: initialLots,
-    pendingLotsCount: initialPendingCount,
-    mobileInitialProducts: undefined,
-    mobileInitialBatchName: undefined,
+    batchInitialProducts: undefined,
+    batchInitialName: undefined,
     syncStatus: {
       isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
       lastSyncedAt: initialTursoConfig.lastSyncedAt,
@@ -163,7 +149,6 @@ export const useAppStore = create<AppState>((set, get) => {
       isFontManagerOpen: false,
       isAuditTrailOpen: false,
       isMappingDictionaryOpen: false,
-      isMobileSyncOpen: false,
       isPreferencesModalOpen: false,
       isFindReplaceOpen: false,
       isShortcutsOpen: false,
@@ -200,14 +185,8 @@ export const useAppStore = create<AppState>((set, get) => {
       mappingDictionaryManager.resetToDefaults();
       set({ dictionary: mappingDictionaryManager.getDictionary() });
     },
-    setMobileLots: (mobileLots) => {
-      const pendingLotsCount = mobileLots.filter(
-        (l) => l.status === 'ready' || l.status === 'received'
-      ).length;
-      set({ mobileLots, pendingLotsCount });
-    },
-    setMobileInitialData: (products, batchName) =>
-      set({ mobileInitialProducts: products, mobileInitialBatchName: batchName }),
+    setBatchInitialData: (products, batchName) =>
+      set({ batchInitialProducts: products, batchInitialName: batchName }),
 
     // Modal Orchestration
     setModalOpen: (modalKey, isOpen) =>
@@ -242,21 +221,14 @@ export const useAppStore = create<AppState>((set, get) => {
         timestamp: Date.now(),
       };
 
-      const truncatedHistory = state.navigationHistory.slice(0, state.historyIndex + 1);
-      const last = truncatedHistory[truncatedHistory.length - 1];
-      const isSameAsLast =
-        last &&
-        last.view === view &&
-        JSON.stringify(last.params || {}) === JSON.stringify(effectiveParams || {});
-
-      const newHistory = isSameAsLast ? truncatedHistory : [...truncatedHistory, newEntry];
-      const newIndex = newHistory.length - 1;
+      const newHistory = state.navigationHistory.slice(0, state.historyIndex + 1);
+      newHistory.push(newEntry);
 
       set({
         currentView: view,
         navigationHistory: newHistory,
-        historyIndex: newIndex,
-        canGoBack: newIndex > 0,
+        historyIndex: newHistory.length - 1,
+        canGoBack: newHistory.length > 1,
         canGoForward: false,
       });
     },
@@ -265,11 +237,11 @@ export const useAppStore = create<AppState>((set, get) => {
       const state = get();
       if (state.historyIndex > 0) {
         const nextIndex = state.historyIndex - 1;
-        const target = state.navigationHistory[nextIndex];
-        if (target) {
-          navigationService.navigateTo(target.view, target.params, true);
+        const entry = state.navigationHistory[nextIndex];
+        if (entry) {
+          navigationService.navigateTo(entry.view, entry.params || {}, true);
           set({
-            currentView: target.view,
+            currentView: entry.view,
             historyIndex: nextIndex,
             canGoBack: nextIndex > 0,
             canGoForward: nextIndex < state.navigationHistory.length - 1,
@@ -282,11 +254,11 @@ export const useAppStore = create<AppState>((set, get) => {
       const state = get();
       if (state.historyIndex < state.navigationHistory.length - 1) {
         const nextIndex = state.historyIndex + 1;
-        const target = state.navigationHistory[nextIndex];
-        if (target) {
-          navigationService.navigateTo(target.view, target.params, true);
+        const entry = state.navigationHistory[nextIndex];
+        if (entry) {
+          navigationService.navigateTo(entry.view, entry.params || {}, true);
           set({
-            currentView: target.view,
+            currentView: entry.view,
             historyIndex: nextIndex,
             canGoBack: nextIndex > 0,
             canGoForward: nextIndex < state.navigationHistory.length - 1,
@@ -304,38 +276,10 @@ export const useAppStore = create<AppState>((set, get) => {
       const snapshot: LabelTemplate = JSON.parse(JSON.stringify(tpl));
       set({
         activeTemplate: snapshot,
-        mobileInitialProducts: undefined,
-        mobileInitialBatchName: undefined,
+        batchInitialProducts: undefined,
+        batchInitialName: undefined,
       });
       get().navigateTo('generation', { template: tpl.name }, `Tirage: ${tpl.name}`);
-    },
-
-    generateFromMobileLot: (lot) => {
-      const state = get();
-      const matchedTemplate =
-        state.templates.find((t) => t.name === lot.targetTemplateId) ||
-        state.templates[0] ||
-        DEFAULT_TEMPLATES[0];
-
-      const records = mobileSyncService.convertLotToProductRecords(lot);
-      const snapshot: LabelTemplate = JSON.parse(JSON.stringify(matchedTemplate));
-
-      set({
-        activeTemplate: snapshot,
-        mobileInitialProducts: records,
-        mobileInitialBatchName: lot.name,
-      });
-
-      get().navigateTo(
-        'generation',
-        {
-          template: matchedTemplate.name,
-          lot: lot.id,
-        },
-        `Lot: ${lot.name}`
-      );
-
-      return records;
     },
 
     generateFromDatabase: (products) => {
@@ -345,8 +289,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
       set({
         activeTemplate: snapshot,
-        mobileInitialProducts: products,
-        mobileInitialBatchName: `Impression Base de Données (${products.length} réf.)`,
+        batchInitialProducts: products,
+        batchInitialName: `Impression Base de Données (${products.length} réf.)`,
       });
 
       get().navigateTo('generation', { template: defaultTemplate.name }, 'Base de Données');
@@ -361,40 +305,41 @@ export const useAppStore = create<AppState>((set, get) => {
       });
     },
 
-    createNewTemplate: async (newTpl) => {
-      await templateRepository.save(newTpl);
+    createNewTemplate: async (tpl) => {
+      await templateRepository.save(tpl);
       const updatedList = templateRepository.getAll();
       set({
         templates: updatedList,
-        activeTemplate: newTpl,
+        activeTemplate: tpl,
       });
-      get().navigateTo('editor', { template: newTpl.name }, `Nouveau: ${newTpl.name}`);
+      get().navigateTo('editor', { template: tpl.name }, `Nouveau: ${tpl.name}`);
     },
 
     duplicateTemplate: async (name) => {
       const cloned = await templateRepository.duplicate(name);
       if (cloned) {
         const updatedList = templateRepository.getAll();
-        set({ templates: updatedList });
+        set({
+          templates: updatedList,
+          activeTemplate: cloned,
+        });
+        get().navigateTo('editor', { template: cloned.name }, `Copie: ${cloned.name}`);
+        return cloned;
       }
-      return cloned;
+      return null;
     },
 
     deleteTemplate: async (name) => {
       await templateRepository.delete(name);
-      const remaining = templateRepository.getAll();
-      const state = get();
-      let nextActive = state.activeTemplate;
-
-      if (state.activeTemplate?.name === name) {
-        nextActive = remaining[0] || null;
-        get().navigateTo('home', {}, "Vue d'ensemble");
-      }
-
+      const updatedList = templateRepository.getAll();
+      const nextActive = updatedList[0] || DEFAULT_TEMPLATES[0] || null;
       set({
-        templates: remaining,
+        templates: updatedList,
         activeTemplate: nextActive,
       });
+      if (get().activeTemplate?.name === name) {
+        get().navigateTo('home');
+      }
     },
 
     importTemplate: async (imported) => {
@@ -433,15 +378,7 @@ export const useAppStore = create<AppState>((set, get) => {
         }
       });
 
-      // 3. Mobile lots sync
-      const unsubLots = mobileSyncService.subscribe((lots) => {
-        const pendingCount = lots.filter(
-          (l) => l.status === 'ready' || l.status === 'received'
-        ).length;
-        set({ mobileLots: lots, pendingLotsCount: pendingCount });
-      });
-
-      // 4. Database & Turso sync
+      // 3. Database & Turso sync
       const unsubDb = databaseService.subscribe((prods) => {
         const config = databaseService.getTursoConfig();
         set((state) => ({
@@ -456,7 +393,7 @@ export const useAppStore = create<AppState>((set, get) => {
         }));
       });
 
-      // 5. Online/Offline events
+      // 4. Online/Offline events
       const handleOnline = () =>
         set((state) => ({ syncStatus: { ...state.syncStatus, isOnline: true } }));
       const handleOffline = () =>
@@ -467,7 +404,7 @@ export const useAppStore = create<AppState>((set, get) => {
         window.addEventListener('offline', handleOffline);
       }
 
-      // 6. Mapping dictionary reactive sync
+      // 5. Mapping dictionary reactive sync
       const unsubDictionary = mappingDictionaryManager.subscribe(() => {
         set({ dictionary: mappingDictionaryManager.getDictionary() });
       });
@@ -476,7 +413,6 @@ export const useAppStore = create<AppState>((set, get) => {
       return () => {
         unsubTemplates();
         unsubNav();
-        unsubLots();
         unsubDb();
         unsubDictionary();
         if (typeof window !== 'undefined') {

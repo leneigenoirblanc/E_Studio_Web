@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 
-export function useOnlineStatus() {
-  const [isOnline, setIsOnline] = useState(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
+/**
+ * Native hook to detect network connectivity using standard browser navigator.onLine events
+ */
+export function useOnlineStatus(): boolean {
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 

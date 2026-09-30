@@ -64,6 +64,18 @@ export interface DynamicDateConfig {
   prefix_label?: string; // e.g. "À consommer jusqu'au :", "Emballé le :"
 }
 
+export type LayoutAnchor =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'center'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right'
+  | 'stretch-x'
+  | 'stretch-y'
+  | 'stretch-both';
+
 export interface BaseItemProperties {
   id: string;
   type: ItemType;
@@ -79,6 +91,7 @@ export interface BaseItemProperties {
   conditional_display?: ConditionalDisplayConfig;
   finish_effect?: 'none' | 'die_cut' | 'spot_varnish' | 'hot_foil';
   semantic_snap?: SemanticSnapConfig;
+  anchor?: LayoutAnchor;
 }
 
 export interface TextShadowConfig {
