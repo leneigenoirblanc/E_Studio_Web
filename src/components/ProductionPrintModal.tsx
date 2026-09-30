@@ -22,6 +22,9 @@ import { CompatibilityEngine } from '../domain/printing/compatibilityEngine';
 import { PrinterAdapterFactory } from '../domain/printing/adapters/PrinterAdapterFactory';
 import { printJobService } from '../domain/printing/printJobService';
 import { useToast } from './ToastNotification';
+import { ruleOrchestrator } from '../domain/orchestration/ruleOrchestrator';
+import { rulesRepository } from '../domain/orchestration/rulesRepository';
+import { RuleTrigger } from '../domain/orchestration/types';
 
 interface ProductionPrintModalProps {
   isOpen: boolean;
@@ -92,6 +95,39 @@ export const ProductionPrintModal: React.FC<ProductionPrintModalProps> = ({
     try {
       const mode = compatibilityReport?.recommendedRenderingMode || 'native';
 
+      // 0. Exécution du hook BEFORE_PRINT via RuleOrchestrator
+      ruleOrchestrator.executeHook(
+        RuleTrigger.BEFORE_PRINT,
+        {
+          product: {
+            itemName: products[0]?.ITEMNAME || '',
+            sellingPrice: Number(products[0]?.SELLING_PRICE) || 0,
+            department: products[0]?.CATEGORY_NAME,
+            barcode: products[0]?.PRODUCT_SCAN,
+          },
+          pricing: {
+            regularPrice: Number(products[0]?.SELLING_PRICE) || 0,
+            hasPromo: Boolean(products[0]?.PROMOPRICE),
+          },
+          template: {
+            currentTemplateId: template.name,
+            resolvedTemplateId: template.name,
+          },
+          print: {
+            printerId: selectedPrinter.id,
+            copies,
+          },
+          batch: {
+            totalCount: totalLabels,
+            currentIndex: 0,
+            isFirst: true,
+            isLast: true,
+          },
+        },
+        rulesRepository.getAll(),
+        { recordTrace: true }
+      );
+
       // 1. Create print job in queue with lastCompletedIndex = -1
       const job = printJobService.createJob({
         templateId: template.name,
@@ -131,6 +167,31 @@ export const ProductionPrintModal: React.FC<ProductionPrintModalProps> = ({
             lastCompletedIndex: totalLabels - 1,
             completedAt: Date.now(),
           });
+          // Hook AFTER_PRINT via RuleOrchestrator
+          ruleOrchestrator.executeHook(
+            RuleTrigger.AFTER_PRINT,
+            {
+              product: {
+                itemName: products[0]?.ITEMNAME || '',
+                sellingPrice: Number(products[0]?.SELLING_PRICE) || 0,
+              },
+              pricing: {
+                regularPrice: Number(products[0]?.SELLING_PRICE) || 0,
+                hasPromo: Boolean(products[0]?.PROMOPRICE),
+              },
+              print: {
+                printerId: selectedPrinter.id,
+                copies,
+              },
+              batch: {
+                totalCount: totalLabels,
+                currentIndex: totalLabels - 1,
+                isFirst: false,
+                isLast: true,
+              },
+            },
+            rulesRepository.getAll()
+          );
           setIsExecuting(false);
           toast.success(
             'Tirage terminé avec succès',
@@ -142,7 +203,18 @@ export const ProductionPrintModal: React.FC<ProductionPrintModalProps> = ({
           });
         }
       }, 400);
-    } catch {
+    } catch (err) {
+      // Hook ON_PRINT_ERROR via RuleOrchestrator
+      ruleOrchestrator.executeHook(
+        RuleTrigger.ON_PRINT_ERROR,
+        {
+          product: { itemName: products[0]?.ITEMNAME || '', sellingPrice: Number(products[0]?.SELLING_PRICE) || 0 },
+          pricing: { regularPrice: 0, hasPromo: false },
+          print: { printerId: selectedPrinter.id },
+          batch: { totalCount: totalLabels, currentIndex: 0, isFirst: true, isLast: false },
+        },
+        rulesRepository.getAll()
+      );
       setIsExecuting(false);
       toast.error('Erreur lors du tirage', 'Vérifiez la connexion de l\'imprimante.');
     }

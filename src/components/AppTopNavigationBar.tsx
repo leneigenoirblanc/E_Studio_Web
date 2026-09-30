@@ -226,10 +226,10 @@ export const AppTopNavigationBar: React.FC<AppTopNavigationBarProps> = (props) =
                     setToolsOpen(false);
                     onOpenRulesModal();
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700/70 transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-indigo-300 hover:text-white hover:bg-slate-700/70 transition-colors text-left font-medium"
                 >
-                  <Cpu className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Règles d'étiquetage</span>
+                  <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Orchestration & Règles Hybrides</span>
                 </button>
 
                 <button

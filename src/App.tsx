@@ -14,6 +14,7 @@ import { TemplateEditor } from './components/TemplateEditor';
 import { GenerationWorkspace } from './components/GenerationWorkspace';
 import { MasterDatabaseStudio } from './components/MasterDatabaseStudio';
 import { NewGabaritWizard } from './components/NewGabaritWizard';
+import { OrchestrationStudioModal } from './components/OrchestrationStudioModal';
 import { OmniChannelStudioModal } from './components/OmniChannelStudioModal';
 import { AccessibilityPreferencesModal } from './components/AccessibilityPreferencesModal';
 import { FontManagerModal } from './components/FontManagerModal';
@@ -154,11 +155,17 @@ function AppContent() {
             onClose={() => closeModal('isMappingDictionaryOpen')}
           />
 
-          {/* Omni-Channel Rules Engine & Simulator Modal */}
-          <OmniChannelStudioModal
+          {/* Global Orchestration & Hybrid Rules Platform Modal */}
+          <OrchestrationStudioModal
             isOpen={modals.isRulesModalOpen}
             onClose={() => closeModal('isRulesModalOpen')}
-            currentTemplateName={activeTemplate?.name}
+            onSelectTemplate={(tplName) => {
+              const found = templates.find((t) => t.name === tplName);
+              if (found) {
+                selectToEdit(found);
+                closeModal('isRulesModalOpen');
+              }
+            }}
           />
 
           {/* Font Manager Modal */}

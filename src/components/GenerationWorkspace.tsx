@@ -19,8 +19,25 @@ import { ProductClusteringStudio } from './ProductClusteringStudio';
 import { MultiSlotSignageStudio } from './MultiSlotSignageStudio';
 import { ImpositionCalibrationBoard } from './ImpositionCalibrationBoard';
 import { ProductionPrintModal } from './ProductionPrintModal';
+import { DataResolutionCenterModal } from './DataResolutionCenterModal';
+import { WorkflowStepperBar } from './WorkflowStepperBar';
+import { PreflightReportModal } from './PreflightReportModal';
 import { ContextTooltip, useTooltip } from '../context/TooltipContext';
 import { useAppStore } from '../store/useAppStore';
+import { useToast } from './ToastNotification';
+import { ruleOrchestrator } from '../domain/orchestration/ruleOrchestrator';
+import { rulesRepository } from '../domain/orchestration/rulesRepository';
+import { RuleTrigger } from '../domain/orchestration/types';
+import { resolutionEngine } from '../domain/resolution/resolutionEngine';
+import { ProductionDataset } from '../domain/resolution/types';
+import { preflightEngine } from '../domain/workflow/preflightEngine';
+import { jobPackageService } from '../domain/workflow/jobPackageService';
+import {
+  WorkflowStageId,
+  WorkflowStageState,
+  WorkflowMode,
+  PreflightReport,
+} from '../domain/workflow/types';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -56,6 +73,8 @@ import {
   CheckSquare,
   Square,
   Copy,
+  Zap,
+  Layers,
 } from 'lucide-react';
 
 interface GenerationWorkspaceProps {
@@ -71,27 +90,155 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   initialProducts,
   initialBatchName,
 }) => {
-  const [products, setProducts] = useState<ProductRecord[]>(() => {
-    if (initialProducts && initialProducts.length > 0) return initialProducts;
-    return databaseService.getProducts();
+  // Dataset de production effectif (séparation stricte du catalogue de référence)
+  const [productionDataset, setProductionDataset] = useState<ProductionDataset | null>(() => {
+    if (initialProducts && initialProducts.length > 0) {
+      return resolutionEngine.resolveImportBatch(initialProducts, {
+        batchName: initialBatchName || 'Jeu de production importé',
+      });
+    }
+    const samples = databaseService.getProducts().slice(0, 5);
+    return resolutionEngine.resolveImportBatch(samples, {
+      batchName: 'Échantillon de travail initial (5 articles)',
+    });
   });
 
-  React.useEffect(() => {
-    if (!initialProducts || initialProducts.length === 0) {
-      const unsub = databaseService.subscribe((dbItems) => {
-        setProducts(dbItems);
-      });
-      return () => unsub();
-    }
-  }, [initialProducts]);
+  const [products, setProducts] = useState<ProductRecord[]>(() => {
+    if (initialProducts && initialProducts.length > 0) return initialProducts;
+    // Par défaut, ne jamais charger l'ensemble de la base de référence comme lot à imprimer !
+    // On charge uniquement un échantillon de 5 articles de travail pour la mise en page
+    return databaseService.getProducts().slice(0, 5);
+  });
+
+  // State pour le Centre de Résolution des Données
+  const [isResolutionModalOpen, setIsResolutionModalOpen] = useState(false);
+  const [pendingResolutionDataset, setPendingResolutionDataset] = useState<ProductionDataset | null>(null);
+  const [lastUploadedFileName, setLastUploadedFileName] = useState<string>('');
+
+  // Workflow Officiel en 5 Étapes & Contrôles
+  const [workflowMode, setWorkflowMode] = useState<WorkflowMode>('STANDARD');
+  const [currentWorkflowStageId, setCurrentWorkflowStageId] = useState<WorkflowStageId>('STAGE_4_PREFLIGHT_BAT');
+  const [isPreflightModalOpen, setIsPreflightModalOpen] = useState(false);
+  const jobFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<
     'preview' | 'data' | 'imposition' | 'tiers' | 'clustering' | 'multislot' | 'blueprint'
   >('preview');
   const { modals, openModal, closeModal, navigateTo } = useAppStore();
+  const toast = useToast();
+  const [isOrchestrating, setIsOrchestrating] = useState(false);
+  const activeRulesCount = useMemo(() => rulesRepository.getActiveCount(), [modals.isRulesModalOpen]);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [isProductionPrintOpen, setIsProductionPrintOpen] = useState(false);
+
+  const handleRunRulesOrchestration = (targetProducts?: ProductRecord[]) => {
+    const list = targetProducts || products;
+    if (list.length === 0) {
+      toast.info('Aucun article', "Importez ou sélectionnez des articles avant de lancer l'orchestration.");
+      return;
+    }
+
+    setIsOrchestrating(true);
+    const rules = rulesRepository.getAll();
+    let totalMutations = 0;
+    const rulesTriggered = new Set<string>();
+
+    // 1. Hook BEFORE_PRICING & AFTER_PRICING sur chaque article
+    const updatedProducts = list.map((p, idx) => {
+      const execCtx = {
+        product: {
+          id: p.id,
+          partNo: p.PARTNO,
+          itemName: p.ITEMNAME,
+          department: p.CATEGORY_NAME,
+          sellingPrice: Number(p.SELLING_PRICE) || 0,
+          promoPrice: p.PROMOPRICE ? Number(p.PROMOPRICE) : undefined,
+          barcode: p.PRODUCT_SCAN,
+          brand: p.BRAND_INFO,
+          unitWeightUnit: p.UNIT_WEIGHT_UNIT,
+          unitWeightValue: p.UNIT_WEIGHT_VALUE,
+        },
+        pricing: {
+          regularPrice: Number(p.SELLING_PRICE) || 0,
+          promoPrice: p.PROMOPRICE ? Number(p.PROMOPRICE) : undefined,
+          hasPromo: Boolean(p.PROMOPRICE && Number(p.PROMOPRICE) > 0),
+          unitPriceMode: p.UNIT_PRICE_MODE,
+        },
+        template: {
+          currentTemplateId: template.name,
+          resolvedTemplateId: template.name,
+        },
+        batch: {
+          totalCount: list.length,
+          currentIndex: idx,
+          isFirst: idx === 0,
+          isLast: idx === list.length - 1,
+        },
+      };
+
+      const pricingRes = ruleOrchestrator.executeHook(RuleTrigger.BEFORE_PRICING, execCtx, rules);
+      totalMutations += pricingRes.rulesAppliedCount;
+      pricingRes.explanations.forEach((exp) => rulesTriggered.add(exp.ruleName));
+
+      const mutated = { ...p };
+      if (pricingRes.finalSnapshot.product.sellingPrice !== undefined) {
+        mutated.SELLING_PRICE = pricingRes.finalSnapshot.product.sellingPrice;
+      }
+      if (pricingRes.finalSnapshot.pricing.discountPercent !== undefined) {
+        mutated.DISCOUNT_PERCENT = pricingRes.finalSnapshot.pricing.discountPercent;
+      }
+      if (pricingRes.finalSnapshot.pricing.unitPriceMode) {
+        mutated.UNIT_PRICE_MODE = pricingRes.finalSnapshot.pricing.unitPriceMode;
+      }
+      return mutated;
+    });
+
+    // 2. Hook BEFORE_TEMPLATE_RESOLUTION (ex: vérification présence code-barres)
+    const tplRes = ruleOrchestrator.executeHook(
+      RuleTrigger.BEFORE_TEMPLATE_RESOLUTION,
+      {
+        product: {
+          itemName: list[0]?.ITEMNAME || '',
+          sellingPrice: Number(list[0]?.SELLING_PRICE) || 0,
+          barcode: list[0]?.PRODUCT_SCAN || '',
+        },
+        pricing: {
+          regularPrice: Number(list[0]?.SELLING_PRICE) || 0,
+          hasPromo: Boolean(list[0]?.PROMOPRICE),
+        },
+        template: { currentTemplateId: template.name },
+        batch: { totalCount: list.length, currentIndex: 0, isFirst: true, isLast: true },
+      },
+      rules
+    );
+
+    tplRes.explanations.forEach((exp) => rulesTriggered.add(exp.ruleName));
+
+    // 3. Hook BEFORE_IMPOSITION (ex: volume d'impression et imposition)
+    ruleOrchestrator.executeHook(
+      RuleTrigger.BEFORE_IMPOSITION,
+      {
+        product: { itemName: list[0]?.ITEMNAME || '', sellingPrice: Number(list[0]?.SELLING_PRICE) || 0 },
+        pricing: { regularPrice: 0, hasPromo: false },
+        batch: { totalCount: list.length, currentIndex: 0, isFirst: true, isLast: true },
+      },
+      rules
+    );
+
+    setProducts(updatedProducts);
+    setIsOrchestrating(false);
+
+    if (totalMutations > 0 || rulesTriggered.size > 0) {
+      toast.success(
+        'Orchestration appliquée',
+        `${totalMutations} mutation(s) exécutée(s) via : ${Array.from(rulesTriggered).slice(0, 2).join(', ')}${rulesTriggered.size > 2 ? '...' : ''}`
+      );
+    } else {
+      toast.info('Orchestration terminée', 'Toutes les données sont conformes aux règles actives.');
+    }
+  };
 
   const handleUpdateSingleProduct = (updated: ProductRecord) => {
     setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
@@ -199,6 +346,186 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
     return Array.from(map.values()).slice(0, 150);
   }, [effectivePrintItems]);
 
+  // Preflight diagnostics complet & rapport automatisé
+  const preflightReport = useMemo<PreflightReport>(() => {
+    return preflightEngine.runPreflightCheck(products, template, {
+      isThermalOutput: false,
+      impositionConfig: {
+        layoutType: 'grid',
+        rows: imposition?.rows || 1,
+        columns: imposition?.cols || 1,
+        marginMm: impositionConfig.gap_mm,
+        gapHorizontalMm: impositionConfig.gap_x_mm,
+        gapVerticalMm: impositionConfig.gap_y_mm,
+        startSlotOffset: impositionConfig.start_offset_slot || 0,
+        showCropMarks: impositionConfig.show_cut_marks,
+        paperFormat: (impositionConfig.page_size as any) || 'A4',
+      },
+    });
+  }, [products, template, imposition, impositionConfig]);
+
+  // États du Workflow en 5 Étapes
+  const workflowStages = useMemo<WorkflowStageState[]>(() => {
+    const hasData = products.length > 0;
+    const hasConflicts = (pendingResolutionDataset?.stats.conflicts || 0) > 0;
+    const isPreflightFail = preflightReport.status === 'FAIL';
+    const isPreflightWarning = preflightReport.status === 'WARNING';
+
+    return [
+      {
+        id: 'STAGE_1_INGESTION',
+        label: '1. Ingestion',
+        subtitle: 'Fichier & Mapping',
+        status: hasData ? 'COMPLETED' : 'NOT_STARTED',
+        blockingIssuesCount: 0,
+        warningsCount: 0,
+      },
+      {
+        id: 'STAGE_2_RESOLUTION',
+        label: '2. Résolution',
+        subtitle: 'Catalogue & Conflits',
+        status: hasConflicts ? 'REQUIRES_ATTENTION' : hasData ? 'COMPLETED' : 'NOT_STARTED',
+        blockingIssuesCount: hasConflicts ? pendingResolutionDataset!.stats.conflicts : 0,
+        warningsCount: 0,
+      },
+      {
+        id: 'STAGE_3_ORCHESTRATION',
+        label: '3. Règles & Pricing',
+        subtitle: 'Moteur Métier',
+        status: activeRulesCount > 0 ? 'COMPLETED' : 'REQUIRES_ATTENTION',
+        blockingIssuesCount: 0,
+        warningsCount: activeRulesCount === 0 ? 1 : 0,
+      },
+      {
+        id: 'STAGE_4_PREFLIGHT_BAT',
+        label: '4. BÀT & Imposition',
+        subtitle: 'Preflight & Rendu',
+        status: isPreflightFail ? 'BLOCKED' : isPreflightWarning ? 'REQUIRES_ATTENTION' : 'COMPLETED',
+        blockingIssuesCount: preflightReport.blockingCount,
+        warningsCount: preflightReport.warningCount,
+      },
+      {
+        id: 'STAGE_5_PRODUCTION',
+        label: '5. Spooler & Prod',
+        subtitle: 'Tirage & Audit',
+        status: 'ACTIVE',
+        blockingIssuesCount: 0,
+        warningsCount: 0,
+      },
+    ];
+  }, [products.length, pendingResolutionDataset, preflightReport, activeRulesCount]);
+
+  const handleSelectWorkflowStage = (stageId: WorkflowStageId) => {
+    setCurrentWorkflowStageId(stageId);
+    switch (stageId) {
+      case 'STAGE_1_INGESTION':
+        openModal('isDataMappingOpen');
+        break;
+      case 'STAGE_2_RESOLUTION':
+        if (!pendingResolutionDataset) {
+          const ds = resolutionEngine.resolveImportBatch(products, {
+            batchName: productionDataset?.name || 'Jeu de production en cours',
+          });
+          setPendingResolutionDataset(ds);
+        }
+        setIsResolutionModalOpen(true);
+        break;
+      case 'STAGE_3_ORCHESTRATION':
+        openModal('isRulesModalOpen');
+        break;
+      case 'STAGE_4_PREFLIGHT_BAT':
+        setActiveTab('preview');
+        if (preflightReport.blockingCount > 0 || preflightReport.warningCount > 0) {
+          setIsPreflightModalOpen(true);
+        }
+        break;
+      case 'STAGE_5_PRODUCTION':
+        handleOpenProductionWithPreflight();
+        break;
+    }
+  };
+
+  const handleOpenProductionWithPreflight = () => {
+    if (workflowMode === 'EXPRESS' && preflightReport.status === 'FAIL') {
+      toast.error(
+        'Arrêt de Sécurité (Mode Express)',
+        `${preflightReport.blockingCount} anomalie(s) bloquante(s) détectée(s). Le tirage est suspendu tant que le preflight n'est pas corrigé.`
+      );
+      setIsPreflightModalOpen(true);
+      return;
+    }
+    setIsProductionPrintOpen(true);
+  };
+
+  const handleExportJobPackage = () => {
+    try {
+      const activeDataset = productionDataset || resolutionEngine.resolveImportBatch(products, {
+        batchName: `Tirage ${products.length} articles`,
+      });
+      const rules = rulesRepository.getAll();
+      const pkg = jobPackageService.createJobPackage({
+        jobName: activeDataset.name,
+        mode: workflowMode,
+        dataset: activeDataset,
+        template,
+        rules,
+        imposition: {
+          layoutType: 'grid',
+          rows: imposition?.rows || 1,
+          columns: imposition?.cols || 1,
+          marginMm: impositionConfig.gap_mm,
+          gapHorizontalMm: impositionConfig.gap_x_mm,
+          gapVerticalMm: impositionConfig.gap_y_mm,
+          startSlotOffset: impositionConfig.start_offset_slot || 0,
+          showCropMarks: impositionConfig.show_cut_marks,
+          paperFormat: (impositionConfig.page_size as any) || 'A4',
+        },
+        preflightReport,
+      });
+
+      jobPackageService.exportJobFile(pkg);
+      toast.success(
+        'Paquet .estudio-job exporté',
+        `Snapshot immuable ${pkg.jobId} généré avec signature de conformité ${pkg.manifest.hashSignature.slice(0, 16)}...`
+      );
+    } catch (e) {
+      toast.error("Erreur d'exportation", String(e));
+    }
+  };
+
+  const handleImportJobPackage = () => {
+    jobFileInputRef.current?.click();
+  };
+
+  const handleJobFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const content = ev.target?.result as string;
+        const pkg = jobPackageService.parseJobFile(content);
+        
+        // Restauration du dataset figé
+        if (pkg.datasetSnapshot) {
+          setProductionDataset(pkg.datasetSnapshot);
+          const restoredRecords = pkg.datasetSnapshot.products.map((p) => resolutionEngine.toProductRecord(p));
+          setProducts(restoredRecords);
+        }
+
+        toast.success(
+          'Paquet de production restauré',
+          `Projet "${pkg.jobName}" (${pkg.datasetSnapshot.products.length} articles) rechargé à l'identique.`
+        );
+      } catch (err) {
+        toast.error('Échec de restauration', String(err));
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   // Preflight diagnostics for rows
   const diagnostics = useMemo(() => {
     return products.map((record) => {
@@ -242,6 +569,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setLastUploadedFileName(file.name);
     const reader = new FileReader();
     reader.onload = (loadEvent) => {
       try {
@@ -268,10 +596,54 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   };
 
   const handleApplyMapping = (mappedProducts: ProductRecord[]) => {
-    setProducts(mappedProducts);
+    // Hooks BEFORE_IMPORT & AFTER_IMPORT
+    const rules = rulesRepository.getAll();
+    ruleOrchestrator.executeHook(
+      RuleTrigger.AFTER_IMPORT,
+      {
+        product: { itemName: mappedProducts[0]?.ITEMNAME || '', sellingPrice: Number(mappedProducts[0]?.SELLING_PRICE) || 0 },
+        pricing: { regularPrice: 0, hasPromo: false },
+        batch: { totalCount: mappedProducts.length, currentIndex: 0, isFirst: true, isLast: true },
+      },
+      rules
+    );
+
+    // Hooks BEFORE_NORMALIZATION & AFTER_NORMALIZATION
+    ruleOrchestrator.executeHook(
+      RuleTrigger.AFTER_NORMALIZATION,
+      {
+        product: { itemName: mappedProducts[0]?.ITEMNAME || '', sellingPrice: Number(mappedProducts[0]?.SELLING_PRICE) || 0 },
+        pricing: { regularPrice: 0, hasPromo: false },
+        batch: { totalCount: mappedProducts.length, currentIndex: 0, isFirst: true, isLast: true },
+      },
+      rules
+    );
+
+    closeModal('isDataMappingOpen');
+
+    // Résolution industrielle contre le catalogue de référence
+    const resDataset = resolutionEngine.resolveImportBatch(mappedProducts, {
+      fileName: lastUploadedFileName || 'Catalogue Importé',
+      batchName: `Tirage ${mappedProducts.length} articles`,
+    });
+    setPendingResolutionDataset(resDataset);
+    setIsResolutionModalOpen(true);
+  };
+
+  const handleApplyResolvedDataset = (frozenDataset: ProductionDataset) => {
+    setProductionDataset(frozenDataset);
+    const resolvedRecords = frozenDataset.products.map((p) => resolutionEngine.toProductRecord(p));
+    setProducts(resolvedRecords);
     setCurrentIndex(0);
     setPrintScope('all');
-    closeModal('isDataMappingOpen');
+
+    // Orchestration automatique post-résolution
+    handleRunRulesOrchestration(resolvedRecords);
+
+    toast.success(
+      'Dataset de production résolu',
+      `${resolvedRecords.length} article(s) figé(s) pour l'impression (Catalogue de référence préservé).`
+    );
   };
 
   // Export Excel template of current records
@@ -299,7 +671,30 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   const handleExportPptx = async () => {
     if (!imposition) return;
     try {
+      const rules = rulesRepository.getAll();
+      ruleOrchestrator.executeHook(
+        RuleTrigger.BEFORE_EXPORT,
+        {
+          product: { itemName: effectivePrintItems[0]?.ITEMNAME || '', sellingPrice: Number(effectivePrintItems[0]?.SELLING_PRICE) || 0 },
+          pricing: { regularPrice: 0, hasPromo: false },
+          print: { exportFormat: 'PPTX' },
+          batch: { totalCount: effectivePrintItems.length, currentIndex: 0, isFirst: true, isLast: true },
+        },
+        rules
+      );
+
       await PptxExporter.exportToPptx(template, effectivePrintItems, imposition, impositionConfig);
+
+      ruleOrchestrator.executeHook(
+        RuleTrigger.AFTER_EXPORT,
+        {
+          product: { itemName: effectivePrintItems[0]?.ITEMNAME || '', sellingPrice: Number(effectivePrintItems[0]?.SELLING_PRICE) || 0 },
+          pricing: { regularPrice: 0, hasPromo: false },
+          print: { exportFormat: 'PPTX' },
+          batch: { totalCount: effectivePrintItems.length, currentIndex: 0, isFirst: true, isLast: true },
+        },
+        rules
+      );
     } catch (err) {
       alert("Erreur lors de l'export PowerPoint : " + String(err));
     }
@@ -308,6 +703,18 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
   // ZPL Direct Thermal Export
   const handleExportZpl = () => {
     try {
+      const rules = rulesRepository.getAll();
+      ruleOrchestrator.executeHook(
+        RuleTrigger.BEFORE_EXPORT,
+        {
+          product: { itemName: effectivePrintItems[0]?.ITEMNAME || '', sellingPrice: Number(effectivePrintItems[0]?.SELLING_PRICE) || 0 },
+          pricing: { regularPrice: 0, hasPromo: false },
+          print: { exportFormat: 'ZPL' },
+          batch: { totalCount: effectivePrintItems.length, currentIndex: 0, isFirst: true, isLast: true },
+        },
+        rules
+      );
+
       const zplContent = ZplExporter.generateBatchZpl(template, effectivePrintItems, {
         dpi: zplDpi,
         quantity: 1,
@@ -318,6 +725,17 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
       const filename = `thermique_${template.name.toLowerCase().replace(/\s+/g, '_')}_${zplDpi}dpi.zpl`;
       ZplExporter.downloadZplFile(filename, zplContent);
       setShowZplModal(false);
+
+      ruleOrchestrator.executeHook(
+        RuleTrigger.AFTER_EXPORT,
+        {
+          product: { itemName: effectivePrintItems[0]?.ITEMNAME || '', sellingPrice: Number(effectivePrintItems[0]?.SELLING_PRICE) || 0 },
+          pricing: { regularPrice: 0, hasPromo: false },
+          print: { exportFormat: 'ZPL' },
+          batch: { totalCount: effectivePrintItems.length, currentIndex: 0, isFirst: true, isLast: true },
+        },
+        rules
+      );
     } catch (err) {
       alert("Erreur lors de la génération ZPL : " + String(err));
     }
@@ -725,6 +1143,28 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-100 overflow-hidden select-none">
+      {/* Hidden file input for .estudio-job package restore */}
+      <input
+        type="file"
+        ref={jobFileInputRef}
+        onChange={handleJobFileSelected}
+        accept=".estudio-job,.json"
+        className="hidden"
+      />
+
+      {/* Workflow Stepper Bar Officiel en 5 Étapes */}
+      <WorkflowStepperBar
+        stages={workflowStages}
+        currentStageId={currentWorkflowStageId}
+        mode={workflowMode}
+        onSelectStage={handleSelectWorkflowStage}
+        onChangeMode={setWorkflowMode}
+        preflightReport={preflightReport}
+        onOpenPreflight={() => setIsPreflightModalOpen(true)}
+        onExportJobPackage={handleExportJobPackage}
+        onImportJobPackage={handleImportJobPackage}
+      />
+
       {/* Top Header Bar */}
       <header className="bg-white border-b border-slate-200 shrink-0 shadow-xs z-30">
         {/* Tier 1: Master Action Bar */}
@@ -859,7 +1299,7 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
               category="Production"
             >
               <button
-                onClick={() => setIsProductionPrintOpen(true)}
+                onClick={handleOpenProductionWithPreflight}
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition"
               >
                 <Printer className="w-3.5 h-3.5 text-white" />
@@ -1032,8 +1472,57 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
             </div>
           </div>
 
-          <div className="text-[11px] text-slate-400 font-mono hidden lg:block">
-            Workflow E-Studio v2.4 • Prêt pour l'impression
+          <div className="flex items-center gap-2">
+            <ContextTooltip
+              title="Centre de Résolution des Données"
+              content="Croise le jeu de travail avec la base de référence, résout les identifiants et arbitre les conflits"
+              category="Résolution"
+            >
+              <button
+                onClick={() => {
+                  if (!pendingResolutionDataset) {
+                    const ds = resolutionEngine.resolveImportBatch(products, {
+                      batchName: productionDataset?.name || 'Jeu de production en cours',
+                    });
+                    setPendingResolutionDataset(ds);
+                  }
+                  setIsResolutionModalOpen(true);
+                }}
+                className="px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1.5 transition shadow-xs"
+              >
+                <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Résolution Données ({products.length})</span>
+              </button>
+            </ContextTooltip>
+
+            <ContextTooltip
+              title="Orchestration & Règles Métier"
+              content="Consulter, configurer ou simuler les règles métier actives dans le pipeline E-Studio"
+              category="Orchestration"
+            >
+              <button
+                onClick={() => openModal('isRulesModalOpen')}
+                className="px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1.5 transition shadow-xs"
+              >
+                <Cpu className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Règles ({activeRulesCount})</span>
+              </button>
+            </ContextTooltip>
+
+            <ContextTooltip
+              title="Exécuter la Chaîne de Règles"
+              content="Évalue les règles tarifaires, visuelles et gabarits sur l'ensemble des articles du tirage"
+              category="Orchestration"
+            >
+              <button
+                onClick={() => handleRunRulesOrchestration()}
+                disabled={isOrchestrating}
+                className="px-2.5 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-1 shadow-xs transition disabled:opacity-60"
+              >
+                <Zap className={`w-3.5 h-3.5 ${isOrchestrating ? 'animate-spin' : ''}`} />
+                <span>{isOrchestrating ? 'Calcul...' : 'Appliquer Règles'}</span>
+              </button>
+            </ContextTooltip>
           </div>
         </div>
       </header>
@@ -1986,6 +2475,28 @@ export const GenerationWorkspace: React.FC<GenerationWorkspaceProps> = ({
         template={template}
         products={products}
         onOpenPrintJobs={() => navigateTo('jobs')}
+      />
+
+      {/* Data Resolution Center Modal */}
+      <DataResolutionCenterModal
+        isOpen={isResolutionModalOpen}
+        onClose={() => setIsResolutionModalOpen(false)}
+        dataset={pendingResolutionDataset}
+        onApplyResolvedDataset={handleApplyResolvedDataset}
+      />
+
+      {/* Preflight Report Modal */}
+      <PreflightReportModal
+        isOpen={isPreflightModalOpen}
+        onClose={() => setIsPreflightModalOpen(false)}
+        report={preflightReport}
+        onSelectProduct={(prodId) => {
+          const idx = products.findIndex((p) => p.id === prodId);
+          if (idx >= 0) {
+            setCurrentIndex(idx);
+            setActiveTab('preview');
+          }
+        }}
       />
     </div>
   );
