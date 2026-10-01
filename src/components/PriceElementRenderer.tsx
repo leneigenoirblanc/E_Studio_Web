@@ -57,26 +57,27 @@ export const PriceElementRenderer: React.FC<PriceElementRendererProps> = ({
     const activePrice = resolved.promotional || resolved.primary || { amount: 0, currency: 'FCFA' };
     const priceParts = enterpriseNumberFormatter.format(activePrice.amount, formatting);
 
-    // Typographies par slot
-    const defaultStyle = fontRegistry.toCssProperties(typography.default as any);
-    const intStyle = typography.slots?.integer
-      ? fontRegistry.toCssProperties(typography.slots.integer as any)
-      : defaultStyle;
-    const decSepStyle = typography.slots?.decimalSeparator
-      ? fontRegistry.toCssProperties(typography.slots.decimalSeparator as any)
-      : defaultStyle;
-    const fracStyle = typography.slots?.fraction
-      ? fontRegistry.toCssProperties(typography.slots.fraction as any)
-      : defaultStyle;
-    const currStyle = typography.slots?.currency
-      ? fontRegistry.toCssProperties(typography.slots.currency as any)
-      : defaultStyle;
-    const unitStyle = typography.slots?.unit
-      ? fontRegistry.toCssProperties(typography.slots.unit as any)
-      : defaultStyle;
-    const prefixStyle = typography.slots?.prefix
-      ? fontRegistry.toCssProperties(typography.slots.prefix as any)
-      : defaultStyle;
+    // Typographies par slot résolues de manière robuste avec héritage
+    const defaultRaw = typography?.default || (typography as any)?.integer || {
+      fontFamily: 'Plus Jakarta Sans',
+      sizePt: 28,
+      weight: '800',
+      color: '#0f172a',
+    };
+    const defaultStyle = fontRegistry.toCssProperties(defaultRaw);
+
+    const resolveSlotStyle = (slotObj: any) => {
+      if (!slotObj) return defaultStyle;
+      const merged = { ...defaultRaw, ...slotObj };
+      return fontRegistry.toCssProperties(merged);
+    };
+
+    const intStyle = resolveSlotStyle(typography?.slots?.integer);
+    const decSepStyle = resolveSlotStyle(typography?.slots?.decimalSeparator);
+    const fracStyle = resolveSlotStyle(typography?.slots?.fraction);
+    const currStyle = resolveSlotStyle(typography?.slots?.currency);
+    const unitStyle = resolveSlotStyle(typography?.slots?.unit);
+    const prefixStyle = resolveSlotStyle(typography?.slots?.prefix);
 
     const hasFraction = priceParts.fraction.length > 0;
     const isPromoActive = Boolean(resolved.promotional && resolved.reference);

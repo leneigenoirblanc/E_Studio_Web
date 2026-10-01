@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LabelTemplate, ProductRecord } from './types';
 import { DEFAULT_TEMPLATES } from './defaultTemplates';
 import { HomeDashboard } from './components/HomeDashboard';
 import { TooltipProvider } from './context/TooltipContext';
 import { MappingDictionaryProvider } from './context/MappingDictionaryContext';
 import { ToastProvider, useToast } from './components/ToastNotification';
-import { AppTopNavigationBar } from './components/AppTopNavigationBar';
+import { PrecisionCockpitHeader } from './components/PrecisionCockpitHeader';
 import { useAppStore } from './store/useAppStore';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
@@ -52,6 +52,9 @@ function AppContent() {
     initSubscriptions,
   } = useAppStore();
 
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [isHeatmapActive, setIsHeatmapActive] = useState(false);
+
   // Initialize and bind all reactive domain listeners
   useEffect(() => {
     const cleanup = initSubscriptions();
@@ -92,8 +95,22 @@ function AppContent() {
 
   return (
     <div className="h-full flex flex-col font-sans select-none overflow-hidden bg-slate-100 text-slate-900">
-      {/* Top Application Navigation Bar (Only on Hub Views; in Editor mode, the Ribbon acts as the dedicated Title & Command Bar) */}
-      {currentView !== 'editor' && <AppTopNavigationBar />}
+      {/* Precision Production Cockpit Global Shell Header (40 px) */}
+      <PrecisionCockpitHeader
+        isFocusMode={isFocusMode}
+        onToggleFocusMode={() => setIsFocusMode(!isFocusMode)}
+        isHeatmapActive={isHeatmapActive}
+        onToggleHeatmap={() => setIsHeatmapActive(!isHeatmapActive)}
+        onQuickAction={(actionId) => {
+          if (actionId === 'insert-price-promo') {
+            navigateTo('editor');
+          } else if (actionId === 'import-data') {
+            navigateTo('database');
+          } else if (actionId === 'open-preflight') {
+            navigateTo('editor');
+          }
+        }}
+      />
 
       {/* Main Viewport Container protected with ErrorBoundary */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
@@ -117,6 +134,10 @@ function AppContent() {
                 navigateTo('generation');
               }}
               onOpenRulesModal={() => openModal('isRulesModalOpen')}
+              isFocusMode={isFocusMode}
+              onToggleFocusMode={() => setIsFocusMode(!isFocusMode)}
+              isHeatmapActive={isHeatmapActive}
+              onToggleHeatmap={() => setIsHeatmapActive(!isHeatmapActive)}
             />
           )}
 

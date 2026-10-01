@@ -184,32 +184,62 @@ export class FontRegistry {
   }
 
   /**
-   * Convertit un TypographyStyle en chaîne CSS font
+   * Convertit un TypographyStyle en chaîne CSS font de manière robuste
    */
-  public toCssProperties(style: TypographyStyle): React.CSSProperties {
-    const fontFamilies = [
-      `"${style.font.family}"`,
-      ...style.font.fallbackFamilies,
-    ].join(', ');
+  public toCssProperties(style?: Partial<TypographyStyle> | any): React.CSSProperties {
+    if (!style) {
+      return { fontFamily: 'Inter, sans-serif', fontSize: '12pt', color: '#0f172a' };
+    }
 
-    return {
-      fontFamily: fontFamilies,
-      fontSize: `${style.sizePt}pt`,
-      fontWeight: style.weight,
-      fontStyle: style.style,
-      color: style.color,
-      letterSpacing: style.letterSpacingPt !== 0 ? `${style.letterSpacingPt}pt` : undefined,
-      lineHeight: typeof style.lineHeight === 'number' ? style.lineHeight : 'normal',
-      textAlign: style.alignment,
-      textTransform: style.textTransform !== 'none' ? style.textTransform : undefined,
-      textDecoration: [
+    const family =
+      style.font?.family ||
+      style.fontFamily ||
+      style.font_family ||
+      'Inter';
+
+    const fallbackFamilies: string[] =
+      style.font?.fallbackFamilies || ['sans-serif'];
+
+    const fontFamilies = [`"${family}"`, ...fallbackFamilies].join(', ');
+
+    const sizePt = style.sizePt ?? style.font_size_pt ?? 12;
+    const weight = style.weight ?? style.font_weight ?? '400';
+    const fontStyle = style.style ?? style.font_style ?? 'normal';
+    const color = style.color ?? style.text_color ?? '#0f172a';
+    const letterSpacingPt = style.letterSpacingPt ?? style.letter_spacing_pt ?? 0;
+    const lineHeight = style.lineHeight ?? style.line_height_multiplier ?? 'normal';
+    const alignment = style.alignment ?? 'left';
+    const textTransform = style.textTransform ?? style.text_transform ?? 'none';
+
+    let textDecoration: string | undefined = undefined;
+    if (typeof style.text_decoration === 'string' && style.text_decoration !== 'none') {
+      textDecoration = style.text_decoration;
+    } else if (style.decoration) {
+      textDecoration = [
         style.decoration.underline ? 'underline' : '',
         style.decoration.lineThrough ? 'line-through' : '',
         style.decoration.overline ? 'overline' : '',
       ]
         .filter(Boolean)
-        .join(' ') || undefined,
-      verticalAlign: style.baselineShiftPt !== 0 ? `${style.baselineShiftPt}pt` : undefined,
+        .join(' ') || undefined;
+    }
+
+    const baselineShiftPt =
+      style.baselineShiftPt ??
+      (style.baseline_shift === 'superscript' ? 6 : style.baseline_shift === 'subscript' ? -4 : 0);
+
+    return {
+      fontFamily: fontFamilies,
+      fontSize: typeof sizePt === 'number' ? `${sizePt}pt` : sizePt,
+      fontWeight: String(weight),
+      fontStyle: fontStyle,
+      color: color,
+      letterSpacing: letterSpacingPt !== 0 ? `${letterSpacingPt}pt` : undefined,
+      lineHeight: typeof lineHeight === 'number' ? lineHeight : 'normal',
+      textAlign: alignment,
+      textTransform: textTransform !== 'none' ? textTransform : undefined,
+      textDecoration: textDecoration,
+      verticalAlign: baselineShiftPt !== 0 ? `${baselineShiftPt}pt` : undefined,
       fontVariantNumeric: style.openTypeFeatures?.tnum ? 'tabular-nums' : undefined,
     };
   }

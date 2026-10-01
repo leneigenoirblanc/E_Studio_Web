@@ -13,6 +13,7 @@ import { FloatingRulerHUD } from './FloatingRulerHUD';
 import { StudioRibbonToolbar } from './StudioRibbonToolbar';
 import { databaseService } from '../services/databaseService';
 import { useAppStore } from '../store/useAppStore';
+import { pricingEngine } from '../domain/pricing/pricingEngine';
 import {
   createObjectInstance,
   ElementStylePayload,
@@ -88,6 +89,11 @@ import {
 } from 'lucide-react';
 import { ContextTooltip, useTooltip } from '../context/TooltipContext';
 import { ViewportZoomToolbar } from './ViewportZoomToolbar';
+import { DesignContextRail, DesignRailTab } from './DesignContextRail';
+import { ContextualToolBand } from './ContextualToolBand';
+import { PreflightStrip } from './PreflightStrip';
+import { stressRowsEngine } from '../domain/data/stressRows';
+import { StockProfile, PRELOADED_STOCKS } from '../domain/stock/stockModel';
 
 interface TemplateEditorProps {
   initialTemplate: LabelTemplate;
@@ -95,6 +101,10 @@ interface TemplateEditorProps {
   onBackToHome: () => void;
   onOpenGeneration: (template: LabelTemplate) => void;
   onOpenRulesModal?: () => void;
+  isFocusMode?: boolean;
+  onToggleFocusMode?: () => void;
+  isHeatmapActive?: boolean;
+  onToggleHeatmap?: () => void;
 }
 
 export const TemplateEditor: React.FC<TemplateEditorProps> = ({
@@ -103,6 +113,10 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   onBackToHome,
   onOpenGeneration,
   onOpenRulesModal,
+  isFocusMode: propFocusMode = false,
+  onToggleFocusMode,
+  isHeatmapActive: propHeatmapActive,
+  onToggleHeatmap: propToggleHeatmap,
 }) => {
   const [template, setTemplate] = useState<LabelTemplate>(initialTemplate);
   // Multi-selection state
@@ -136,19 +150,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [previewDataIndex, setPreviewDataIndex] = useState<number | null>(null);
   const [savedNotification, setSavedNotification] = useState(false);
 
-  // Viewport-First Edge Docker & Focus Mode States
-  const [leftRailTab, setLeftRailTab] = useState<'tree' | 'assets' | 'layers' | 'search' | null>(null);
-  const [isLeftDrawerPinned, setIsLeftDrawerPinned] = useState(false);
-  const [rightRailTab, setRightRailTab] = useState<'properties' | 'data' | 'rules' | 'preflight' | null>(null);
-  const [isRightDrawerPinned, setIsRightDrawerPinned] = useState(false);
-  const [isFocusMode, setIsFocusMode] = useState(false);
+  // Precision Cockpit: Single Adaptive Context Rail & Focus Mode
+  const [railTab, setRailTab] = useState<DesignRailTab>('layers');
+  const [isRailCollapsed, setIsRailCollapsed] = useState(false);
+  const [localFocusMode, setLocalFocusMode] = useState(false);
+  const isFocusMode = propFocusMode !== undefined ? propFocusMode : localFocusMode;
 
-  // Context-Driven Adaptive Workspace & Diagnostic States
-  const [isNavCollapsed, setIsNavCollapsed] = useState(false);
-  const [isInspectorDrawerOpen, setIsInspectorDrawerOpen] = useState(false);
-  const [isHeatmapActive, setIsHeatmapActive] = useState(false);
+  const [localHeatmapActive, setLocalHeatmapActive] = useState(false);
+  const isHeatmapActive = propHeatmapActive !== undefined ? propHeatmapActive : localHeatmapActive;
+  const handleToggleHeatmap = propToggleHeatmap || (() => setLocalHeatmapActive(!localHeatmapActive));
 
-  // Focus Mode Shortcut (F key)
+  // Focus Mode Shortcut (F key) & Rail collapse (Escape)
   useEffect(() => {
     const handleFocusKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -156,17 +168,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       if (e.key === 'f' || e.key === 'F') {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
-          setIsFocusMode((prev) => !prev);
+          if (onToggleFocusMode) onToggleFocusMode();
+          else setLocalFocusMode((prev) => !prev);
         }
       }
       if (e.key === 'Escape') {
-        if (!isLeftDrawerPinned) setLeftRailTab(null);
-        if (!isRightDrawerPinned) setRightRailTab(null);
+        setIsRailCollapsed(true);
       }
     };
     window.addEventListener('keydown', handleFocusKey);
     return () => window.removeEventListener('keydown', handleFocusKey);
-  }, [isLeftDrawerPinned, isRightDrawerPinned]);
+  }, [onToggleFocusMode]);
 
   // Centralized Modals state from useAppStore
   const { modals, openModal, closeModal } = useAppStore();
@@ -355,10 +367,24 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           },
         ];
 
+  // Physical Stock & Live-Bound Stress Rows Engine
+  const [activeStockProfile, setActiveStockProfile] = useState<StockProfile>(PRELOADED_STOCKS[0]);
+  const [activeStressType, setActiveStressType] = useState<'none' | 'longest_name' | 'widest_price' | 'promo_tiers'>('none');
+  const [productRowIndex, setProductRowIndex] = useState(0);
+
+  const stressRows = React.useMemo(() => {
+    return stressRowsEngine.extractStressRows(availablePreviewProducts);
+  }, [availablePreviewProducts]);
+
+  const currentPreviewRecord: ProductRecord = React.useMemo(() => {
+    if (activeStressType === 'longest_name') return stressRows.longestNameRow;
+    if (activeStressType === 'widest_price') return stressRows.widestPriceRow;
+    if (activeStressType === 'promo_tiers') return stressRows.promoWithTiersRow;
+    return availablePreviewProducts[productRowIndex] || availablePreviewProducts[0];
+  }, [activeStressType, stressRows, availablePreviewProducts, productRowIndex]);
+
   const selectedItems = template.items.filter((i) => selectedItemIds.includes(i.id));
   const primarySelected = selectedItems.length > 0 ? selectedItems[0] : null;
-  const currentPreviewRecord: ProductRecord | undefined =
-    previewDataIndex !== null ? availablePreviewProducts[previewDataIndex] || availablePreviewProducts[0] : undefined;
 
   // History / Undo / Redo
   const pushState = (newTemplate: LabelTemplate) => {
@@ -689,7 +715,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       }
       const next = { ...template, items: [...template.items, newItem] };
       setSelectedItemIds([id]);
-      setIsInspectorDrawerOpen(true);
+      setRailTab('properties');
       pushState(next);
       return;
     }
@@ -995,19 +1021,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           display: {
             mode: preset === 'simple' ? 'single' : 'stacked',
           },
-          typography: {
-            default: {
-              fontFamily: 'Plus Jakarta Sans',
-              sizePt: 28,
-              weight: 800,
-              color: '#0f172a',
-            },
-            slots: {
-              integer: { sizePt: 28, weight: 800, color: '#0f172a' },
-              fraction: { sizePt: 14, weight: 700, color: '#0f172a' },
-              currency: { sizePt: 13, weight: 700, color: '#0f172a' },
-            },
-          },
+          typography: pricingEngine.createFullPriceTypography('Plus Jakarta Sans'),
         } as any;
         break;
       }
@@ -1129,10 +1143,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       } else if (e.key.toLowerCase() === 'h') {
         setActiveTool('pan');
       } else if (e.key.toLowerCase() === 'm') {
-        setIsHeatmapActive((prev) => !prev);
+        handleToggleHeatmap();
       } else if (e.key === '[' || e.key === ']') {
-        if (e.key === '[') setIsNavCollapsed((prev) => !prev);
-        if (e.key === ']') setIsInspectorDrawerOpen((prev) => !prev);
+        setIsRailCollapsed((prev) => !prev);
+      } else if (e.key === 'PageDown') {
+        e.preventDefault();
+        setActiveStressType('none');
+        setProductRowIndex((prev) => Math.min(availablePreviewProducts.length - 1, prev + 1));
+      } else if (e.key === 'PageUp') {
+        e.preventDefault();
+        setActiveStressType('none');
+        setProductRowIndex((prev) => Math.max(0, prev - 1));
       }
     }
 
@@ -1718,79 +1739,35 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-100 overflow-hidden select-none">
-      {/* Modern PowerPoint 365 Fluent Ribbon & Title Bar */}
-      <StudioRibbonToolbar
-        template={template}
-        selectedItems={selectedItems}
-        activeTool={activeTool}
-        onToolChange={setActiveTool}
-        onAddItem={(type, payload) => addItem(type, payload)}
-        onUpdateItem={handleUpdateItem}
-        onUpdateMultipleItems={handleUpdateMultipleItems}
-        onDuplicateItems={handleDuplicateMultipleItems}
-        onDeleteItems={handleDeleteMultipleItems}
-        onAlign={handleAlign}
-        onDistribute={handleDistribute}
-        onCenterItem={(id, axis) => {
-          const it = template.items.find((i) => i.id === id);
-          if (!it) return;
-          const patch: any = {};
-          if (axis === 'x' || axis === 'both') {
-            patch.x_mm = Math.max(0, Number(((template.width_mm - it.w_mm) / 2).toFixed(2)));
-          }
-          if (axis === 'y' || axis === 'both') {
-            patch.y_mm = Math.max(0, Number(((template.height_mm - it.h_mm) / 2).toFixed(2)));
-          }
-          handleUpdateItem({ ...it, ...patch });
-        }}
-        onReorderItem={(id, dir) => handleReorderItem(id, dir === 'up' ? 1 : -1)}
-        onRotateStep90={(id) => handleRotateStep90(id, {} as any)}
-        onCopyStyle={handleCopyStyle}
-        onPasteStyle={handlePasteStyle}
-        hasCopiedStyle={Boolean(copiedStyle)}
-        smartGuidesEnabled={smartGuidesEnabled}
-        onToggleSmartGuides={() => setSmartGuidesEnabled(!smartGuidesEnabled)}
-        snapToGrid={snapToGrid}
-        onToggleSnapToGrid={() => setSnapToGrid(!snapToGrid)}
-        gridSizeMm={gridSizeMm}
-        onChangeGridSize={setGridSizeMm}
-        showRulers={showRulers}
-        onToggleRulers={() => setShowRulers(!showRulers)}
-        showBleed={showBleed}
-        onToggleBleed={() => setShowBleed(!showBleed)}
-        showInnerMargins={showInnerMargins}
-        onToggleInnerMargins={() => setShowInnerMargins(!showInnerMargins)}
-        isHeatmapActive={isHeatmapActive}
-        onToggleHeatmap={() => setIsHeatmapActive(!isHeatmapActive)}
-        onOpenCalibration={() => openModal('isCalibrationOpen')}
-        previewDataIndex={previewDataIndex}
-        onChangePreviewDataIndex={setPreviewDataIndex}
-        availablePreviewProducts={availablePreviewProducts}
-        isInspectorDrawerOpen={isInspectorDrawerOpen}
-        onToggleInspectorDrawer={() => setIsInspectorDrawerOpen(!isInspectorDrawerOpen)}
-        onBackToHome={onBackToHome}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        canUndo={historyIndex > 0}
-        canRedo={historyIndex < history.length - 1}
-        historyIndex={historyIndex}
-        historyLength={history.length}
-        onSave={handleSave}
-        onExportJson={exportJson}
-        onOpenGeneration={() => onOpenGeneration(template)}
-        onOpenFindReplace={() => openModal('isFindReplaceOpen')}
-        onOpenRulesModal={onOpenRulesModal}
-        isFocusMode={isFocusMode}
-        onToggleFocusMode={() => setIsFocusMode(!isFocusMode)}
-        onOpenRightDrawerTab={(tab) => {
-          setRightRailTab(tab);
-          setIsInspectorDrawerOpen(true);
-        }}
-      />
+      {/* 44 px Contextual Tool Band (changes with selection) */}
+      {!isFocusMode && (
+        <ContextualToolBand
+          template={template}
+          selectedItems={selectedItems}
+          currentProduct={currentPreviewRecord}
+          totalProductsCount={availablePreviewProducts.length}
+          currentProductIndex={productRowIndex}
+          onSelectProductIndex={(idx) => {
+            setActiveStressType('none');
+            setProductRowIndex(idx);
+          }}
+          onSelectStressRow={(stressType) => {
+            setActiveStressType(stressType);
+          }}
+          onUpdateItem={handleUpdateItem}
+          snapToGrid={snapToGrid}
+          onToggleSnapToGrid={() => setSnapToGrid(!snapToGrid)}
+          gridSizeMm={gridSizeMm}
+          onChangeGridSize={setGridSizeMm}
+          stockProfile={activeStockProfile}
+          onChangeStockProfile={setActiveStockProfile}
+          onOpenRulesModal={onOpenRulesModal}
+        />
+      )}
 
-      {/* Main Workspace Area: Viewport-First 85%+ Canvas Dominance with Edge Dockers & Overlay Drawers */}
+      {/* Precision Workspace: Single Context Rail (280px / 48px) + Dominant Canvas (85%+) */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Toast feedback for Copy/Paste style */}
+        {/* Style Copy/Paste Feedback Toast */}
         {styleToast && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white text-xs px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 backdrop-blur-xs animate-in fade-in slide-in-from-top-2">
             <ClipboardCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -1798,159 +1775,46 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* LEFT EDGE DOCKER (44 PX RAIL) : STRUCTURE | ASSETS | LAYERS | SEARCH       */}
-        {/* ========================================================================= */}
+        {/* SINGLE ADAPTIVE CONTEXT RAIL (Layers / Properties / Insert) */}
         {!isFocusMode && (
-          <div className="w-11 bg-[#f3f2f1] border-r border-[#e1dfdd] flex flex-col items-center py-2 gap-1 shrink-0 z-30 select-none">
-            <button
-              onClick={() => {
-                setLeftRailTab(leftRailTab === 'tree' ? null : 'tree');
-              }}
-              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
-                leftRailTab === 'tree'
-                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
-              }`}
-              title="Structure & Arborescence (Arbre des éléments)"
-            >
-              <Layers className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => {
-                setLeftRailTab(leftRailTab === 'assets' ? null : 'assets');
-              }}
-              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
-                leftRailTab === 'assets'
-                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
-              }`}
-              title="Médias, Images & Pictogrammes"
-            >
-              <Stamp className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => {
-                setLeftRailTab(leftRailTab === 'layers' ? null : 'layers');
-              }}
-              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
-                leftRailTab === 'layers'
-                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
-              }`}
-              title="Calques & Ordre d'empilement Z"
-            >
-              <Group className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => openModal('isFindReplaceOpen')}
-              className="w-8 h-8 rounded-lg flex flex-col items-center justify-center text-slate-600 hover:bg-white hover:text-slate-900 transition"
-              title="Rechercher & Remplacer (Ctrl+F)"
-            >
-              <Search className="w-4 h-4" />
-            </button>
-          </div>
+          <DesignContextRail
+            template={template}
+            selectedItems={selectedItems}
+            selectedItemIds={selectedItemIds}
+            activeTab={railTab}
+            onTabChange={setRailTab}
+            isCollapsed={isRailCollapsed}
+            onToggleCollapse={() => setIsRailCollapsed(!isRailCollapsed)}
+            onSelectItem={(id, multi) => {
+              if (multi) {
+                setSelectedItemIds((prev) =>
+                  prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+                );
+              } else {
+                setSelectedItemIds([id]);
+              }
+              setRailTab('properties');
+            }}
+            onUpdateItem={handleUpdateItem}
+            onUpdateMultipleItems={handleUpdateMultipleItems}
+            onDeleteItem={handleDeleteItem}
+            onDeleteMultipleItems={handleDeleteMultipleItems}
+            onDuplicateItem={handleDuplicateItem}
+            onDuplicateMultipleItems={handleDuplicateMultipleItems}
+            onReorderItem={handleReorderItem}
+            onAddNewItem={(type, payload) => addItem(type, payload)}
+            copiedStyle={copiedStyle}
+            onCopyStyle={handleCopyStyle}
+            onPasteStyle={handlePasteStyle}
+            onUpdateTemplate={(patch) => {
+              const updated = { ...template, ...patch };
+              pushState(updated);
+            }}
+            onOpenCalibration={() => openModal('isCalibrationOpen')}
+          />
         )}
 
-        {/* ========================================================================= */}
-        {/* LEFT OVERLAY DRAWER (280 PX) : NON-LAYOUT-AFFECTING OVERLAY               */}
-        {/* ========================================================================= */}
-        {leftRailTab && !isFocusMode && (
-          <div
-            className={`h-full z-40 bg-white border-r border-slate-300 shadow-2xl flex flex-col animate-in slide-in-from-left-2 duration-150 ${
-              isLeftDrawerPinned ? 'relative w-72 shrink-0' : 'absolute left-11 top-0 bottom-0 w-72'
-            }`}
-          >
-            {/* Drawer Header */}
-            <div className="h-9 px-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800">
-              <span>
-                {leftRailTab === 'tree' && 'Structure du Gabarit'}
-                {leftRailTab === 'assets' && 'Assets & Pictogrammes'}
-                {leftRailTab === 'layers' && 'Calques & Empilement'}
-                {leftRailTab === 'search' && 'Recherche'}
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setIsLeftDrawerPinned(!isLeftDrawerPinned)}
-                  className={`p-1 rounded hover:bg-slate-200 text-[10px] transition ${
-                    isLeftDrawerPinned ? 'bg-blue-100 text-blue-700 font-bold' : 'text-slate-500'
-                  }`}
-                  title={isLeftDrawerPinned ? 'Détacher (Overlay)' : 'Épingler (Docked)'}
-                >
-                  {isLeftDrawerPinned ? '📌 Épinglé' : 'Float'}
-                </button>
-                <button
-                  onClick={() => setLeftRailTab(null)}
-                  className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Drawer Body */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin">
-              {(leftRailTab === 'tree' || leftRailTab === 'layers') && (
-                <SmartNavTreeSidebar
-                  template={template}
-                  selectedItemIds={selectedItemIds}
-                  onSelectItem={(id, multi) => {
-                    if (multi) {
-                      setSelectedItemIds((prev) =>
-                        prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-                      );
-                    } else {
-                      setSelectedItemIds([id]);
-                    }
-                    setRightRailTab('properties');
-                    setIsInspectorDrawerOpen(true);
-                  }}
-                  onUpdateItem={(id, patch) => {
-                    const item = template.items.find((i) => i.id === id);
-                    if (item) handleUpdateItem({ ...item, ...patch } as TemplateItem);
-                  }}
-                  onDeleteItem={handleDeleteItem}
-                  onDuplicateItem={handleDuplicateItem}
-                  onReorderItem={(id, dir) => handleReorderItem(id, dir === 'up' ? 1 : -1)}
-                  onAddNewItem={(type, customField) => addItem(type as any, customField)}
-                  isCollapsed={false}
-                  onToggleCollapse={() => setLeftRailTab(null)}
-                />
-              )}
-
-              {leftRailTab === 'assets' && (
-                <div className="p-3 space-y-3 text-xs">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Bibliothèque d'assets</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => addItem('image')}
-                      className="p-2.5 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50 text-left transition"
-                    >
-                      <ImageIcon className="w-5 h-5 text-blue-600 mb-1" />
-                      <div className="font-bold text-slate-800">Image / Logo</div>
-                      <div className="text-[10px] text-slate-500">Importer visuel</div>
-                    </button>
-                    <button
-                      onClick={() => addItem('pictogram')}
-                      className="p-2.5 rounded-lg border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 text-left transition"
-                    >
-                      <Stamp className="w-5 h-5 text-emerald-600 mb-1" />
-                      <div className="font-bold text-slate-800">Picto Légal</div>
-                      <div className="text-[10px] text-slate-500">Nutri-Score, Bio</div>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* CENTRAL VIEWPORT CANVAS STAGE (DOMINANT 85-95% SPATIAL PRESENCE)           */}
-        {/* ========================================================================= */}
+        {/* DOMINANT CANVAS VIEWPORT (85% to 98% of Screen) */}
         <div
           ref={canvasContainerRef}
           onMouseDown={handleCanvasMouseDown}
@@ -1962,7 +1826,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               }
             }
           }}
-          className="flex-1 overflow-auto p-12 flex items-center justify-center relative cursor-default bg-[#eef0f3]"
+          className="flex-1 overflow-auto p-8 sm:p-12 flex items-center justify-center relative cursor-default bg-[#eef0f3]"
           style={{
             backgroundImage: isHeatmapActive
               ? 'radial-gradient(#1e293b 1.5px, transparent 1.5px), radial-gradient(#1e293b 1.5px, #090d16 1.5px)'
@@ -1971,14 +1835,16 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             backgroundPosition: '0 0, 12px 12px',
           }}
         >
-          {/* Independent Draggable Floating Ruler HUD */}
-          <FloatingRulerHUD
-            width_mm={template.width_mm}
-            height_mm={template.height_mm}
-            mousePosMm={mousePosMm}
-          />
+          {/* Floating Ruler HUD (only while rulers active and mouse over canvas) */}
+          {showRulers && mousePosMm && (
+            <FloatingRulerHUD
+              width_mm={template.width_mm}
+              height_mm={template.height_mm}
+              mousePosMm={mousePosMm}
+            />
+          )}
 
-          {/* Viewport Frame Rulers (Anchored to top and left of viewport container) */}
+          {/* Viewport Frame Rulers */}
           {showRulers && uiPreferences?.rulerMode === 'window_frame' && (
             <CanvasRulers
               width_mm={template.width_mm}
@@ -2035,8 +1901,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               selectedItemIds={selectedItemIds}
               onSelectItem={(id, e) => {
                 handleItemMouseDown(id, e);
-                setRightRailTab('properties');
-                setIsInspectorDrawerOpen(true);
+                setRailTab('properties');
               }}
               onResizeStart={handleResizeStart}
               onRotateStart={handleRotateStart}
@@ -2089,38 +1954,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             )}
           </div>
 
-          {/* Floating Contextual HUD near Selection */}
-          {selectedItems.length > 0 && selectedItems[0] && (
-            <ContextualFloatingRibbon
-              selectedItem={selectedItems[0]}
-              selectedItemsCount={selectedItems.length}
-              template={template}
-              zoom={zoom}
-              onUpdateItem={handleUpdateItem}
-              onDuplicateItem={handleDuplicateItem}
-              onDeleteItem={handleDeleteItem}
-              onReorderItem={(id, dir) => handleReorderItem(id, dir === 'up' ? 1 : -1)}
-              onCenterItem={(id, axis) => {
-                const it = template.items.find((i) => i.id === id);
-                if (!it) return;
-                const patch: any = {};
-                if (axis === 'x' || axis === 'both') {
-                  patch.x_mm = Math.max(0, Number(((template.width_mm - it.w_mm) / 2).toFixed(2)));
-                }
-                if (axis === 'y' || axis === 'both') {
-                  patch.y_mm = Math.max(0, Number(((template.height_mm - it.h_mm) / 2).toFixed(2)));
-                }
-                handleUpdateItem({ ...it, ...patch });
-              }}
-              onRotateStep90={(id) => handleRotateStep90(id, {} as any)}
-              onOpenInspectorDrawer={() => {
-                setRightRailTab('properties');
-                setIsInspectorDrawerOpen(true);
-              }}
-            />
-          )}
-
-          {/* Floating Viewport Mini-Toolbar (Select | Pan | Zoom | Fits) */}
+          {/* Floating Viewport Mini-Toolbar (Select | Pan | Zoom | Fit) */}
           <ViewportZoomToolbar
             zoom={zoom}
             onZoomChange={(newZoom, anchorPoint) => handleZoomWithAnchor(newZoom, anchorPoint)}
@@ -2131,218 +1965,27 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             zoomMethod={uiPreferences?.zoomMethod || 'pointer'}
           />
         </div>
-
-        {/* ========================================================================= */}
-        {/* RIGHT OVERLAY DRAWER (320 PX) : NON-LAYOUT-AFFECTING INSPECTOR            */}
-        {/* ========================================================================= */}
-        {rightRailTab && !isFocusMode && (
-          <div
-            className={`h-full z-40 bg-white border-l border-slate-300 shadow-2xl flex flex-col animate-in slide-in-from-right-2 duration-150 ${
-              isRightDrawerPinned ? 'relative w-80 shrink-0' : 'absolute right-11 top-0 bottom-0 w-80'
-            }`}
-          >
-            {/* Drawer Header */}
-            <div className="h-9 px-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800">
-              <div className="flex items-center gap-1.5">
-                {rightRailTab === 'properties' && <Sliders className="w-3.5 h-3.5 text-blue-600" />}
-                {rightRailTab === 'data' && <Database className="w-3.5 h-3.5 text-emerald-600" />}
-                {rightRailTab === 'rules' && <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" />}
-                {rightRailTab === 'preflight' && <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />}
-                <span>
-                  {rightRailTab === 'properties' && 'Propriétés de l’objet'}
-                  {rightRailTab === 'data' && 'Données & Liaisons ERP'}
-                  {rightRailTab === 'rules' && 'Règles Conditionnelles'}
-                  {rightRailTab === 'preflight' && 'Diagnostic Pré-Vol'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setIsRightDrawerPinned(!isRightDrawerPinned)}
-                  className={`p-1 rounded hover:bg-slate-200 text-[10px] transition ${
-                    isRightDrawerPinned ? 'bg-blue-100 text-blue-700 font-bold' : 'text-slate-500'
-                  }`}
-                  title={isRightDrawerPinned ? 'Détacher (Overlay)' : 'Épingler (Docked)'}
-                >
-                  {isRightDrawerPinned ? '📌 Épinglé' : 'Float'}
-                </button>
-                <button
-                  onClick={() => {
-                    setRightRailTab(null);
-                    setIsInspectorDrawerOpen(false);
-                  }}
-                  className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Drawer Body */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin">
-              {rightRailTab === 'properties' && (
-                <PropertyInspector
-                  selectedItems={selectedItems}
-                  allItems={template.items}
-                  onUpdateItem={handleUpdateItem}
-                  onUpdateMultipleItems={handleUpdateMultipleItems}
-                  onDeleteItem={handleDeleteItem}
-                  onDeleteMultipleItems={handleDeleteMultipleItems}
-                  onDuplicateItem={handleDuplicateItem}
-                  onDuplicateMultipleItems={handleDuplicateMultipleItems}
-                  onReorderItem={handleReorderItem}
-                  copiedStyle={copiedStyle}
-                  onCopyStyle={handleCopyStyle}
-                  onPasteStyle={handlePasteStyle}
-                  onClose={() => setRightRailTab(null)}
-                />
-              )}
-
-              {rightRailTab === 'data' && (
-                <div className="p-4 space-y-4 text-xs">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mappage Données</div>
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-                    <div className="font-semibold text-slate-800">Champ source associé :</div>
-                    <input
-                      type="text"
-                      value={(primarySelected as any)?.binding_key || ''}
-                      onChange={(e) => {
-                        if (primarySelected) {
-                          handleUpdateItem({ ...primarySelected, binding_key: e.target.value } as any);
-                        }
-                      }}
-                      placeholder="Ex: ITEMNAME, SELLING_PRICE, BARCODE..."
-                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-mono"
-                    />
-                    <div className="text-[10px] text-slate-500">
-                      Injecte automatiquement les valeurs du catalogue produit ou du fichier CSV.
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {rightRailTab === 'rules' && (
-                <div className="p-4 space-y-3 text-xs">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Règles Conditionnelles</div>
-                  <div className="p-3 bg-purple-50 rounded-lg border border-purple-200 text-purple-900 space-y-2">
-                    <div className="font-bold">Affichage sous condition</div>
-                    <div className="text-[11px]">Masquer automatiquement si le prix promo est égal à zéro ou si la date d'offre est dépassée.</div>
-                    <button
-                      onClick={onOpenRulesModal}
-                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded text-xs shadow-2xs"
-                    >
-                      Ouvrir le Constructeur de Règles
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {rightRailTab === 'preflight' && (
-                <div className="p-4 space-y-3 text-xs">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contrôle Qualité Pré-Vol</div>
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-800">Score de production :</span>
-                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">100/100</span>
-                    </div>
-                    <div className="text-[11px] text-slate-600">
-                      Toutes les vérifications géométriques, de codes-barres GS1 et de cohérence des prix sont conformes.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* RIGHT EDGE DOCKER (44 PX RAIL) : PROPERTIES | DATA | RULES | PREFLIGHT    */}
-        {/* ========================================================================= */}
-        {!isFocusMode && (
-          <div className="w-11 bg-[#f3f2f1] border-l border-[#e1dfdd] flex flex-col items-center py-2 gap-1 shrink-0 z-30 select-none">
-            <button
-              onClick={() => {
-                setRightRailTab(rightRailTab === 'properties' ? null : 'properties');
-                setIsInspectorDrawerOpen(rightRailTab !== 'properties');
-              }}
-              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
-                rightRailTab === 'properties'
-                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
-              }`}
-              title="Propriétés & Format (⚙)"
-            >
-              <Sliders className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => {
-                setRightRailTab(rightRailTab === 'data' ? null : 'data');
-              }}
-              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
-                rightRailTab === 'data'
-                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
-              }`}
-              title="Données & Bindings (◉)"
-            >
-              <Database className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => {
-                setRightRailTab(rightRailTab === 'rules' ? null : 'rules');
-              }}
-              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
-                rightRailTab === 'rules'
-                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
-              }`}
-              title="Règles Conditionnelles (ƒ)"
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => {
-                setRightRailTab(rightRailTab === 'preflight' ? null : 'preflight');
-              }}
-              className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center transition ${
-                rightRailTab === 'preflight'
-                  ? 'bg-[#c43e1c] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
-              }`}
-              title="Diagnostic Pré-Vol (✓)"
-            >
-              <ShieldCheck className="w-4 h-4" />
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* ========================================================================= */}
-      {/* MICRO STATUS BAR (24 PX) : ULTRA-COMPACT STATUS & QUICK CLICKS             */}
-      {/* ========================================================================= */}
+      {/* PRECISION STATUS BAR (24 PX) */}
       {!isFocusMode && (
-        <footer className="h-6 bg-white border-t border-slate-200 px-2.5 flex items-center justify-between text-[10px] text-slate-600 shrink-0 font-mono z-20 select-none">
-          {/* Left: Selected Item Geometry Chip */}
-          <div className="flex items-center gap-2">
+        <footer className="h-6 bg-white border-t border-slate-200 px-3 flex items-center justify-between text-[11px] text-slate-600 shrink-0 font-mono z-20 select-none">
+          {/* Left: Active Item Geometry & Binding */}
+          <div className="flex items-center gap-3">
             {selectedItems.length === 1 ? (
               <div className="flex items-center gap-2">
                 <span className="font-sans font-bold text-blue-600">
-                  {selectedItems[0].type.toUpperCase()}
+                  {selectedItems[0].type.toUpperCase()} #{selectedItems[0].id.slice(0, 5)}
                 </span>
-                <span>
-                  X <strong className="font-bold text-slate-800">{selectedItems[0].x_mm}</strong>
-                </span>
-                <span>
-                  Y <strong className="font-bold text-slate-800">{selectedItems[0].y_mm}</strong>
-                </span>
-                <span>
-                  W <strong className="font-bold text-slate-800">{selectedItems[0].w_mm}</strong>
-                </span>
-                <span>
-                  H <strong className="font-bold text-slate-800">{selectedItems[0].h_mm}</strong>
-                </span>
+                {(selectedItems[0] as any).binding_key && (
+                  <span className="font-mono text-purple-700 font-bold bg-purple-50 px-1 py-0.2 rounded border border-purple-200 text-[10px]">
+                    {`{{${(selectedItems[0] as any).binding_key}}}`}
+                  </span>
+                )}
+                <span>X <strong className="font-bold text-slate-800">{selectedItems[0].x_mm}</strong></span>
+                <span>Y <strong className="font-bold text-slate-800">{selectedItems[0].y_mm}</strong></span>
+                <span>W <strong className="font-bold text-slate-800">{selectedItems[0].w_mm}</strong></span>
+                <span>H <strong className="font-bold text-slate-800">{selectedItems[0].h_mm}</strong></span>
                 {selectedItems[0].rotation ? <span>Rot {selectedItems[0].rotation}°</span> : null}
               </div>
             ) : selectedItems.length > 1 ? (
@@ -2351,13 +1994,13 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               </span>
             ) : (
               <span className="text-slate-400 font-sans italic">
-                Canvas {template.width_mm}×{template.height_mm}mm
+                {template.name} ({template.width_mm} × {template.height_mm} mm)
               </span>
             )}
           </div>
 
-          {/* Center & Right: Magnet, Zoom & Ready */}
-          <div className="flex items-center gap-3">
+          {/* Right: Grid, Zoom, Live Mouse mm, Online */}
+          <div className="flex items-center gap-4">
             {mousePosMm && (
               <span className="text-slate-500 hidden sm:inline">
                 {mousePosMm.x_mm}, {mousePosMm.y_mm} mm
@@ -2367,26 +2010,36 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             <button
               onClick={() => setSnapToGrid(!snapToGrid)}
               className="hover:text-blue-600 transition"
-              title="Cliquer pour basculer le magnétisme"
+              title="Basculer le magnétisme de la grille"
             >
               Grid {gridSizeMm}mm {snapToGrid ? '✓' : '✕'}
             </button>
 
             <span className="font-semibold text-slate-700">{Math.round(zoom * 100)}%</span>
 
-            <button
-              onClick={() => {
-                setRightRailTab('preflight');
-                setIsInspectorDrawerOpen(true);
-              }}
-              className="font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5"
-            >
-              <CheckCircle className="w-3 h-3 text-emerald-600 inline" />
-              <span>Ready</span>
-            </button>
+            <span className="flex items-center gap-1 text-[10px] text-emerald-700 font-semibold font-sans">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>Prêt</span>
+            </span>
           </div>
         </footer>
       )}
+
+      {/* 28 px Continuous Preflight Strip */}
+      <PreflightStrip
+        template={template}
+        totalLabelsCount={availablePreviewProducts.length}
+        totalSheetsCount={Math.ceil(
+          availablePreviewProducts.length /
+            (activeStockProfile.type === 'sheet' ? activeStockProfile.labelsPerSheet : 1)
+        )}
+        stockProfile={activeStockProfile}
+        currentProduct={currentPreviewRecord}
+        onJumpToElement={(elId) => {
+          setSelectedItemIds([elId]);
+          setRailTab('properties');
+        }}
+      />
 
       {/* Calibration Image Settings Modal */}
       {modals.isCalibrationOpen && (
